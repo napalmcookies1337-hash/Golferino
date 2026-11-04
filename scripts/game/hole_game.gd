@@ -256,6 +256,9 @@ func _pick_club_for_lie() -> bool:
 	var wanted: String = "iron"
 	if lie_surface() == Surface.Type.GREEN:
 		wanted = "putter"
+	elif is_playing_away():
+		# Playing back only needs a modest shot, and a driver could lose the whole hole.
+		wanted = "iron"
 	elif lie_surface() != Surface.Type.SAND and distance_to_cup() > _full_range_estimate("iron"):
 		# The driver's low loft can't clear a bunker wall, so sand always offers the iron.
 		wanted = "driver"

@@ -1,8 +1,11 @@
 class_name ObstacleView
 extends Node2D
-## Draws every moving hazard. Trees are drawn by TreeView.
+## Draws every hazard.
 
 const OUTLINE := Color("20202e")
+const PAD_HELPS := Color("5fd068")
+const PAD_NEUTRAL := Color("ffe25a")
+const PAD_HURTS := Color("f0703a")
 
 var game: HoleGame
 var _time: float = 0.0
@@ -27,6 +30,45 @@ func _draw() -> void:
 			_draw_sprinkler(obstacle)
 		elif obstacle is GooseObstacle:
 			_draw_goose(obstacle)
+		elif obstacle is BouncePadObstacle:
+			_draw_pad(obstacle)
+
+
+func _draw_pad(pad: BouncePadObstacle) -> void:
+	# The colour and arrows say which way it fires: green toward the cup, orange away.
+	var color: Color = PAD_NEUTRAL
+	if not pad.is_flat():
+		color = PAD_HELPS if pad.faces_cup() else PAD_HURTS
+
+	# The plate dips when it fires, and springs back.
+	var dip: Vector2 = -pad.normal * pad.squash * 2.5
+	var a: Vector2 = (pad.plate_a() + dip).round()
+	var b: Vector2 = (pad.plate_b() + dip).round()
+
+	if not pad.is_flat():
+		var low: Vector2 = a if a.y > b.y else b
+		var high: Vector2 = a if a.y <= b.y else b
+		var wedge := PackedVector2Array([low, high, Vector2(high.x, pad.ground + 1.0), Vector2(low.x, pad.ground + 1.0)])
+		draw_colored_polygon(wedge, Color("3a3a4c"))
+		draw_line(high, Vector2(high.x, pad.ground), OUTLINE, 2.0)
+
+	draw_line(a, b, OUTLINE, 5.0)
+	draw_line(a, b, color, 3.0)
+
+	var bob: float = 3.0 + sin(_time * 4.0) * 1.5 + pad.squash * 6.0
+	for row in 2:
+		_draw_chevron(pad.center + pad.normal * (5.0 + bob + float(row) * 5.0), pad.normal, color)
+
+
+func _draw_chevron(at: Vector2, direction: Vector2, color: Color) -> void:
+	var side: Vector2 = Vector2(-direction.y, direction.x) * 4.0
+	var tip: Vector2 = (at + direction * 3.0).round()
+	var left: Vector2 = (at - side).round()
+	var right: Vector2 = (at + side).round()
+	draw_line(left, tip, OUTLINE, 3.0)
+	draw_line(right, tip, OUTLINE, 3.0)
+	draw_line(left, tip, color, 1.0)
+	draw_line(right, tip, color, 1.0)
 
 
 func _draw_cart(cart: CartObstacle) -> void:

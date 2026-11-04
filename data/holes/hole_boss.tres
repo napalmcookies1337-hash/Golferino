@@ -6,12 +6,12 @@
 script = ExtResource("1")
 display_name = "BOSS HOLE"
 title = "THE GAUNTLET"
-par = 6
+par = 7
 tee_x = 90.0
 cup_x = 2770.0
 wind = -8.0
-points = PackedVector2Array(0, 330, 60, 340, 130, 342, 350, 345, 600, 335, 800, 340, 900, 345, 950, 385, 1150, 395, 1260, 385, 1310, 340, 1420, 315, 1600, 305, 1750, 300, 1830, 315, 1870, 335, 1930, 335, 1970, 312, 2080, 290, 2200, 280, 2260, 295, 2300, 345, 2420, 350, 2470, 300, 2540, 270, 2640, 255, 2780, 252, 2900, 254, 2960, 235, 3080, 200)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 910, "type": 1}, {"from": 1305, "to": 1825, "type": 1}, {"from": 1825, "to": 1975, "type": 3}, {"from": 1975, "to": 2265, "type": 1}, {"from": 2470, "to": 2630, "type": 1}, {"from": 2630, "to": 2910, "type": 2}]
-water_spans = [{"from": 900, "to": 1315, "level": 365.0}, {"from": 2270, "to": 2480, "level": 322.0}]
-obstacles = [{"kind": "cart", "from": 420.0, "to": 860.0, "speed": 60.0}, {"kind": "goose", "from": 930.0, "to": 1290.0, "start": 980.0, "height": 70.0, "speed": 65.0}, {"kind": "goose", "from": 930.0, "to": 1290.0, "start": 1120.0, "height": 105.0, "speed": 50.0}, {"kind": "goose", "from": 930.0, "to": 1290.0, "start": 1240.0, "height": 50.0, "speed": 75.0}, {"kind": "windmill", "x": 1620.0, "turn_speed": 1.5}, {"kind": "sprinkler", "x": 2130.0, "height": 80.0, "on_time": 2.5, "off_time": 1.5}, {"kind": "sprinkler", "x": 2560.0, "height": 70.0, "on_time": 2.0, "off_time": 2.0, "offset": 2.0}]
+points = PackedVector2Array(0, 330, 60, 340, 130, 342, 350, 345, 600, 335, 800, 340, 900, 345, 950, 385, 1100, 395, 1180, 385, 1230, 340, 1340, 315, 1600, 305, 1750, 300, 1830, 315, 1870, 335, 1930, 335, 1970, 312, 2080, 290, 2200, 280, 2260, 295, 2300, 345, 2420, 350, 2470, 300, 2540, 270, 2640, 255, 2780, 252, 2900, 254, 2960, 235, 3080, 200)
+surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 910, "type": 1}, {"from": 1225, "to": 1825, "type": 1}, {"from": 1825, "to": 1975, "type": 3}, {"from": 1975, "to": 2265, "type": 1}, {"from": 2470, "to": 2630, "type": 1}, {"from": 2630, "to": 2910, "type": 2}]
+water_spans = [{"from": 900, "to": 1235, "level": 365.0}, {"from": 2270, "to": 2480, "level": 322.0}]
+obstacles = [{"kind": "cart", "from": 400.0, "to": 680.0, "speed": 60.0}, {"kind": "pad", "x": 760.0, "lean": -30.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 980.0, "height": 70.0, "speed": 65.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 1100.0, "height": 105.0, "speed": 50.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 1180.0, "height": 50.0, "speed": 75.0}, {"kind": "windmill", "x": 1620.0, "turn_speed": 1.1}, {"kind": "pad", "x": 1785.0, "lean": 30.0}, {"kind": "sprinkler", "x": 2130.0, "height": 80.0, "on_time": 2.5, "off_time": 1.5}, {"kind": "pad", "x": 2235.0, "lean": 20.0}, {"kind": "sprinkler", "x": 2560.0, "height": 70.0, "on_time": 2.0, "off_time": 2.0, "offset": 2.0}, {"kind": "pad", "x": 2600.0, "lean": -25.0}]
 tree_xs = PackedFloat32Array(20, 300, 1480, 2030, 2960, 3040)

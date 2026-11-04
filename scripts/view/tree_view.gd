@@ -1,6 +1,8 @@
 class_name TreeView
 extends Node2D
-## Draws the trees. Their rules live in TreeObstacle.
+## Trees are scenery behind the ground. They have no effect on the ball.
+
+const VARIANTS := 3
 
 var game: HoleGame
 
@@ -11,26 +13,27 @@ func setup(p_game: HoleGame) -> void:
 
 func _ready() -> void:
 	var textures: Array[ImageTexture] = []
-	for i in TreeObstacle.VARIANTS:
+	for i in VARIANTS:
 		textures.append(ImageTexture.create_from_image(_make_tree(i)))
-	for obstacle in game.obstacles:
-		if obstacle is TreeObstacle:
-			_add_tree(obstacle, textures[obstacle.variant])
+	var index: int = 0
+	for x: float in game.hole.tree_xs:
+		_add_tree(x, textures[index % VARIANTS])
+		index += 1
 
 
-func _add_tree(tree: TreeObstacle, texture: ImageTexture) -> void:
+func _add_tree(x: float, texture: ImageTexture) -> void:
 	var sprite := Sprite2D.new()
 	sprite.texture = texture
 	sprite.centered = false
 	sprite.position = Vector2(
-			round(tree.x - texture.get_width() / 2.0),
-			round(tree.ground + 3.0 - texture.get_height()))
+			round(x - texture.get_width() / 2.0),
+			round(game.terrain.ground_y(x) + 3.0 - texture.get_height()))
 	add_child(sprite)
 
 
 func _make_tree(variant: int) -> Image:
-	var width: int = TreeObstacle.sprite_width(variant)
-	var height: int = TreeObstacle.sprite_height(variant)
+	var width: int = 44 + variant * 6
+	var height: int = 62 + variant * 8
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 900 + variant

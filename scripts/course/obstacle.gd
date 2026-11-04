@@ -29,10 +29,6 @@ func interact(_ball: BallSim, _dt: float) -> bool:
 
 static func build_all(hole: HoleData, terrain: Terrain) -> Array[Obstacle]:
 	var result: Array[Obstacle] = []
-	var index: int = 0
-	for x: float in hole.tree_xs:
-		result.append(TreeObstacle.new(terrain, x, index % TreeObstacle.VARIANTS))
-		index += 1
 	for entry: Dictionary in hole.obstacles:
 		var obstacle: Obstacle = _build_one(entry, terrain)
 		if obstacle != null:
@@ -50,6 +46,8 @@ static func _build_one(entry: Dictionary, terrain: Terrain) -> Obstacle:
 			return SprinklerObstacle.new(terrain, entry)
 		"goose":
 			return GooseObstacle.new(terrain, entry)
+		"pad":
+			return BouncePadObstacle.new(terrain, entry)
 	push_error("Unknown obstacle kind: %s" % str(entry.get("kind", "")))
 	return null
 

@@ -13,9 +13,11 @@ mode comes later: leave room for it, do not build it yet.
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
 | Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
-| Direction | The golfer hits toward the cup, with no manual flip (removed after playtesting Milestone 1). If no club has a safe shot that way, they turn and play back, and the HUD says why |
-| Trees | Solid trunks under leaves that slow the ball. A ball starting a shot right beside a trunk or windmill tower passes it, so it can't get stuck |
+| Direction | The golfer hits toward the cup, with no manual flip (removed after playtesting Milestone 1). If no club has a safe shot that way, they turn and play back with the Iron offered, and the HUD says why |
+| Trees | Scenery only, with no effect on the ball. Solid trees were tried and removed after playtesting: in a side view they block everything behind them |
+| Bounce pads | Flat or angled springy plates. Usually angled away from the hole as a hazard, sometimes toward it as a reward. Green faces the cup, orange faces away, yellow is flat. Touching any side fires the ball the way the pad faces. Weaker on repeat bounces, and stops after 3 per shot. The aim preview includes them |
 | Moving hazards | Golf cart, windmill, sprinkler, geese. Carts and geese hit a ball once per shot. The aim preview ignores moving hazards, so the player has to time them |
+| Posts | A ball starting a shot right beside the windmill tower or on a pad isn't blocked or fired by it, so it can't get stuck |
 | Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |
 | Slopes | The launch angle tilts by half the ground's slope, and the ball always clears the slope it sits on. Landing downhill runs further, landing uphill runs less |
 | Spin | Depends on the club (Driver half as much as Iron), the lie, and how clean the strike is. A full miss has no spin |
@@ -42,20 +44,20 @@ mode comes later: leave room for it, do not build it yet.
 Not in this version: multiplayer, online leaderboards, procedural holes,
 infinite mode, other platforms.
 
-## The course (par 42)
+## The course (par 43)
 
 | Hole | Name | Par | Introduces |
 |---|---|---|---|
-| 1 | The Opener | 4 | Trees, bunker, pond |
+| 1 | The Opener | 4 | Bunker, pond |
 | 2 | Short Hop | 3 | A bunker guarding the green |
-| 3 | The Ridge | 4 | Big elevation |
+| 3 | The Ridge | 4 | Big elevation, first bounce pads |
 | 4 | Long Meadow | 5 | First wind, two trouble spots |
 | 5 | Cart Path | 4 | Golf cart |
 | 6 | The Old Mill | 3 | Windmill |
 | 7 | Sprinkler Hill | 4 | Sprinklers, headwind |
 | 8 | Goose Pond | 4 | Geese over a wide pond |
 | 9 | Clubhouse Climb | 5 | Everything so far |
-| Boss | The Gauntlet | 6 | Every hazard in sequence. Plays solo until the duel arrives in Milestone 4 |
+| Boss | The Gauntlet | 7 | Every hazard in sequence. Plays solo until the duel arrives in Milestone 4 |
 
 ## Milestones (stop for review at each)
 

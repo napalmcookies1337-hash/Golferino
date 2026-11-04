@@ -194,8 +194,9 @@ func _on_pin_hit(at: Vector2) -> void:
 
 func _on_obstacle_hit(at: Vector2, kind: String) -> void:
 	match kind:
-		"tree":
-			fx.dust(at, Color("56983e"), 7, 0)
+		"pad":
+			hud.show_message("BOING!", 0.9)
+			fx.dust(at, Color("ffe25a"), 10, 0)
 		"goose":
 			hud.show_message("HONK!", 1.1)
 			fx.dust(at, Color("f7f4e6"), 12, 0)

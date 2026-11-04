@@ -42,6 +42,8 @@ var wind: float = 0.0
 var ignore_moving: bool = false
 ## Where the current shot started. Solid things right next to this spot let the ball past.
 var launch_x: float = 0.0
+## How many times each bounce pad has fired this ball during the current shot.
+var pad_uses: Dictionary = {}
 
 var _touching: Dictionary = {}
 var _hit_this_shot: Dictionary = {}
@@ -71,6 +73,7 @@ func launch(velocity: Vector2, p_spin: float) -> void:
 	_motion_time = 0.0
 	_touching.clear()
 	_hit_this_shot.clear()
+	pad_uses.clear()
 	launch_x = pos.x
 	_launch_dir = signf(velocity.x) if velocity.x != 0.0 else 1.0
 	if is_zero_approx(velocity.y):

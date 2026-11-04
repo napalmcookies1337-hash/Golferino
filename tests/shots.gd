@@ -104,6 +104,9 @@ func _shoot_hole(index: int) -> void:
 
 
 func _shoot_hazards() -> void:
+	await _shoot_at(2, 440.0, "hazard_pad_away")
+	await _shoot_at(2, 1040.0, "hazard_pad_toward")
+	await _shoot_at(3, 1730.0, "hazard_pad_flat")
 	await _shoot_at(4, 560.0, "hazard_cart")
 	await _shoot_at(5, 300.0, "hazard_windmill")
 	await _shoot_at(6, 570.0, "hazard_sprinkler")
