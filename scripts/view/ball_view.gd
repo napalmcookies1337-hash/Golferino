@@ -3,12 +3,17 @@ extends Node2D
 ## The ball, with a fading trail while it flies.
 
 const TRAIL_LENGTH := 16
+## A squashy ball flattens on landing, then stretches as it springs back up.
+const SQUASH_TIME := 0.06
+const STRETCH_TIME := 0.08
+const MIN_SQUASH_SPEED := 40.0
 
 var game: HoleGame
 var ball: BallSim
 var fill := Color("ffffff")
 var shade := Color("c9d2de")
 var _trail: Array[Vector2] = []
+var _since_landing: float = 1.0
 
 
 func setup(p_game: HoleGame) -> void:
@@ -26,9 +31,11 @@ func setup_other(p_game: HoleGame, p_ball: BallSim, p_fill: Color, p_shade: Colo
 
 func _ready() -> void:
 	game.phase_changed.connect(_on_phase_changed)
+	ball.bounced.connect(_on_bounced)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_since_landing += delta
 	if ball.state == BallSim.State.AIRBORNE:
 		_trail.append(ball.pos)
 		if _trail.size() > TRAIL_LENGTH:
@@ -43,6 +50,11 @@ func _on_phase_changed(_phase: int) -> void:
 		_trail.clear()
 
 
+func _on_bounced(_at: Vector2, _surface: int, impact_speed: float) -> void:
+	if ball.squash_scale > 0.0 and impact_speed >= MIN_SQUASH_SPEED:
+		_since_landing = 0.0
+
+
 func _draw() -> void:
 	for i in _trail.size():
 		var alpha: float = float(i + 1) / float(TRAIL_LENGTH) * 0.55
@@ -53,8 +65,24 @@ func _draw() -> void:
 	if state == BallSim.State.HOLED or state == BallSim.State.IN_WATER:
 		return
 	var at: Vector2 = ball.pos.round()
+	if _since_landing < SQUASH_TIME:
+		_draw_squished(at + Vector2(0, 2), 9, 5)
+		return
+	if _since_landing < SQUASH_TIME + STRETCH_TIME:
+		_draw_squished(at, 5, 9)
+		return
 	draw_rect(Rect2(at.x - 2, at.y - 3, 5, 7), Color("20202e"))
 	draw_rect(Rect2(at.x - 3, at.y - 2, 7, 5), Color("20202e"))
 	draw_rect(Rect2(at.x - 2, at.y - 2, 5, 5), fill)
 	draw_rect(Rect2(at.x, at.y + 1, 2, 1), shade)
 	draw_rect(Rect2(at.x + 1, at.y, 1, 1), shade)
+
+
+# The ball at another shape, centered on a point, with its corners cut off.
+func _draw_squished(center: Vector2, width: int, height: int) -> void:
+	var left: float = center.x - float(width - 1) / 2.0
+	var top: float = center.y - float(height - 1) / 2.0
+	draw_rect(Rect2(left + 1, top, width - 2, height), Color("20202e"))
+	draw_rect(Rect2(left, top + 1, width, height - 2), Color("20202e"))
+	draw_rect(Rect2(left + 1, top + 1, width - 2, height - 2), fill)
+	draw_rect(Rect2(left + 1, top + height - 2, width - 2, 1), shade)

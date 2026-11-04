@@ -32,7 +32,7 @@ const CATALOG: Array[Dictionary] = [
 	# Special balls. Only one at a time, kept until replaced.
 	{ "id": "wind_cutter", "kind": KIND_BALL, "name": "WIND CUTTER", "text": "WIND BARELY MOVES IT", "price": 12, "effects": { "wind": 0.3 } },
 	{ "id": "sticky_ball", "kind": KIND_BALL, "name": "STICKY BALL", "text": "STOPS WHERE IT LANDS", "price": 12, "effects": { "bounce": 0.6, "roll": 1.5 } },
-	{ "id": "rubber_ball", "kind": KIND_BALL, "name": "RUBBER BALL", "text": "BOUNCES AND RUNS MORE", "price": 12, "effects": { "bounce": 1.3, "roll": 0.8 } },
+	{ "id": "rubber_ball", "kind": KIND_BALL, "name": "RUBBER BALL", "text": "BOUNCES AND RUNS MORE", "price": 12, "effects": { "bounce": 2.2, "grip": 1.12, "knock": 1.6, "squash": 1.0 } },
 	{ "id": "skipper", "kind": KIND_BALL, "name": "SKIPPER", "text": "SKIPS OFF WATER ONCE", "price": 16, "effects": { "water_skips": 1 } },
 	{ "id": "heavy_ball", "kind": KIND_BALL, "name": "HEAVY BALL", "text": "HAZARDS KNOCK IT LESS", "price": 14, "effects": { "knock": 0.5 }, "unlock": 2 },
 	{ "id": "magnet_ball", "kind": KIND_BALL, "name": "MAGNET BALL", "text": "CUP PULLS IT HARD", "price": 14, "effects": { "cup_pull": 2.0 }, "unlock": 4 },
@@ -94,6 +94,8 @@ static func club_with_stickers(base: ClubData, sticker_ids: Array) -> ClubData:
 static func apply_ball(sim: BallSim, ball_id: String) -> void:
 	var effects: Dictionary = by_id(ball_id).get("effects", {})
 	sim.bounce_scale = float(effects.get("bounce", 1.0))
+	sim.grip_scale = float(effects.get("grip", 1.0))
+	sim.squash_scale = float(effects.get("squash", 0.0))
 	sim.roll_scale = float(effects.get("roll", 1.0))
 	sim.cup_pull_scale = float(effects.get("cup_pull", 1.0))
 	sim.knock_scale = float(effects.get("knock", 1.0))

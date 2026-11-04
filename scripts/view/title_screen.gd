@@ -96,7 +96,6 @@ func _choose(index: int) -> void:
 func _draw_menu(canvas: Node2D) -> void:
 	var bob: float = round(sin(_time * 1.6) * 2.0)
 	PixelFont.draw_centered(canvas, "GOLFERINO", CENTER_X, 66.0 + bob, ACCENT, 6)
-	PixelFont.draw_centered(canvas, "A SIDE-ON GOLF ROGUELITE", CENTER_X, 124.0, TEXT)
 	for i in ITEMS.size():
 		var y: float = ITEM_TOP + float(i) * ITEM_GAP
 		var color: Color = ACCENT if i == _selected else TEXT

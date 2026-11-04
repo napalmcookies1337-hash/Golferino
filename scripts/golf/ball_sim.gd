@@ -49,6 +49,10 @@ var collects_coins: bool = false
 # What the ball is made of. Special balls change these.
 ## Bounce kept on landing.
 var bounce_scale: float = 1.0
+## Forward speed kept on landing.
+var grip_scale: float = 1.0
+## How much it visibly squashes when it lands. Only the view reads this.
+var squash_scale: float = 0.0
 ## Slowdown while rolling.
 var roll_scale: float = 1.0
 ## Pull over the cup.
@@ -224,7 +228,7 @@ func _collide(ground: float) -> void:
 	var vt: float = vel.dot(tangent)
 
 	var new_vn: float = absf(vn) * float(props["restitution"]) * bounce_scale
-	var new_vt: float = vt * float(props["impact_grip"])
+	var new_vt: float = vt * minf(float(props["impact_grip"]) * grip_scale, 1.0)
 
 	# Backspin (negative) grabs and can pull the ball back. Topspin drives it on.
 	var bite: float = BACKSPIN_BITE if spin < 0.0 else TOPSPIN_BITE

@@ -2188,7 +2188,33 @@ func _test_special_balls() -> void:
 	# The aim preview uses the ball in play.
 	var plain := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
 	var rubbery := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), "rubber_ball")
-	_check(plain.new_preview_sim().bounce_scale == 1.0 and rubbery.new_preview_sim().bounce_scale == 1.3, "the preview matches the ball in play")
+	_check(plain.new_preview_sim().bounce_scale == 1.0 and rubbery.new_preview_sim().bounce_scale == rubbery.ball.bounce_scale, "the preview matches the ball in play")
+	_check(rubbery.ball.bounce_scale > 1.0, "a rubber ball is bouncier")
+
+	# Dropped from the same height, a rubber ball rebounds higher and keeps going for longer.
+	var drops: Dictionary = {}
+	for ball_id: String in ["", "rubber_ball"]:
+		var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), ball_id)
+		var sim: BallSim = game.ball
+		sim.pos = Vector2(300.0, 150.0)
+		sim.launch(Vector2(40.0, 1.0), 0.0)
+		var first_bounce_y: float = INF
+		var highest_after: float = INF
+		var steps: int = 0
+		while sim.is_moving() and steps < 3000:
+			sim.step(DT)
+			steps += 1
+			if sim.bounce_count >= 1:
+				if first_bounce_y == INF:
+					first_bounce_y = sim.pos.y
+				highest_after = minf(highest_after, sim.pos.y)
+		_check(not sim.is_moving(), "a dropped ball settles (%s)" % ball_id)
+		drops[ball_id] = { "bounces": sim.bounce_count, "rebound": first_bounce_y - highest_after }
+	var plain_drop: Dictionary = drops[""]
+	var rubber_drop: Dictionary = drops["rubber_ball"]
+	_check(float(rubber_drop["rebound"]) > float(plain_drop["rebound"]) * 3.0, "a rubber ball rebounds much higher (%.0f, %.0f)" % [rubber_drop["rebound"], plain_drop["rebound"]])
+	_check(int(rubber_drop["bounces"]) >= int(plain_drop["bounces"]) + 3, "a rubber ball bounces more times (%d, %d)" % [rubber_drop["bounces"], plain_drop["bounces"]])
+	print("Rubber drop: %s, plain drop: %s, landing x %.0f against %.0f" % [rubber_drop, plain_drop, rubber_x, plain_x])
 
 	# Hazards knock a heavy ball less.
 	var heavy_hole: HoleData = _flat_hole({ "cup_x": 990.0 })

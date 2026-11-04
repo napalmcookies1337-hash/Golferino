@@ -32,6 +32,7 @@ func _run() -> void:
 		await _shoot_hole(i)
 	await _shoot_hazards()
 	await _test_coin_and_card()
+	await _test_rubber_ball()
 	await _test_pause()
 	await _test_out_of_strokes()
 	await _test_duel()
@@ -184,6 +185,29 @@ func _test_shop() -> void:
 	# A clean bag for the rest of the checks.
 	run_state.stickers = { "driver": [], "iron": [], "putter": [] }
 	run_state.ball_id = ""
+
+
+# A rubber ball squashes as it lands, then stretches as it springs back up.
+func _test_rubber_ball() -> void:
+	main.run_state.ball_id = "rubber_ball"
+	main.run.hole_index = 0
+	main.load_current_hole()
+	await _wait(0.4)
+	var ball: BallSim = game().ball
+	_expect(ball.squash_scale > 0.0, "the hole starts with the rubber ball in play")
+	ball.pos = Vector2(ball.pos.x + 60.0, ball.pos.y - 70.0)
+	ball.launch(Vector2(25.0, 1.0), 0.0)
+	game()._set_phase(HoleGame.Phase.BALL_MOVING)
+	await ball.bounced
+	await _save("rubber_01_squash")
+	await _wait(0.07)
+	await _save("rubber_02_stretch")
+	while ball.is_moving():
+		await get_tree().physics_frame
+	_expect(ball.bounce_count >= 4, "a rubber ball bounces many times (%d)" % ball.bounce_count)
+	main.run_state.ball_id = ""
+	main.load_current_hole()
+	await _wait(0.2)
 
 
 func _test_coin_and_card() -> void:
