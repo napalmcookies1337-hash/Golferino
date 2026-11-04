@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "HOLE 1"
+par = 4
+tee_x = 90.0
+cup_x = 1440.0
+points = PackedVector2Array(0, 250, 60, 262, 130, 268, 210, 276, 320, 292, 450, 300, 560, 292, 620, 286, 650, 304, 690, 306, 720, 288, 800, 280, 900, 278, 960, 292, 1000, 345, 1100, 350, 1150, 300, 1210, 270, 1290, 250, 1330, 240, 1440, 238, 1530, 240, 1600, 222, 1700, 190)
+surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 625, "type": 1}, {"from": 625, "to": 720, "type": 3}, {"from": 720, "to": 965, "type": 1}, {"from": 1150, "to": 1320, "type": 1}, {"from": 1320, "to": 1545, "type": 2}]
+water_spans = [{"from": 960, "to": 1150, "level": 318.0}]
+tree_xs = PackedFloat32Array(24, 170, 395, 470, 760, 880, 1190, 1580, 1660)

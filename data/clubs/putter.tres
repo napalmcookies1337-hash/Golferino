@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ClubData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/golf/club_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "putter"
+display_name = "PUTTER"
+max_speed = 150.0
+loft_deg = 0.0
+is_putter = true
+draw_length = 12.0
