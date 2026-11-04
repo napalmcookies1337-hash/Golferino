@@ -95,6 +95,9 @@ func _draw_club_panel() -> void:
 	if game.ball.state == BallSim.State.RESTING and surface.has("name"):
 		PixelFont.draw(self, str(surface["name"]), Vector2(74, 307), DIM)
 		PixelFont.draw(self, "%d%%" % lie_percent, Vector2(74, 321), DIM)
+	if not game.current_club().is_putter:
+		var angle_text: String = "ANGLE %d" % int(round(game.aim_angle))
+		PixelFont.draw(self, angle_text, Vector2(74, 335), ACCENT)
 
 
 func _draw_spin_panel() -> void:
@@ -161,7 +164,7 @@ func _draw_meter() -> void:
 func _draw_hint() -> void:
 	if game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(
-				self, "A/D LOOK  Q/E CLUB  W/S SPIN  F FLIP  R RESTART",
+				self, "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  F FLIP  R RESTART",
 				SCREEN_WIDTH / 2.0, 346.0, TEXT)
 
 

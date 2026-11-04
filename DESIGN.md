@@ -11,7 +11,7 @@ mode comes later: leave room for it, do not build it yet.
 |---|---|
 | Swing | Classic 3-click: start, set power, set accuracy |
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
-| Shot control | Each club sets range and loft; player adds backspin or topspin |
+| Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
 | Stickers | Clubs are not sold. Shop sells stickers; each club holds up to 3 and each gives that club a bonus. A new sticker on a full club replaces one the player chooses, and the old one is lost |
 | Run structure | Fixed 9 holes, then the boss hole |

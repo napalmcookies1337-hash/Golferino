@@ -11,12 +11,13 @@ const PUTT_SPEED_ERROR := 0.22
 
 
 ## Range grows with speed squared, so taking the square root makes half power
-## travel about half as far.
+## travel about half as far. A negative angle_deg means the club's default loft.
 static func compute(
-		club: ClubData, power: float, accuracy: float, spin: int, facing: int, lie_power: float
+		club: ClubData, power: float, accuracy: float, spin: int, facing: int, lie_power: float,
+		angle_deg: float = -1.0
 ) -> Dictionary:
 	var speed: float = club.max_speed * sqrt(clampf(power * lie_power, 0.0, 1.0))
-	var angle: float = club.loft_deg
+	var angle: float = club.loft_deg if angle_deg < 0.0 else angle_deg
 
 	if club.is_putter:
 		speed *= 1.0 - PUTT_SPEED_ERROR * accuracy

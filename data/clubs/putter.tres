@@ -8,5 +8,7 @@ id = "putter"
 display_name = "PUTTER"
 max_speed = 150.0
 loft_deg = 0.0
+min_angle_deg = 0.0
+max_angle_deg = 0.0
 is_putter = true
 draw_length = 12.0

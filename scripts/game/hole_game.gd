@@ -14,6 +14,8 @@ const DOWNSWING_TIME := 0.14
 const PENALTY_TIME := 1.3
 const PREVIEW_STEP := 1.0 / 60.0
 const PREVIEW_MAX_STEPS := 600
+## How fast holding the aim control changes the launch angle, degrees per second.
+const AIM_RATE := 30.0
 
 var hole: HoleData
 var terrain: Terrain
@@ -23,6 +25,8 @@ var clubs: Array[ClubData] = []
 var club_index: int = 0
 ## -1 backspin, 0 none, 1 topspin.
 var spin: int = 0
+## Launch angle for the next shot, degrees above level.
+var aim_angle: float = 0.0
 ## 1 hits toward +x, -1 hits toward -x.
 var facing: int = 1
 var phase: int = Phase.AIM
@@ -75,13 +79,23 @@ func cycle_club(step_by: int) -> void:
 	if phase != Phase.AIM:
 		return
 	club_index = posmod(club_index + step_by, clubs.size())
-	_preview_dirty = true
+	_reset_aim()
 
 
 func select_club(index: int) -> void:
 	if phase != Phase.AIM or index < 0 or index >= clubs.size():
 		return
 	club_index = index
+	_reset_aim()
+
+
+## Raises (direction 1) or lowers (direction -1) the launch angle while held.
+func adjust_aim(direction: float, dt: float) -> void:
+	if phase != Phase.AIM or current_club().is_putter:
+		return
+	var club: ClubData = current_club()
+	aim_angle = clampf(
+			aim_angle + direction * AIM_RATE * dt, club.min_angle_deg, club.max_angle_deg)
 	_preview_dirty = true
 
 
@@ -165,7 +179,7 @@ static func score_name(p_strokes: int, par: int) -> String:
 
 func _strike() -> void:
 	var shot: Dictionary = ShotCalc.compute(
-			current_club(), meter.power, meter.accuracy, spin, facing, lie_power())
+			current_club(), meter.power, meter.accuracy, spin, facing, lie_power(), aim_angle)
 	strokes += 1
 	_last_spot_x = ball.pos.x
 	last_quality = str(shot["quality"])
@@ -179,8 +193,13 @@ func _begin_aim() -> void:
 	_pick_club_for_lie()
 	if current_club().is_putter:
 		spin = 0
-	_preview_dirty = true
+	_reset_aim()
 	_set_phase(Phase.AIM)
+
+
+func _reset_aim() -> void:
+	aim_angle = current_club().loft_deg
+	_preview_dirty = true
 
 
 # Offers a sensible club so most shots need no menu input. The player can change it.
@@ -208,7 +227,8 @@ func _full_range_estimate(club_id: String) -> float:
 func _build_preview() -> Dictionary:
 	var sim := BallSim.new(terrain)
 	sim.place(ball.pos.x)
-	var shot: Dictionary = ShotCalc.compute(current_club(), 1.0, 0.0, spin, facing, lie_power())
+	var shot: Dictionary = ShotCalc.compute(
+			current_club(), 1.0, 0.0, spin, facing, lie_power(), aim_angle)
 	sim.launch(shot["velocity"], float(shot["spin"]))
 	var path := PackedVector2Array()
 	var is_putt: bool = current_club().is_putter

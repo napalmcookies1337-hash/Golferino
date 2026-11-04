@@ -20,9 +20,10 @@ To work on it, open this folder in the Godot 4.6 editor and press F5.
 | Action | Keyboard | Controller |
 |---|---|---|
 | Swing (3 presses) | Space or Enter | A |
-| Look along the hole | A / D or Left / Right | D-pad or left stick |
+| Launch angle (hold) | Up / Down | D-pad up / down |
+| Look along the hole | A / D or Left / Right | D-pad left / right or left stick |
 | Change club | Q / E, or 1 / 2 / 3 | LB / RB |
-| Spin | W / S or Up / Down | D-pad up / down |
+| Spin | W / S | Y / B |
 | Hit the other way | F | X |
 | Restart hole | R | Back |
 | Fullscreen on or off | F11 | |

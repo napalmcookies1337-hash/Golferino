@@ -81,6 +81,9 @@ func _connect_signals() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var aim_input: float = Input.get_axis("aim_down", "aim_up")
+	if aim_input != 0.0:
+		game.adjust_aim(aim_input, delta)
 	game.tick(delta)
 
 

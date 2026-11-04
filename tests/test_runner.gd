@@ -29,6 +29,9 @@ func _ready() -> void:
 	_test_auto_club_on_green()
 	_test_auto_club_in_sand()
 	_test_club_ranges()
+	_test_aim_angle_rules()
+	_test_aim_angle_changes_shot()
+	_test_aim_bindings()
 	_test_bot_finishes_hole()
 	print("%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
@@ -317,6 +320,79 @@ func _test_auto_club_in_sand() -> void:
 	_check(game.current_club().id == "iron", "sand offers the iron, even from long range")
 	var reach: float = absf(Vector2(game.preview()["landing"]).x - game.ball.pos.x)
 	_check(reach > 100.0, "the iron escapes the bunker (%.0f)" % reach)
+
+
+func _test_aim_angle_rules() -> void:
+	var game: HoleGame = _game()
+	_check(is_equal_approx(game.aim_angle, 30.0), "aim starts at the driver's loft")
+
+	game.adjust_aim(1.0, 0.5)
+	_check(is_equal_approx(game.aim_angle, 30.0 + HoleGame.AIM_RATE * 0.5), "holding up raises the angle")
+	game.adjust_aim(1.0, 60.0)
+	_check(is_equal_approx(game.aim_angle, game.current_club().max_angle_deg), "angle stops at the club's maximum")
+	game.adjust_aim(-1.0, 60.0)
+	_check(is_equal_approx(game.aim_angle, game.current_club().min_angle_deg), "angle stops at the club's minimum")
+
+	game.select_club(1)
+	_check(is_equal_approx(game.aim_angle, 45.0), "changing club resets to its loft")
+	game.select_club(2)
+	game.adjust_aim(1.0, 1.0)
+	_check(is_zero_approx(game.aim_angle), "putts stay on the ground")
+
+	game.select_club(1)
+	game.press_swing()
+	var before: float = game.aim_angle
+	game.adjust_aim(1.0, 1.0)
+	_check(is_equal_approx(game.aim_angle, before), "the angle locks once the swing starts")
+
+
+func _test_aim_angle_changes_shot() -> void:
+	var game: HoleGame = _game()
+	game.select_club(1)
+	var base_reach: float = Vector2(game.preview()["landing"]).x
+	game.adjust_aim(1.0, 0.8)
+	var high_angle: float = game.aim_angle
+	var high_reach: float = Vector2(game.preview()["landing"]).x
+	_check(high_reach < base_reach, "a steeper iron lands shorter, and the preview shows it")
+
+	# The angle must reach the real shot, not only the preview.
+	game.strike_with(1.0, 0.0)
+	var launch_angle: float = rad_to_deg(_elevation(game.ball.vel))
+	_check(absf(launch_angle - high_angle) < 0.01, "the shot launches at the aimed angle (%.1f)" % launch_angle)
+
+	var low: Vector2 = ShotCalc.compute(_club("iron"), 1.0, 0.0, 0, 1, 1.0, 20.0)["velocity"]
+	var low_popped: Vector2 = ShotCalc.compute(_club("iron"), 1.0, 1.0, 0, 1, 1.0, 20.0)["velocity"]
+	_check(_elevation(low_popped) > _elevation(low), "misses still apply on top of the chosen angle")
+
+	var after: HoleGame = _game()
+	after.adjust_aim(1.0, 0.5)
+	after.strike_with(0.3, 0.0)
+	var guard: int = 0
+	while after.phase != HoleGame.Phase.AIM and guard < 4000:
+		after.tick(DT)
+		guard += 1
+	_check(is_equal_approx(after.aim_angle, after.current_club().loft_deg), "the next shot starts at the club's loft")
+
+
+func _test_aim_bindings() -> void:
+	Controls.register()
+	var up := InputEventKey.new()
+	up.physical_keycode = KEY_UP
+	up.pressed = true
+	_check(up.is_action_pressed("aim_up"), "the up arrow raises the angle")
+	_check(not up.is_action_pressed("spin_up"), "the up arrow no longer changes spin")
+	var w := InputEventKey.new()
+	w.physical_keycode = KEY_W
+	w.pressed = true
+	_check(w.is_action_pressed("spin_up"), "W still changes spin")
+	var dpad := InputEventJoypadButton.new()
+	dpad.button_index = JOY_BUTTON_DPAD_UP
+	dpad.pressed = true
+	_check(dpad.is_action_pressed("aim_up"), "controller d-pad up raises the angle")
+	var y_button := InputEventJoypadButton.new()
+	y_button.button_index = JOY_BUTTON_Y
+	y_button.pressed = true
+	_check(y_button.is_action_pressed("spin_up"), "controller Y changes spin")
 
 
 func _test_club_ranges() -> void:
