@@ -1,0 +1,419 @@
+extends Node
+## Drives the real game through the title menu and map editor with real mouse and keyboard
+## events, and saves screenshots to tests/shots. Uses its own map folder.
+## Run with: Godot --path . --windowed --resolution 1280x720 --quit-after 6000 res://tests/editor_check.tscn
+
+const OUT_DIR := "res://tests/shots"
+const MAPS_DIR := "user://check_maps"
+
+var app: Node
+var _failures: int = 0
+
+
+func _ready() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
+	var absolute: String = ProjectSettings.globalize_path(MAPS_DIR)
+	DirAccess.make_dir_recursive_absolute(absolute)
+	for file_name in DirAccess.get_files_at(MAPS_DIR):
+		DirAccess.remove_absolute("%s/%s" % [absolute, file_name])
+	app = (load("res://scenes/app.tscn") as PackedScene).instantiate()
+	app.maps_dir = MAPS_DIR
+	add_child(app)
+	_run()
+
+
+func editor() -> MapEditor:
+	return app._editor
+
+
+func _run() -> void:
+	await _title_menu()
+	await _maps_screen()
+	await _open_and_add_objects()
+	await _rotation()
+	await _ground_and_paint()
+	await _settings_panel()
+	await _save_and_reload()
+	await _test_play()
+	await _course_order()
+	await _play_edited_course()
+	for file_name in DirAccess.get_files_at(MAPS_DIR):
+		DirAccess.remove_absolute("%s/%s" % [ProjectSettings.globalize_path(MAPS_DIR), file_name])
+	print("editor check finished, %d failed" % _failures)
+	get_tree().quit(1 if _failures > 0 else 0)
+
+
+func _title_menu() -> void:
+	await _wait(0.4)
+	_expect(app._screen is TitleScreen, "the game opens on the title menu")
+	await _save("editor_01_title")
+	await _click(Vector2(320, 214))
+	await _wait(0.3)
+	_expect(app._screen is MapEditor, "clicking MAP EDITOR opens the editor")
+
+
+func _maps_screen() -> void:
+	_expect(editor().maps_open, "the editor opens on the maps screen")
+	await _save("editor_02_maps")
+
+
+func _open_and_add_objects() -> void:
+	# OPEN on the third row: hole 3.
+	await _click(Vector2(200, LIST_Y(2)))
+	await _wait(0.3)
+	_expect(editor().map_id == "hole_03" and not editor().maps_open, "OPEN opens that map")
+	await _save("editor_03_opened")
+
+	_press_key(KEY_4)
+	await _wait(0.05)
+	_expect(editor().tool == MapEditor.Tool.ADD, "4 picks the add tool")
+	await _save("editor_04_add_tool")
+	await _click(Vector2(250, 120))
+	await _wait(0.1)
+	var pad: Dictionary = editor().doc.entry_of(editor().selection)
+	_expect(str(pad.get("kind", "")) == "pad", "clicking the map places a pad")
+	var world: Vector2 = editor().world_mouse()
+	_expect(absf(float(pad["y"]) - world.y) < 2.0 and world.y < editor().doc.terrain.ground_y(world.x) - 40.0, "the pad sits in mid-air where clicked")
+	await _save("editor_05_pad_placed")
+
+
+func _rotation() -> void:
+	var map_editor: MapEditor = editor()
+	var handle: Vector2 = _to_screen(map_editor.rotate_handle())
+	var center: Vector2 = _to_screen(map_editor.doc.selection_center(map_editor.selection))
+	await _mouse_move(handle)
+	await _mouse_button(handle, true)
+	await _mouse_move(center + Vector2(36, 0))
+	await _mouse_button(center + Vector2(36, 0), false)
+	await _wait(0.1)
+	_expect(absf(map_editor.doc.rotation_of(map_editor.selection) - 90.0) < 2.0, "dragging the ring rotates the pad (%.0f)" % map_editor.doc.rotation_of(map_editor.selection))
+	await _save("editor_06_pad_rotated")
+
+	_press_key(KEY_E, true)
+	await _wait(0.05)
+	_expect(absf(map_editor.doc.rotation_of(map_editor.selection) - 105.0) < 0.5, "Shift+E turns it 15 degrees (%.0f)" % map_editor.doc.rotation_of(map_editor.selection))
+	Input.action_press("ui_accept")
+	Input.action_release("ui_accept")
+	var before: float = map_editor.doc.rotation_of(map_editor.selection)
+	var hold := InputEventKey.new()
+	hold.physical_keycode = KEY_Q
+	hold.pressed = true
+	Input.parse_input_event(hold)
+	await _wait(0.25)
+	hold = InputEventKey.new()
+	hold.physical_keycode = KEY_Q
+	hold.pressed = false
+	Input.parse_input_event(hold)
+	await _wait(0.05)
+	_expect(map_editor.doc.rotation_of(map_editor.selection) < before - 5.0, "holding Q rotates it smoothly")
+
+	# Dragging the pad itself moves it.
+	var at: Vector2 = _to_screen(map_editor.doc.selection_center(map_editor.selection))
+	await _mouse_move(at)
+	await _mouse_button(at, true)
+	await _mouse_move(at + Vector2(40, -20))
+	await _mouse_button(at + Vector2(40, -20), false)
+	await _wait(0.1)
+	_expect(_to_screen(map_editor.doc.selection_center(map_editor.selection)).distance_to(at + Vector2(40, -20)) < 3.0, "dragging moves the pad")
+
+	# Carts can't rotate: no ring appears and Q/E do nothing.
+	_press_key(KEY_4)
+	await _wait(0.05)
+	await _click(Vector2(290, 332 + 8))
+	await _wait(0.05)
+	_expect(map_editor.add_kind == "cart", "the add list picks a cart")
+	await _click(Vector2(200, 200))
+	await _wait(0.1)
+	_expect(str(map_editor.doc.entry_of(map_editor.selection).get("kind", "")) == "cart", "a cart was placed")
+	_expect(not map_editor.doc.can_rotate(map_editor.selection), "a cart has no rotation")
+	await _save("editor_07_cart_route")
+
+
+func _ground_and_paint() -> void:
+	var map_editor: MapEditor = editor()
+	_press_key(KEY_2)
+	await _wait(0.1)
+	await _save("editor_08_ground_tool")
+	var count: int = map_editor.doc.hole.points.size()
+	var spot: float = map_editor.camera.position.x + 100.0
+	var on_ground: Vector2 = _to_screen(Vector2(spot, map_editor.doc.terrain.ground_y(spot)))
+	await _mouse_move(on_ground)
+	await _mouse_button(on_ground, true)
+	await _mouse_move(on_ground + Vector2(0, -30))
+	await _mouse_button(on_ground + Vector2(0, -30), false)
+	await _wait(0.2)
+	_expect(map_editor.doc.hole.points.size() == count + 1, "clicking the ground adds a point")
+	_expect(map_editor.doc.terrain.ground_y(spot) < _to_world(on_ground).y - 20.0, "dragging the point raises the ground")
+	await _save("editor_09_ground_raised")
+
+	_press_key(KEY_3)
+	await _wait(0.05)
+	await _click(Vector2(240 + 4 + 18 + 42 + 16, 332 + 8))
+	await _wait(0.05)
+	var picked: int = map_editor.paint_type
+	var from: Vector2 = Vector2(100, 200)
+	var to: Vector2 = Vector2(160, 200)
+	await _mouse_move(from)
+	await _mouse_button(from, true)
+	await _mouse_move(to)
+	await _save("editor_10_painting")
+	await _mouse_button(to, false)
+	await _wait(0.2)
+	var middle: float = _to_world((from + to) / 2.0).x
+	_expect(map_editor.doc.terrain.surface_at(middle) == picked, "dragging paints the ground (wanted %d)" % picked)
+	await _save("editor_11_painted")
+
+	_press_key(KEY_Z, false, true)
+	await _wait(0.2)
+	_expect(map_editor.doc.terrain.surface_at(middle) != picked or picked == Surface.Type.FAIRWAY, "Ctrl+Z undoes the paint")
+	_press_key(KEY_Y, false, true)
+	await _wait(0.2)
+	_expect(map_editor.doc.terrain.surface_at(middle) == picked, "Ctrl+Y redoes it")
+
+
+func _settings_panel() -> void:
+	var map_editor: MapEditor = editor()
+	_press_key(KEY_1)
+	await _wait(0.05)
+	map_editor.selection = {}
+	await _wait(0.1)
+	await _save("editor_12_hole_settings")
+	var par: int = map_editor.doc.hole.par
+	# THIS MAP, the name, the length, then PAR's plus button.
+	await _click(Vector2(506 + 42 + 43 + 6, 25 + 12 + 17 + 12 + 6))
+	await _wait(0.1)
+	_expect(map_editor.doc.hole.par == par + 1, "the panel's + raises par (%d)" % map_editor.doc.hole.par)
+
+	await _click(Vector2(560, 25 + 12 + 6))
+	await _wait(0.05)
+	_expect(map_editor._typing, "clicking the name starts typing")
+	for key: Key in [KEY_BACKSPACE, KEY_BACKSPACE]:
+		_type_key(key, 0)
+	_type_key(KEY_X, 120)
+	_type_key(KEY_ENTER, 0)
+	await _wait(0.1)
+	_expect(map_editor.doc.hole.title.ends_with("X"), "typing changes the map's name (%s)" % map_editor.doc.hole.title)
+
+
+func _save_and_reload() -> void:
+	var map_editor: MapEditor = editor()
+	_expect(map_editor.doc.dirty, "the map shows unsaved changes")
+	_press_key(KEY_S, false, true)
+	await _wait(0.1)
+	_expect(not map_editor.doc.dirty, "Ctrl+S saves")
+	var saved: HoleData = map_editor.library.load_hole("hole_03")
+	_expect(saved.obstacles.size() == map_editor.doc.hole.obstacles.size(), "the saved map has its objects")
+	_expect(map_editor.library.kind_of("hole_03") == MapLibrary.Kind.EDITED, "the hole now counts as edited")
+	var original: HoleData = map_editor.library.load_original("hole_03")
+	_expect(original.obstacles.size() < saved.obstacles.size(), "the original is still there underneath")
+
+
+func _test_play() -> void:
+	var map_editor: MapEditor = editor()
+	var camera_at: Vector2 = map_editor.camera.position
+	var undo_was: bool = map_editor.doc.can_undo()
+	var pad_count: int = map_editor.doc.hole.obstacles.size()
+
+	_press_key(KEY_F5)
+	await _wait(0.5)
+	var main: Node = _test_main()
+	_expect(main != null and main.is_testing(), "F5 starts a test")
+	_expect(not map_editor.visible, "the editor hides during a test")
+	_expect(is_equal_approx(main.game.ball.pos.x, map_editor.doc.hole.tee_x), "the test starts from the tee")
+	_expect(main.game.obstacles.size() == pad_count, "the test uses the map being edited")
+	await _save("editor_13_test_from_tee")
+
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(main.game.phase == HoleGame.Phase.SWING, "the test can actually be played")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(_test_main() == null, "Esc ends the test")
+	_expect(map_editor.visible and app._screen == map_editor, "the editor comes back")
+	_expect(map_editor.camera.position.distance_to(camera_at) < 1.0, "the view is where it was")
+	_expect(map_editor.doc.can_undo() == undo_was, "undo history survives")
+	await _save("editor_14_back_from_test")
+
+	var mouse_spot: Vector2 = Vector2(300, 150)
+	await _mouse_move(mouse_spot)
+	var wanted: float = _to_world_with(map_editor, mouse_spot).x
+	_press_key(KEY_T)
+	await _wait(0.5)
+	main = _test_main()
+	_expect(main != null and absf(main.game.ball.pos.x - wanted) < 3.0, "T starts a test at the mouse")
+	await _save("editor_15_test_from_mouse")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+
+	# Hitting the pad for real in a test run, with the ball dropped above its spring face.
+	var pad_map: HoleData = HoleIO.blank_hole("PAD CHECK")
+	pad_map.obstacles = [{ "kind": "pad", "x": 400.0, "y": 250.0, "rotation": 30.0 }]
+	map_editor.test_requested.emit(pad_map, 300.0)
+	await _wait(0.4)
+	main = _test_main()
+	main.game.ball.pos = Vector2(400, 200)
+	main.game.ball.launch(Vector2(0, 40), 0.0)
+	main.game.ball.launch_x = 0.0
+	main.game._set_phase(HoleGame.Phase.BALL_MOVING)
+	await _wait(1.0)
+	_expect(main.game.ball.vel.x > 40.0, "a rotated pad fires along its face in real play (%.0f)" % main.game.ball.vel.x)
+	await _save("editor_16_pad_fired")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+
+
+func _course_order() -> void:
+	var map_editor: MapEditor = editor()
+	_press_key(KEY_ESCAPE)
+	await _wait(0.05)
+	if not map_editor.selection.is_empty():
+		_press_key(KEY_ESCAPE)
+		await _wait(0.05)
+	if not map_editor.maps_open:
+		await _click(Vector2(16, 10))
+		await _wait(0.1)
+	_expect(map_editor.maps_open, "the maps screen opens")
+	await _save("editor_17_maps_edited")
+
+	await _click(Vector2(40, 342))
+	await _wait(0.3)
+	_expect(map_editor.map_id == "map_001", "NEW MAP makes and opens a custom map")
+	await _save("editor_18_new_map")
+	await _click(Vector2(16, 10))
+	await _wait(0.1)
+
+	# ADD on the new map, the last row, then move it to the top.
+	var row: int = map_editor.library.list_ids().size() - 1
+	await _click(Vector2(236, LIST_Y(row)))
+	await _wait(0.1)
+	var order: Array[String] = map_editor.library.course_order()
+	_expect(order[order.size() - 1] == "map_001", "ADD puts the map in the course")
+	await _click(Vector2(530, LIST_Y(order.size() - 1)))
+	await _wait(0.1)
+	order = map_editor.library.course_order()
+	_expect(order[order.size() - 2] == "map_001", "UP moves it earlier")
+	await _click(Vector2(600, LIST_Y(order.size() - 2)))
+	await _wait(0.1)
+	_expect(not map_editor.library.course_order().has("map_001"), "REMOVE takes it out of the course")
+	_expect(map_editor.library.list_ids().has("map_001"), "but the map itself stays")
+	await _save("editor_19_course_list")
+
+	# RESTORE on hole 3, with its confirmation.
+	await _click(Vector2(280, LIST_Y(2)))
+	await _wait(0.1)
+	await _save("editor_20_confirm")
+	await _click(Vector2(320 - 72 + 35, 188))
+	await _wait(0.1)
+	_expect(map_editor.library.kind_of("hole_03") == MapLibrary.Kind.ORIGINAL, "RESTORE brings the original back")
+
+
+func _play_edited_course() -> void:
+	var map_editor: MapEditor = editor()
+	var edited: HoleData = map_editor.library.load_hole("hole_01")
+	edited.title = "RENAMED"
+	map_editor.library.save_hole("hole_01", edited)
+	await _click(Vector2(590, 342))
+	await _wait(0.1)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "TITLE MENU goes back to the menu")
+	await _click(Vector2(320, 192))
+	await _wait(0.5)
+	_expect(app._screen.get("game") != null, "PLAY starts the course")
+	_expect(app._screen.game.hole.title == "RENAMED", "a run plays the edited maps")
+	_expect(app._screen.game.hole.display_name == "HOLE 1", "holes are numbered in the run")
+	await _save("editor_21_run_uses_edits")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "Esc in a run goes back to the menu")
+
+
+func _test_main() -> Node:
+	for child in app.get_children():
+		if child != app._screen and child.get("game") != null:
+			return child
+	return null
+
+
+func LIST_Y(row: int) -> float:
+	return MapEditor.LIST_TOP + float(row) * MapEditor.ROW_H + 6.0
+
+
+func _to_screen(world: Vector2) -> Vector2:
+	return editor().get_canvas_transform() * world
+
+
+func _to_world(screen: Vector2) -> Vector2:
+	return editor().get_canvas_transform().affine_inverse() * screen
+
+
+func _to_world_with(map_editor: MapEditor, screen: Vector2) -> Vector2:
+	return map_editor.get_canvas_transform().affine_inverse() * screen
+
+
+func _expect(condition: bool, label: String) -> void:
+	if not condition:
+		_failures += 1
+	print("%s: %s" % ["ok" if condition else "FAIL", label])
+
+
+# The game is 640x360 scaled by a whole number to fit the window, and centered in it.
+func _to_window(at: Vector2) -> Vector2:
+	var size := Vector2(get_window().size)
+	var scale_by: float = maxf(floor(minf(size.x / 640.0, size.y / 360.0)), 1.0)
+	return at * scale_by + (size - Vector2(640, 360) * scale_by) / 2.0
+
+
+func _mouse_move(at: Vector2) -> void:
+	var event := InputEventMouseMotion.new()
+	event.position = _to_window(at)
+	event.global_position = event.position
+	event.relative = Vector2(1, 0)
+	Input.parse_input_event(event)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _mouse_button(at: Vector2, is_pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.position = _to_window(at)
+	event.global_position = event.position
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = is_pressed
+	Input.parse_input_event(event)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _click(at: Vector2) -> void:
+	await _mouse_move(at)
+	await _wait(0.05)
+	await _mouse_button(at, true)
+	await _mouse_button(at, false)
+
+
+func _press_key(key: Key, shift: bool = false, ctrl: bool = false) -> void:
+	for is_pressed: bool in [true, false]:
+		var event := InputEventKey.new()
+		event.physical_keycode = key
+		event.pressed = is_pressed
+		event.shift_pressed = shift
+		event.ctrl_pressed = ctrl
+		Input.parse_input_event(event)
+
+
+func _type_key(key: Key, unicode: int) -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = key
+	event.unicode = unicode
+	event.pressed = true
+	Input.parse_input_event(event)
+
+
+func _wait(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+
+
+func _save(shot_name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var image: Image = get_viewport().get_texture().get_image()
+	image.save_png("%s/%s.png" % [OUT_DIR, shot_name])

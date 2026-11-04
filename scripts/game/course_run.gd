@@ -11,10 +11,18 @@ var scores: Dictionary = {}
 var _holes: Array[HoleData] = []
 
 
-func _init(p_course: CourseData) -> void:
+func _init(p_course: CourseData = null) -> void:
 	course = p_course
+	if course == null:
+		return
 	for path: String in course.hole_paths:
 		_holes.append(load(path) as HoleData)
+
+
+static func from_holes(holes: Array[HoleData]) -> CourseRun:
+	var run := CourseRun.new()
+	run._holes = holes
+	return run
 
 
 func hole_count() -> int:

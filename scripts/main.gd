@@ -1,7 +1,10 @@
 extends Node2D
-## Runs the course: creates each hole's rules object, then attaches the views to it.
+## Runs the course, or one map being tested from the editor: creates each hole's rules
+## object, then attaches the views to it.
 
-const COURSE_PATH := "res://data/course_01.tres"
+## The player asked to leave. Only used when embedded.
+signal exit_requested
+
 const CLUB_PATHS := [
 	"res://data/clubs/driver.tres",
 	"res://data/clubs/iron.tres",
@@ -14,15 +17,39 @@ var camera: FollowCamera
 var hud: Hud
 var fx: FxView
 
+## True when something else manages this screen, so Esc asks to leave instead of quitting.
+var embedded: bool = false
+## Where the course's maps come from. Uses the player's own if not set.
+var library: MapLibrary
+
 var _clubs: Array[ClubData] = []
 var _world: Node2D
+var _test_hole: HoleData
+var _test_start_x: float = -1.0
+
+
+## Plays one map instead of the course. A negative start means from the tee.
+func setup_test(hole: HoleData, start_x: float) -> void:
+	_test_hole = hole
+	_test_start_x = start_x
+
+
+func is_testing() -> bool:
+	return _test_hole != null
 
 
 func _ready() -> void:
 	Controls.register()
 	for path: String in CLUB_PATHS:
 		_clubs.append(load(path) as ClubData)
-	run = CourseRun.new(load(COURSE_PATH) as CourseData)
+	if is_testing():
+		var only: Array[HoleData] = [_test_hole]
+		_test_hole.display_name = "TEST"
+		run = CourseRun.from_holes(only)
+	else:
+		if library == null:
+			library = MapLibrary.new()
+		run = CourseRun.from_holes(library.load_course())
 	load_current_hole()
 
 
@@ -34,9 +61,13 @@ func load_current_hole() -> void:
 	_world = Node2D.new()
 	add_child(_world)
 	game = HoleGame.new(run.current_hole(), _clubs)
+	if is_testing() and _test_start_x >= 0.0:
+		game.start_from(_test_start_x)
 	_build_views()
 	_connect_signals()
 	hud.show_message("%s: %s" % [game.hole.display_name, game.hole.title], 2.2)
+	if is_testing():
+		hud.banner = "TESTING: ESC RETURNS TO THE EDITOR. SCORES DON'T COUNT."
 
 
 func _build_views() -> void:
@@ -48,7 +79,7 @@ func _build_views() -> void:
 	_world.add_child(background)
 
 	var trees := TreeView.new()
-	trees.setup(game)
+	trees.setup(game.hole, game.terrain)
 	_world.add_child(trees)
 
 	var water := WaterView.new()
@@ -59,7 +90,7 @@ func _build_views() -> void:
 	_world.add_child(water)
 
 	var obstacle_view := ObstacleView.new()
-	obstacle_view.setup(game)
+	obstacle_view.setup(game.obstacles)
 	_world.add_child(obstacle_view)
 
 	var flag := FlagView.new()
@@ -133,24 +164,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		_review_jump(1)
 	elif event.is_action_pressed("review_prev_hole", false):
 		_review_jump(-1)
-	elif event.is_action_pressed("fullscreen", false):
-		_toggle_fullscreen()
 	elif event.is_action_pressed("quit", false):
-		get_tree().quit()
+		if embedded:
+			exit_requested.emit()
+		else:
+			get_tree().quit()
 
 
 func _review_jump(step: int) -> void:
 	run.jump_by(step)
 	load_current_hole()
-
-
-func _toggle_fullscreen() -> void:
-	var window: Window = get_window()
-	if window.mode == Window.MODE_WINDOWED:
-		window.mode = Window.MODE_FULLSCREEN
-	else:
-		window.mode = Window.MODE_WINDOWED
-		window.size = Vector2i(1280, 720)
 
 
 func _on_shot_struck(quality: String, _power: float) -> void:

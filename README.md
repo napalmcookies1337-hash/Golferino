@@ -15,6 +15,29 @@ D:\ClaudeCode\Golferino\Play.bat
 
 To work on it, open this folder in the Godot 4.6 editor and press F5.
 
+## Map editor
+
+Choose **Map Editor** on the title menu. It uses mouse and keyboard.
+
+| Action | Control |
+|---|---|
+| Tools: select, ground, paint, add | 1 / 2 / 3 / 4 |
+| Move the view | WASD, arrows, or right-drag |
+| Zoom | Mouse wheel |
+| Rotate a pad, windmill or sprinkler | Drag its ring, or hold Q / E |
+| Rotate in 15 degree steps | Hold Shift while dragging, or Shift+Q / Shift+E |
+| Remove the selected object | Delete |
+| Add a ground point / remove one | Click the ground / right-click the point |
+| Undo / redo | Ctrl+Z / Ctrl+Y |
+| Save | Ctrl+S |
+| Test from the tee | F5 |
+| Test from the mouse position | T |
+| Leave a test | Esc |
+
+Dragging the last ground point changes the hole's length. **Maps** lists every map and the
+course order. Original holes are never overwritten, and **Restore** brings one back.
+Maps are saved in `%APPDATA%\Godot\app_userdata\Golferino\maps`.
+
 ## Controls
 
 | Action | Keyboard | Controller |
@@ -41,5 +64,6 @@ From this folder, in PowerShell:
 The first runs the rules tests and takes about two minutes, because simulated players
 play every hole. Check for "0 failed": a script parse error can still exit with code 0.
 The second plays the real scene, checks the input
-bindings, and saves screenshots to `tests/shots`. Keep `--quit-after`: a script error
+bindings, and saves screenshots to `tests/shots`. `tests/editor_check.tscn` runs the same
+way, and drives the title menu and map editor with real mouse clicks, using its own map folder. Keep `--quit-after`: a script error
 would otherwise leave Godot running forever instead of exiting.

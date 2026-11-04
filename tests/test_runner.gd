@@ -48,6 +48,13 @@ func _ready() -> void:
 	_test_no_spot_is_a_trap()
 	_test_trees_are_scenery()
 	_test_bounce_pads()
+	_test_pads_never_fire_into_water()
+	_test_rotated_hazards()
+	_test_hole_files()
+	_test_map_library()
+	_test_editor_ground_and_paint()
+	_test_editor_objects()
+	_test_editor_undo()
 	_test_ball_against_a_post_can_escape()
 	_test_plays_away_when_blocked()
 	_test_cart()
@@ -717,126 +724,135 @@ func _test_trees_are_scenery() -> void:
 	_check(is_equal_approx(plain_game.ball.pos.x, wooded_game.ball.pos.x), "trees don't change where a shot finishes")
 
 
-func _pad_sim(lean: float, x: float = 400.0) -> Dictionary:
-	return _hazard_sim({ "kind": "pad", "x": x, "lean": lean })
+func _floating_pad(rotation: float, center: Vector2 = Vector2(400, 200)) -> Dictionary:
+	return _hazard_sim({ "kind": "pad", "x": center.x, "y": center.y, "rotation": rotation })
 
 
-# Drops a ball onto a pad from the left, and returns where it first lands afterwards.
-func _shot_onto_pad(lean: float) -> Dictionary:
-	var made: Dictionary = _pad_sim(lean)
-	var sim: BallSim = made["sim"]
-	var hits: Array[String] = []
-	sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
-	sim.place(300.0)
-	sim.pos.y = 300.0 - 60.0
-	sim.launch(Vector2(90.0, -30.0), 0.0)
-	var guard: int = 0
-	while sim.bounce_count == 0 and sim.is_moving() and guard < 1200:
-		sim.step(DT)
-		guard += 1
-	return { "x": sim.pos.x, "hits": hits, "pad": made["obstacle"] }
+func _start_ball(sim: BallSim, at: Vector2, velocity: Vector2) -> void:
+	sim.place(at.x)
+	sim.pos = at
+	sim.launch(velocity, 0.0)
+	# Starts each test shot from far away, so the pad's start-of-shot grace doesn't apply.
+	sim.launch_x = 0.0
+	sim.launch_y = 0.0
 
 
 func _test_bounce_pads() -> void:
-	var flat: Dictionary = _shot_onto_pad(0.0)
-	var away: Dictionary = _shot_onto_pad(-35.0)
-	var toward: Dictionary = _shot_onto_pad(35.0)
-	_check(flat["hits"].has("pad") and away["hits"].has("pad") and toward["hits"].has("pad"), "balls land on all three kinds of pad")
-	_check(float(away["x"]) < 385.0, "a pad angled away sends the ball backward (%.0f)" % float(away["x"]))
-	_check(float(toward["x"]) > float(flat["x"]) + 50.0, "a pad angled toward the hole carries it further (%.0f vs %.0f)" % [float(toward["x"]), float(flat["x"])])
-	_check(float(flat["x"]) > 420.0, "a flat pad bounces it up and onward (%.0f)" % float(flat["x"]))
+	# A rectangle that can float anywhere, at any angle.
+	var flat: Dictionary = _floating_pad(0.0)
+	var flat_pad: BouncePadObstacle = flat["obstacle"]
+	_check(flat_pad.center == Vector2(400, 200), "a pad can float in mid-air")
+	var grounded: BouncePadObstacle = _hazard_sim({ "kind": "pad", "x": 400.0, "rotation": 0.0 })["obstacle"]
+	_check(is_equal_approx(grounded.center.y, 300.0 - BouncePadObstacle.HALF_THICKNESS), "with no height given, a pad rests on the ground")
+	var tilted: BouncePadObstacle = _hazard_sim({ "kind": "pad", "x": 400.0, "rotation": 30.0 })["obstacle"]
+	_check(tilted.center.y < 300.0 and tilted.center.y > 295.0, "a tilted grounded pad settles into the ground (%.1f)" % tilted.center.y)
 
-	var no_pad: float = 300.0 + 90.0 * (30.0 + sqrt(900.0 + 2.0 * BallSim.GRAVITY * 58.0)) / BallSim.GRAVITY
-	_check(float(toward["x"]) > no_pad + 100.0, "a helpful pad beats the same shot with no pad (%.0f vs %.0f)" % [float(toward["x"]), no_pad])
+	# The spring face fires the ball straight out from it.
+	var flat_sim: BallSim = flat["sim"]
+	_start_ball(flat_sim, Vector2(400, 170), Vector2(0, 120))
+	for _i in 30:
+		flat_sim.step(DT)
+		if flat_sim.vel.y < 0.0:
+			break
+	_check(flat_sim.vel.y <= -BouncePadObstacle.DEFAULT_POWER * 0.95, "the face fires the ball out (%.0f)" % flat_sim.vel.y)
+	_check(flat_sim.pad_uses.get(flat_pad, 0) == 1, "firing counts as one use")
 
-	var pad: BouncePadObstacle = toward["pad"]
-	_check(pad.faces_cup(), "a pad leaning toward the cup knows it helps")
-	var away_pad: BouncePadObstacle = away["pad"]
-	_check(not away_pad.faces_cup(), "a pad leaning away knows it hurts")
-	var flat_pad: BouncePadObstacle = flat["pad"]
-	_check(flat_pad.is_flat() and not flat_pad.faces_cup(), "a flat pad faces neither way")
+	for rotation: float in [45.0, -45.0, 90.0]:
+		var made: Dictionary = _floating_pad(rotation)
+		var pad: BouncePadObstacle = made["obstacle"]
+		var sim: BallSim = made["sim"]
+		_start_ball(sim, pad.center + pad.normal * 30.0, -pad.normal * 150.0)
+		for _i in 30:
+			sim.step(DT)
+			if sim.vel.dot(pad.normal) > 0.0:
+				break
+		_check(sim.vel.dot(pad.normal) >= BouncePadObstacle.DEFAULT_POWER * 0.9, "a pad at %d degrees fires along its face (%.0f)" % [int(rotation), sim.vel.dot(pad.normal)])
 
-	# A rolling ball is launched by a flat pad.
-	var roll_made: Dictionary = _pad_sim(0.0)
-	var roll_sim: BallSim = roll_made["sim"]
+	# The back and ends are ordinary solid bounces.
+	var back: Dictionary = _floating_pad(0.0)
+	var back_sim: BallSim = back["sim"]
+	_start_ball(back_sim, Vector2(400, 230), Vector2(0, -150))
+	for _i in 30:
+		back_sim.step(DT)
+		if back_sim.vel.y > 0.0:
+			break
+	_check(back_sim.vel.y > 0.0, "the back stops a ball coming from behind")
+	_check(back_sim.vel.y < 100.0, "the back doesn't fire it (%.0f)" % back_sim.vel.y)
+	_check(back_sim.pad_uses.is_empty(), "hitting the back doesn't use the spring")
+
+	var side: Dictionary = _floating_pad(0.0)
+	var side_sim: BallSim = side["sim"]
+	_start_ball(side_sim, Vector2(350, 201), Vector2(200, -14))
+	for _i in 30:
+		side_sim.step(DT)
+		if side_sim.vel.x < 0.0:
+			break
+	_check(side_sim.vel.x < 0.0 and side_sim.vel.x > -100.0, "an end is a plain bounce (%.0f)" % side_sim.vel.x)
+	_check(side_sim.pad_uses.is_empty(), "hitting an end doesn't use the spring")
+
+	# On the ground, a rolling ball stops at the pad's end instead of being launched.
+	var roll: Dictionary = _hazard_sim({ "kind": "pad", "x": 400.0, "rotation": 0.0 })
+	var roll_sim: BallSim = roll["sim"]
 	roll_sim.place(340.0)
 	roll_sim.launch(Vector2(100.0, 0.0), 0.0)
-	var peak: float = roll_sim.pos.y
-	var guard: int = 0
-	while roll_sim.is_moving() and guard < 1200:
-		roll_sim.step(DT)
-		peak = minf(peak, roll_sim.pos.y)
-		guard += 1
-	_check(peak < 300.0 - 60.0, "a flat pad launches a rolling ball (peak %.0f)" % peak)
+	_run_to_stop(roll_sim)
+	_check(roll_sim.pos.x < 400.0 - BouncePadObstacle.HALF_LENGTH, "a rolling ball stops at the end of a grounded pad (%.0f)" % roll_sim.pos.x)
+	_check(roll_sim.pad_uses.is_empty(), "rolling into the end doesn't fire it")
 
-	# Touching an angled pad from either side fires the ball the way it faces.
-	var forward_made: Dictionary = _pad_sim(35.0)
-	var forward_sim: BallSim = forward_made["sim"]
-	forward_sim.place(340.0)
-	forward_sim.launch(Vector2(100.0, 0.0), 0.0)
-	_run_to_stop(forward_sim)
-	_check(forward_sim.pos.x > 560.0, "rolling into a helpful pad fires it on toward the hole (%.0f)" % forward_sim.pos.x)
+	# Helpful pads have to work on a real shot, and beat the same shot with no pad.
+	var with_pad: float = _iron_shot_past_pad(20.0, true)
+	var without_pad: float = _iron_shot_past_pad(20.0, false)
+	_check(with_pad > without_pad + 60.0, "a pad facing the hole carries a real shot further (%.0f vs %.0f)" % [with_pad, without_pad])
+	var sent_back: float = _iron_shot_past_pad(-30.0, true)
+	_check(sent_back < without_pad - 60.0, "a pad facing away sends a real shot back (%.0f vs %.0f)" % [sent_back, without_pad])
 
-	var back_made: Dictionary = _pad_sim(-35.0)
-	var back_sim: BallSim = back_made["sim"]
-	back_sim.place(340.0)
-	back_sim.launch(Vector2(100.0, 0.0), 0.0)
-	_run_to_stop(back_sim)
-	_check(back_sim.pos.x < 340.0, "rolling into a pad facing away fires it back (%.0f)" % back_sim.pos.x)
-
-	# A ball on a slope can't get stuck against a pad: it fires a few times, then passes.
-	var slope_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
-	slope_hole.points = PackedVector2Array([Vector2(0, 100), Vector2(500, 300), Vector2(1000, 300)])
-	slope_hole.obstacles = [{ "kind": "pad", "x": 300.0, "lean": -35.0 }]
-	var slope_terrain := Terrain.new(slope_hole)
-	var slope_sim := BallSim.new(slope_terrain)
-	slope_sim.obstacles = Obstacle.build_all(slope_hole, slope_terrain)
-	var slope_hits: Array[String] = []
-	slope_sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: slope_hits.append(kind))
-	slope_sim.place(200.0)
-	slope_sim.launch(Vector2(40.0, 0.0), 0.0)
-	_run_to_stop(slope_sim)
-	_check(not slope_sim.is_moving(), "a ball rolling downhill into a pad still settles")
-	_check(slope_hits.size() <= BouncePadObstacle.MAX_USES_PER_SHOT + 1, "the pad fires a limited number of times (%d)" % slope_hits.size())
-
-	# A ball coming straight down can't bounce on a flat pad forever.
-	var pogo_made: Dictionary = _pad_sim(0.0)
+	# A ball coming straight down can't bounce on a pad forever.
+	var pogo_made: Dictionary = _hazard_sim({ "kind": "pad", "x": 400.0, "rotation": 0.0 })
 	var pogo: BallSim = pogo_made["sim"]
-	pogo.place(350.0)
-	pogo.pos = Vector2(400.0, 250.0)
-	pogo.launch(Vector2(0.0, 1.0), 0.0)
-	pogo.launch_x = 300.0
+	_start_ball(pogo, Vector2(400, 250), Vector2(0, 1))
 	var steps: int = 0
 	while pogo.is_moving() and steps < int(BallSim.MAX_MOTION_TIME * 60.0) - 60:
 		pogo.step(DT)
 		steps += 1
 	_check(not pogo.is_moving(), "a ball can't bounce on a pad forever (%d steps)" % steps)
-	var pogo_uses: int = pogo.pad_uses.get(pogo_made["obstacle"], 0)
-	_check(pogo_uses >= 2 and pogo_uses <= BouncePadObstacle.MAX_USES_PER_SHOT, "the pad limits its repeat bounces (%d)" % pogo_uses)
+	var uses: int = pogo.pad_uses.get(pogo_made["obstacle"], 0)
+	_check(uses >= 2 and uses <= BouncePadObstacle.MAX_USES_PER_SHOT, "repeat bounces are limited (%d)" % uses)
 
-	# A ball sitting on a pad can be played off it.
-	var on_made: Dictionary = _pad_sim(-35.0)
+	# A ball on a slope can't rattle against a pad's back for long.
+	var slope_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	slope_hole.points = PackedVector2Array([Vector2(0, 100), Vector2(500, 300), Vector2(1000, 300)])
+	slope_hole.obstacles = [{ "kind": "pad", "x": 300.0, "rotation": 20.0 }]
+	var slope_terrain := Terrain.new(slope_hole)
+	var slope_sim := BallSim.new(slope_terrain)
+	slope_sim.obstacles = Obstacle.build_all(slope_hole, slope_terrain)
+	slope_sim.place(200.0)
+	slope_sim.launch(Vector2(40.0, 0.0), 0.0)
+	var slope_steps: int = 0
+	while slope_sim.is_moving() and slope_steps < 900:
+		slope_sim.step(DT)
+		slope_steps += 1
+	_check(not slope_sim.is_moving(), "a ball rolling into a pad on a slope settles soon (%d steps)" % slope_steps)
+
+	# A ball sitting right next to a pad can be played away from it.
+	var on_made: Dictionary = _hazard_sim({ "kind": "pad", "x": 400.0, "rotation": -35.0 })
 	var on_sim: BallSim = on_made["sim"]
 	on_sim.place(400.0)
 	on_sim.launch(Vector2(150.0, -150.0), 0.0)
 	_run_to_stop(on_sim)
-	_check(on_sim.pos.x > 500.0, "a shot played from on a pad isn't fired back (%.0f)" % on_sim.pos.x)
+	_check(on_sim.pos.x > 500.0, "a shot played from beside a pad isn't fired back (%.0f)" % on_sim.pos.x)
 
-	# The aim preview shows what a pad will do.
+	# Previews must not make the real pad twitch.
 	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
-	hole.obstacles = [{ "kind": "pad", "x": 300.0, "lean": 35.0 }]
+	hole.obstacles = [{ "kind": "pad", "x": 300.0, "y": 200.0, "rotation": 0.0 }]
 	var game := HoleGame.new(hole, _clubs())
-	var sim: BallSim = game.new_preview_sim()
-	sim.place(200.0)
-	sim.launch(Vector2(100.0, 0.0), 0.0)
-	var pad_used: Array[String] = []
-	sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: pad_used.append(kind))
-	_run_to_stop(sim)
-	_check(pad_used.is_empty() or pad_used[0] == "pad", "previews include bounce pads")
-	var in_preview: BouncePadObstacle = game.obstacles[0]
-	_check(is_zero_approx(in_preview.squash), "previews don't make the real pad twitch")
+	var preview: BallSim = game.new_preview_sim()
+	_start_ball(preview, Vector2(300, 170), Vector2(0, 100))
+	_run_to_stop(preview)
+	var shown: BouncePadObstacle = game.obstacles[0]
+	_check(is_zero_approx(shown.squash), "previews don't animate the real pad")
+	_check(preview.pad_uses.get(shown, 0) >= 1, "previews do include pads")
 
-	# Across the course, pads mostly point away from the hole, with some that help.
+	# Across the course, pads mostly face away from the hole, with some that help.
 	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
 	var away_count: int = 0
 	var toward_count: int = 0
@@ -859,8 +875,406 @@ func _test_bounce_pads() -> void:
 			_check(absf(course_pad.x - course_hole.tee_x) > 100.0, "%s isn't on the tee" % label)
 			_check(absf(course_pad.x - course_hole.cup_x) > 100.0, "%s isn't on the pin" % label)
 	print("Bounce pads on the course: %d away, %d toward the hole, %d flat" % [away_count, toward_count, flat_count])
-	_check(away_count > toward_count and toward_count > 0, "pads mostly point away, and sometimes help")
+	_check(away_count > toward_count and toward_count > 0, "pads mostly face away, and sometimes help")
 	_check(flat_count > 0, "some pads are flat")
+
+
+# Hits a full iron so that it comes down on a pad, and returns where it finishes.
+func _iron_shot_past_pad(rotation: float, with_pad: bool) -> float:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	var terrain := Terrain.new(hole)
+	var shot: Dictionary = ShotCalc.compute(_club("iron"), 0.6, 0.0, 0, 1, 1.0)
+	# Finds where this shot first lands on open ground, then puts the pad there.
+	var scout := BallSim.new(terrain)
+	scout.place(100.0)
+	scout.launch(shot["velocity"], 0.0)
+	var guard: int = 0
+	while scout.bounce_count == 0 and guard < 2000:
+		scout.step(DT)
+		guard += 1
+	var landing: float = scout.pos.x
+	if with_pad:
+		hole.obstacles = [{ "kind": "pad", "x": landing, "rotation": rotation }]
+	var play_terrain := Terrain.new(hole)
+	var sim := BallSim.new(play_terrain)
+	sim.obstacles = Obstacle.build_all(hole, play_terrain)
+	sim.place(100.0)
+	sim.launch(shot["velocity"], 0.0)
+	_run_to_stop(sim)
+	return sim.pos.x
+
+
+# Water returns the ball to where the shot started, so a pad aimed at water could send a
+# good shot back to the same penalty again and again.
+func _test_pads_never_fire_into_water() -> void:
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		var hole: HoleData = run.hole_at(i)
+		var terrain := Terrain.new(hole)
+		var static_only: Array[Obstacle] = Obstacle.build_all(hole, terrain)
+		for obstacle in static_only:
+			if not obstacle is BouncePadObstacle:
+				continue
+			var pad: BouncePadObstacle = obstacle
+			var sim := BallSim.new(terrain)
+			sim.obstacles = static_only
+			sim.wind = hole.wind
+			sim.ignore_moving = true
+			_start_ball(sim, pad.center + pad.normal * 12.0, -pad.normal * 120.0)
+			_run_to_stop(sim)
+			_check(sim.state != BallSim.State.IN_WATER, "%s pad at %d doesn't fire into water (ended at %d)" % [hole.display_name, int(pad.x), int(sim.pos.x)])
+
+
+func _test_rotated_hazards() -> void:
+	var made: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "rotation": 45.0, "turn_speed": 0.0 })
+	var mill: WindmillObstacle = made["obstacle"]
+	var expected: Vector2 = mill.base() + Vector2(sin(PI / 4.0), -cos(PI / 4.0)) * WindmillObstacle.TOWER_HEIGHT
+	_check(mill.hub().distance_to(expected) < 0.01, "a rotated windmill's hub moves with its tower")
+
+	# A ball on the tower's new line hits it, and a ball where it used to stand doesn't.
+	var sim: BallSim = made["sim"]
+	var midway: Vector2 = (mill.base() + mill.hub()) / 2.0
+	_start_ball(sim, midway - Vector2(40, 0), Vector2(200, -1))
+	sim.ignore_moving = true
+	for _i in 20:
+		sim.step(DT)
+	_check(sim.vel.x < 150.0, "the tilted tower deflects the ball (%.0f)" % sim.vel.x)
+	var clear: BallSim = _hazard_sim({ "kind": "windmill", "x": 300.0, "rotation": 45.0, "turn_speed": 0.0 })["sim"]
+	_start_ball(clear, Vector2(260, 270), Vector2(200, -60))
+	clear.ignore_moving = true
+	for _i in 20:
+		clear.step(DT)
+	_check(clear.vel.x > 0.0, "the space the tower leaned away from is open")
+
+	var jet: Dictionary = _hazard_sim({ "kind": "sprinkler", "x": 300.0, "rotation": 60.0, "height": 70.0 })
+	var jet_sim: BallSim = jet["sim"]
+	var on_jet: SprinklerObstacle = jet["obstacle"]
+	_start_ball(jet_sim, on_jet.base() + on_jet.direction * 30.0, Vector2(0, -1))
+	for _i in 10:
+		jet_sim.step(DT)
+	_check(jet_sim.vel.x > 30.0, "a tilted sprinkler sprays along its tilt (%.0f)" % jet_sim.vel.x)
+	var missed: BallSim = _hazard_sim({ "kind": "sprinkler", "x": 300.0, "rotation": 90.0, "height": 70.0 })["sim"]
+	_start_ball(missed, Vector2(300, 250), Vector2(0, -1))
+	for _i in 5:
+		missed.step(DT)
+	_check(missed.vel.y > -1.0, "and doesn't spray straight up any more")
+
+
+func _test_hole_files() -> void:
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		var original: HoleData = run.hole_at(i)
+		var copy: HoleData = HoleIO.from_dict(JSON.parse_string(JSON.stringify(HoleIO.to_dict(original))))
+		var original_terrain := Terrain.new(original)
+		var copy_terrain := Terrain.new(copy)
+		var same: bool = copy.par == original.par and copy.title == original.title \
+				and is_equal_approx(copy.cup_x, original.cup_x) and is_equal_approx(copy.wind, original.wind) \
+				and copy.obstacles.size() == original.obstacles.size() and copy.tree_xs.size() == original.tree_xs.size()
+		for x in range(0, original_terrain.length, 25):
+			if absf(copy_terrain.ground_y(float(x)) - original_terrain.ground_y(float(x))) > 0.01 \
+					or copy_terrain.surface_at(float(x)) != original_terrain.surface_at(float(x)):
+				same = false
+		_check(same, "%s survives being saved and loaded" % original.display_name)
+
+	_check(HoleIO.from_dict(null) == null, "nothing isn't a map")
+	_check(HoleIO.from_dict({ "points": [[0, 300]] }) == null, "one point isn't a map")
+	_check(HoleIO.from_dict("garbage") == null, "text isn't a map")
+	var messy: HoleData = HoleIO.from_dict({
+		"points": [[0, 300], [0, 200], [100, 300], [90, 100], ["x", 2], [500, 9999]],
+		"par": 999,
+		"cup_x": 99999,
+		"surface_spans": [{ "from": 0, "to": 10, "type": 99 }, "junk", { "from": 0, "to": 50, "type": 2 }],
+		"obstacles": [{ "kind": "dragon", "x": 3 }, { "kind": "pad" }, { "kind": "pad", "x": 50.0 }, 7],
+	})
+	_check(messy != null, "a damaged map is cleaned up")
+	_check(messy.points.size() == 3, "bad points are dropped (%d)" % messy.points.size())
+	_check(messy.par == 12 and messy.cup_x <= 490.0, "wild numbers are limited")
+	_check(messy.surface_spans.size() == 1, "bad surfaces are dropped")
+	_check(messy.obstacles.size() == 1, "unknown and incomplete objects are dropped")
+	var messy_game := HoleGame.new(messy, _clubs())
+	messy_game.tick(DT)
+	_check(messy_game.phase == HoleGame.Phase.AIM, "a cleaned-up map can be played")
+
+
+func _clean_library() -> MapLibrary:
+	var path: String = "user://test_maps"
+	var absolute: String = ProjectSettings.globalize_path(path)
+	DirAccess.make_dir_recursive_absolute(absolute)
+	for file_name in DirAccess.get_files_at(path):
+		DirAccess.remove_absolute("%s/%s" % [absolute, file_name])
+	return MapLibrary.new(path)
+
+
+func _test_map_library() -> void:
+	var library: MapLibrary = _clean_library()
+	var ids: Array[String] = library.list_ids()
+	_check(ids.size() == 10 and ids[0] == "hole_01" and ids[9] == "hole_boss", "the originals are all listed")
+	_check(library.course_order() == ids, "the course starts as the originals in order")
+	_check(library.kind_of("hole_03") == MapLibrary.Kind.ORIGINAL, "an untouched hole is an original")
+
+	# Editing an original saves a copy, and restoring brings the original back.
+	var original_par: int = library.load_hole("hole_03").par
+	var edited: HoleData = library.load_hole("hole_03")
+	edited.par = 9
+	edited.title = "MY RIDGE"
+	_check(library.save_hole("hole_03", edited), "an original can be edited")
+	_check(library.kind_of("hole_03") == MapLibrary.Kind.EDITED, "it then counts as edited")
+	_check(library.load_hole("hole_03").par == 9, "the edit is what loads")
+	_check((load("res://data/holes/hole_03.tres") as HoleData).par == original_par, "the original itself is untouched")
+	library.restore_original("hole_03")
+	_check(library.kind_of("hole_03") == MapLibrary.Kind.ORIGINAL, "restoring removes the edit")
+	_check(library.load_hole("hole_03").par == original_par, "restoring brings the original back")
+
+	# Loading gives a copy, so changing it doesn't reach the shared resource.
+	library.load_hole("hole_04").par = 11
+	_check(library.load_hole("hole_04").par != 11, "loaded maps are safe to change")
+
+	# Custom maps.
+	var id: String = library.new_custom_id()
+	var blank: HoleData = HoleIO.blank_hole("MY MAP")
+	_check(library.save_hole(id, blank), "a new map can be saved")
+	_check(library.kind_of(id) == MapLibrary.Kind.CUSTOM, "it counts as custom")
+	_check(library.list_ids().has(id), "it's listed")
+	_check(library.new_custom_id() != id, "new maps get new ids")
+	_check(library.load_hole(id).title == "MY MAP", "it loads back")
+
+	# The course order.
+	var order: Array[String] = [id, "hole_02"]
+	library.save_course_order(order)
+	_check(library.course_order() == order, "the course order is saved")
+	var holes: Array[HoleData] = library.load_course()
+	_check(holes.size() == 2, "the course loads its holes")
+	_check(holes[0].display_name == "HOLE 1" and holes[0].title == "MY MAP", "holes are numbered by position")
+	_check(holes[1].display_name == "BOSS HOLE", "the last hole is the boss")
+	var run := CourseRun.from_holes(holes)
+	_check(run.hole_count() == 2 and run.current_hole().title == "MY MAP", "a run plays the player's course")
+	var single: Array[String] = [id]
+	library.save_course_order(single)
+	_check(library.load_course()[0].display_name == "HOLE 1", "a one-hole course has no boss")
+
+	# Deleting.
+	library.save_course_order(order)
+	library.delete_map("hole_02")
+	_check(library.is_original("hole_02") and library.load_hole("hole_02") != null, "originals can't be deleted")
+	library.delete_map(id)
+	_check(not library.list_ids().has(id), "custom maps can be deleted")
+	_check(library.course_order() == (["hole_02"] as Array[String]), "a deleted map leaves the course")
+
+	# A damaged file can't break anything.
+	var bad_id: String = library.new_custom_id()
+	var bad := FileAccess.open("user://test_maps/%s.json" % bad_id, FileAccess.WRITE)
+	bad.store_string("{ not json at all")
+	bad.close()
+	_check(library.load_hole(bad_id) == null, "a damaged custom map reports as unreadable")
+	var bad_original := FileAccess.open("user://test_maps/hole_05.json", FileAccess.WRITE)
+	bad_original.store_string("[1, 2, 3]")
+	bad_original.close()
+	_check(library.load_hole("hole_05") != null, "a damaged edit falls back to the original")
+	var bad_order := FileAccess.open("user://test_maps/course_order.json", FileAccess.WRITE)
+	bad_order.store_string("oops")
+	bad_order.close()
+	_check(library.course_order().size() == 10, "a damaged course order falls back to the originals")
+	_clean_library()
+
+
+func _test_editor_ground_and_paint() -> void:
+	var doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	var before: int = doc.hole.points.size()
+	var index: int = doc.add_point(Vector2(500, 200))
+	_check(index > 0 and doc.hole.points.size() == before + 1, "a ground point can be added")
+	_check(absf(doc.terrain.ground_y(500.0) - 200.0) < 0.01, "the ground follows the new point")
+	_check(doc.add_point(Vector2(503, 200)) == -1, "points can't crowd each other")
+	_check(doc.add_point(Vector2(-5, 200)) == -1 and doc.add_point(Vector2(99999, 200)) == -1, "points stay on the map")
+
+	doc.move_point(index, Vector2(520, 150))
+	_check(doc.hole.points[index] == Vector2(520, 150), "a point can be dragged")
+	doc.move_point(index, Vector2(99999, 150))
+	_check(doc.hole.points[index].x < doc.hole.points[index + 1].x, "a point can't pass its neighbour")
+	doc.move_point(0, Vector2(50, 320))
+	_check(doc.hole.points[0].x == 0.0 and doc.hole.points[0].y == 320.0, "the first point stays at the left edge")
+	doc.move_point(index, Vector2(500, -500))
+	_check(doc.hole.points[index].y >= EditorDoc.MIN_Y, "the ground can't leave the world")
+
+	var last: int = doc.hole.points.size() - 1
+	doc.move_point(last, Vector2(2000, 300))
+	_check(doc.terrain.length == 2000, "dragging the last point lengthens the hole")
+	doc.move_point(last, Vector2(10, 300))
+	_check(doc.length() >= EditorDoc.MIN_LENGTH, "a hole can't get too short")
+	doc.hole.cup_x = 390.0
+	doc.move_point(last, Vector2(float(EditorDoc.MIN_LENGTH), 300))
+	_check(doc.hole.cup_x < doc.length() and doc.hole.tee_x < doc.length(), "the tee and cup stay on a shortened hole")
+
+	var small := EditorDoc.new(HoleIO.blank_hole("T"))
+	_check(not small.remove_point(0) and not small.remove_point(small.hole.points.size() - 1), "end points can't be removed")
+	_check(small.remove_point(1), "a middle point can be removed")
+	_check(not small.remove_point(1), "a hole keeps at least three points")
+
+	var painted := EditorDoc.new(HoleIO.blank_hole("T"))
+	painted.paint_surface(300.0, 400.0, Surface.Type.SAND)
+	_check(painted.terrain.surface_at(350.0) == Surface.Type.SAND, "ground can be painted")
+	_check(painted.terrain.surface_at(250.0) == Surface.Type.FAIRWAY, "paint stays in its stretch")
+	var span_count: int = painted.hole.surface_spans.size()
+	for _i in 20:
+		painted.paint_surface(300.0, 400.0, Surface.Type.SAND)
+	_check(painted.hole.surface_spans.size() == span_count, "repainting doesn't grow the file")
+	painted.paint_surface(400.0, 300.0, Surface.Type.GREEN)
+	_check(painted.terrain.surface_at(350.0) == Surface.Type.GREEN, "painting works dragging either way")
+	painted.paint_surface(300.0, 400.0, Surface.Type.ROUGH)
+	_check(painted.terrain.surface_at(350.0) == Surface.Type.ROUGH, "rough paint clears a surface")
+
+	var wet := EditorDoc.new(HoleIO.blank_hole("T"))
+	wet.hole.points = PackedVector2Array([Vector2(0, 300), Vector2(400, 300), Vector2(500, 380), Vector2(600, 300), Vector2(1200, 300)])
+	wet.rebake()
+	wet.paint_surface(400.0, 600.0, Surface.Type.WATER)
+	_check(wet.terrain.surface_at(500.0) == Surface.Type.WATER, "water fills a dip")
+	_check(absf(wet.terrain.ground_y(500.0) - 300.0) < 1.0, "water rises to its edges")
+	wet.paint_surface(480.0, 520.0, Surface.Type.SAND)
+	_check(wet.terrain.surface_at(500.0) != Surface.Type.WATER, "painting over water drains that stretch")
+	_check(wet.terrain.surface_at(450.0) == Surface.Type.WATER and wet.terrain.surface_at(550.0) == Surface.Type.WATER, "the rest of the water stays")
+	_check(wet.hole.water_spans.size() == 2, "the water splits around the paint")
+
+
+func _test_editor_objects() -> void:
+	var doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	for kind: String in ["pad", "cart", "windmill", "sprinkler", "goose", "tree"]:
+		var selection: Dictionary = doc.add_object(kind, Vector2(500, 250))
+		var center: Vector2 = doc.selection_center(selection)
+		_check(not doc.pick(center, 4.0).is_empty(), "a placed %s can be clicked" % kind)
+		doc.move_selection(selection, center + Vector2(100, 0))
+		_check(absf(doc.selection_center(selection).x - (center.x + 100.0)) < 1.0, "a %s can be moved" % kind)
+	_check(doc.hole.obstacles.size() == 5 and doc.hole.tree_xs.size() == 1, "everything was added")
+	_check(Obstacle.build_all(doc.hole, doc.terrain).size() == 5, "every placed object builds")
+
+	# Rotation: pads, windmills and sprinklers only.
+	var by_kind: Dictionary = {}
+	for i in doc.hole.obstacles.size():
+		by_kind[str(doc.hole.obstacles[i]["kind"])] = { "type": "obstacle", "index": i }
+	for kind: String in ["pad", "windmill", "sprinkler"]:
+		_check(doc.can_rotate(by_kind[kind]), "a %s can rotate" % kind)
+		doc.set_rotation(by_kind[kind], 40.0)
+		_check(is_equal_approx(doc.rotation_of(by_kind[kind]), 40.0), "a %s remembers its rotation" % kind)
+	for kind: String in ["cart", "goose"]:
+		_check(not doc.can_rotate(by_kind[kind]), "a %s can't rotate" % kind)
+		doc.set_rotation(by_kind[kind], 40.0)
+		_check(not doc.entry_of(by_kind[kind]).has("rotation"), "a %s ignores rotation" % kind)
+	_check(not doc.can_rotate({ "type": "tee" }) and not doc.can_rotate({}), "the tee and nothing can't rotate")
+
+	doc.set_rotation(by_kind["pad"], 22.0, true)
+	_check(is_equal_approx(doc.rotation_of(by_kind["pad"]), 15.0), "rotation snaps to 15 degrees")
+	doc.set_rotation(by_kind["pad"], 200.0)
+	_check(is_equal_approx(doc.rotation_of(by_kind["pad"]), -160.0), "rotation wraps around")
+
+	var pad_entry: Dictionary = doc.entry_of(by_kind["pad"])
+	var built: BouncePadObstacle = BouncePadObstacle.new(doc.terrain, pad_entry)
+	_check(is_equal_approx(built.rotation_deg, -160.0), "the rotation reaches the real pad")
+
+	# A pad can go anywhere, including in mid-air.
+	doc.move_selection(by_kind["pad"], Vector2(700, 100))
+	_check(doc.selection_center(by_kind["pad"]) == Vector2(700, 100), "a pad can be placed in mid-air")
+
+	# Routes.
+	var cart: Dictionary = by_kind["cart"]
+	doc.move_route_end(cart, 1, 900.0)
+	_check(is_equal_approx(float(doc.entry_of(cart)["to"]), 900.0), "a cart's route can be changed")
+	doc.move_route_end(cart, 1, -500.0)
+	_check(float(doc.entry_of(cart)["to"]) > float(doc.entry_of(cart)["from"]), "a route's ends can't cross")
+	var goose: Dictionary = by_kind["goose"]
+	var goose_y: float = doc.route_ends(goose)[0].y
+	doc.move_route_end(goose, 0, 200.0)
+	_check(absf(doc.route_ends(goose)[0].y - goose_y) < 1.0, "a goose keeps its height when its route changes")
+
+	# The settings panel: every row must really change something.
+	doc.move_route_end(cart, 1, 1000.0)
+	doc.move_route_end(goose, 1, 1000.0)
+	for selection: Dictionary in [{}, by_kind["pad"], by_kind["cart"], by_kind["windmill"], by_kind["sprinkler"], by_kind["goose"], { "type": "tee" }, { "type": "cup" }]:
+		for row: Dictionary in doc.properties(selection):
+			var next: float = clampf(float(row["value"]) + float(row["step"]), float(row["min"]), float(row["max"]))
+			if next == float(row["value"]):
+				next = clampf(float(row["value"]) - float(row["step"]), float(row["min"]), float(row["max"]))
+			doc.set_property(selection, str(row["key"]), next)
+			var changed: float = 0.0
+			for after: Dictionary in doc.properties(selection):
+				if after["key"] == row["key"]:
+					changed = float(after["value"])
+			_check(absf(changed - next) < 0.01, "setting %s on %s works (%.1f, wanted %.1f)" % [row["key"], str(selection.get("type", "hole")), changed, next])
+
+	var water_doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	water_doc.hole.points = PackedVector2Array([Vector2(0, 300), Vector2(400, 300), Vector2(500, 380), Vector2(600, 300), Vector2(1200, 300)])
+	water_doc.rebake()
+	water_doc.paint_water(400.0, 600.0)
+	var water: Dictionary = water_doc.pick(Vector2(500, 340), 2.0)
+	_check(water.get("type") == "water", "water can be selected")
+	water_doc.set_property(water, "level", 340.0)
+	_check(absf(water_doc.terrain.ground_y(500.0) - 340.0) < 0.01, "the water level can be set")
+	water_doc.delete_selection(water)
+	_check(water_doc.terrain.surface_at(500.0) != Surface.Type.WATER, "water can be removed")
+
+	# Deleting.
+	var count: int = doc.hole.obstacles.size()
+	_check(doc.can_delete(by_kind["pad"]) and not doc.can_delete({ "type": "tee" }) and not doc.can_delete({ "type": "cup" }), "the tee and cup can't be deleted")
+	doc.delete_selection({ "type": "obstacle", "index": 0 })
+	_check(doc.hole.obstacles.size() == count - 1, "objects can be deleted")
+	doc.delete_selection({ "type": "tree", "index": 0 })
+	_check(doc.hole.tree_xs.is_empty(), "trees can be deleted")
+
+	# A map made entirely in the editor plays, saves and loads.
+	var made := EditorDoc.new(HoleIO.blank_hole("MADE"))
+	made.add_object("pad", Vector2(500, 200))
+	made.add_object("windmill", Vector2(650, 280))
+	made.add_object("sprinkler", Vector2(760, 280))
+	made.add_object("cart", Vector2(400, 280))
+	made.add_object("goose", Vector2(300, 200))
+	made.add_point(Vector2(600, 260))
+	_check(made.warnings().is_empty(), "a sensible map has no warnings (%s)" % str(made.warnings()))
+	var reloaded: HoleData = HoleIO.from_dict(JSON.parse_string(JSON.stringify(HoleIO.to_dict(made.hole))))
+	_check(reloaded.obstacles.size() == 5, "a made map keeps its objects")
+	_check(_play_round(reloaded, RandomNumberGenerator.new(), 0.0, 0.0) > 0, "a made map can be played to the end")
+
+	# Warnings.
+	var bad := EditorDoc.new(HoleIO.blank_hole("BAD"))
+	bad.paint_surface(900.0, 1100.0, Surface.Type.FAIRWAY)
+	_check(bad.warnings().has("CUP IS NOT ON GREEN"), "a cup off the green is flagged")
+	bad.hole.tee_x = bad.hole.cup_x - 10.0
+	_check(bad.warnings().has("TEE IS TOO NEAR CUP"), "a tee by the cup is flagged")
+
+
+func _test_editor_undo() -> void:
+	var doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	_check(not doc.dirty and not doc.can_undo(), "a fresh map has nothing to undo")
+	doc.checkpoint()
+	doc.add_object("pad", Vector2(500, 200))
+	_check(doc.dirty, "a change marks the map unsaved")
+	doc.checkpoint()
+	doc.add_object("cart", Vector2(500, 200))
+	doc.undo()
+	_check(doc.hole.obstacles.size() == 1, "undo removes the last change")
+	doc.undo()
+	_check(doc.hole.obstacles.is_empty(), "undo goes further back")
+	_check(not doc.can_undo() and doc.can_redo(), "undo stops at the start")
+	doc.redo()
+	doc.redo()
+	_check(doc.hole.obstacles.size() == 2, "redo brings changes back")
+	doc.undo()
+	doc.checkpoint()
+	doc.add_object("goose", Vector2(500, 200))
+	_check(not doc.can_redo(), "a new change clears redo")
+
+	var ground := EditorDoc.new(HoleIO.blank_hole("T"))
+	var ground_y: float = ground.terrain.ground_y(500.0)
+	ground.checkpoint()
+	ground.add_point(Vector2(500, 150))
+	ground.undo()
+	_check(is_equal_approx(ground.terrain.ground_y(500.0), ground_y), "undo restores the ground too")
+
+	var many := EditorDoc.new(HoleIO.blank_hole("T"))
+	for i in EditorDoc.UNDO_LIMIT + 20:
+		many.checkpoint()
+		many.hole.par = i % 9 + 1
+	var steps: int = 0
+	while many.can_undo():
+		many.undo()
+		steps += 1
+	_check(steps == EditorDoc.UNDO_LIMIT, "undo history has a limit (%d)" % steps)
 
 
 func _test_ball_against_a_post_can_escape() -> void:
@@ -1201,7 +1615,6 @@ func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float,
 		game.ball.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: _count_event(kind))
 	var shots: int = 0
 	var last_x: float = -1.0
-	var repeats: int = 0
 	while game.phase != HoleGame.Phase.COMPLETE and shots < 25:
 		var power: float = _best_power(game)
 		if power_noise > 0.0:
@@ -1209,12 +1622,9 @@ func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float,
 		var accuracy: float = 0.0
 		if timing_noise > 0.0:
 			accuracy = SwingMeter.accuracy_for_cursor(rng.randfn(0.0, timing_noise), game.meter.perfect_window)
-		# Back at the same spot means that plan failed, so try something shorter.
+		# Back at the same spot means that plan failed, so take the shot that carries furthest.
 		if is_equal_approx(game.ball.pos.x, last_x):
-			repeats += 1
-			power *= pow(0.75, float(repeats))
-		else:
-			repeats = 0
+			power = _set_longest_safe_shot(game, power)
 		last_x = game.ball.pos.x
 		game.strike_with(power, accuracy)
 		var steps: int = 0
@@ -1271,6 +1681,32 @@ func _best_power(game: HoleGame) -> float:
 	game.select_club(int(best["club"]))
 	game.aim_angle = float(best["angle"])
 	return float(best["power"])
+
+
+# Sets up the safe shot that finishes furthest from where it started, and returns its power.
+func _set_longest_safe_shot(game: HoleGame, fallback_power: float) -> float:
+	var best_reach: float = -1.0
+	var best: Dictionary = {}
+	for club_index in game.clubs.size():
+		var club: ClubData = game.clubs[club_index]
+		if club.is_putter:
+			continue
+		game.select_club(club_index)
+		for angle: float in [club.min_angle_deg, club.loft_deg, club.max_angle_deg, lerpf(club.loft_deg, club.max_angle_deg, 0.5)]:
+			game.aim_angle = angle
+			var sim: BallSim = game.new_preview_sim()
+			var shot: Dictionary = game.shot_for(1.0, 0.0)
+			sim.launch(shot["velocity"], 0.0)
+			_run_to_stop(sim)
+			var reach: float = absf(sim.pos.x - game.ball.pos.x)
+			if sim.state == BallSim.State.RESTING and reach > best_reach:
+				best_reach = reach
+				best = { "club": club_index, "angle": angle }
+	if best.is_empty():
+		return fallback_power
+	game.select_club(int(best["club"]))
+	game.aim_angle = float(best["angle"])
+	return 1.0
 
 
 func _angles_to_try(club: ClubData) -> Array[float]:

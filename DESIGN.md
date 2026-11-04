@@ -15,7 +15,10 @@ mode comes later: leave room for it, do not build it yet.
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
 | Direction | The golfer hits toward the cup, with no manual flip (removed after playtesting Milestone 1). If no club has a safe shot that way, they turn and play back with the Iron offered, and the HUD says why |
 | Trees | Scenery only, with no effect on the ball. Solid trees were tried and removed after playtesting: in a side view they block everything behind them |
-| Bounce pads | Flat or angled springy plates. Usually angled away from the hole as a hazard, sometimes toward it as a reward. Green faces the cup, orange faces away, yellow is flat. Touching any side fires the ball the way the pad faces. Weaker on repeat bounces, and stops after 3 per shot. The aim preview includes them |
+| Bounce pads | Plain rectangles (not ramps), on the ground or floating anywhere, at any rotation. The upper half is a spring that fires the ball straight out. The back and lower ends are ordinary solid bounces. Usually angled away from the hole as a hazard, sometimes toward it as a reward. Green faces the cup, orange faces away, yellow is flat. Weaker on repeat bounces, and stops after 3 per shot. The aim preview includes them. On the ground, an angled pad settles in around its middle. Original holes never have a pad that fires into water |
+| Map editor | In-game, from the title menu, mouse and keyboard. Drag ground points, paint surfaces, place and rotate objects, set every option in a side panel, with undo. Test from the tee or any spot; Esc returns exactly where you were and scores don't count |
+| Rotation | Pads, windmills and sprinklers rotate, with collisions following. Carts and geese stay level, because they travel along routes |
+| Your maps | Any map can be edited or made from blank. Maps save to `user://maps` as JSON. Originals are never changed: an edit is a copy that replaces it until restored. The player chooses the course's holes and order, and the last hole is the boss |
 | Moving hazards | Golf cart, windmill, sprinkler, geese. Carts and geese hit a ball once per shot. The aim preview ignores moving hazards, so the player has to time them |
 | Posts | A ball starting a shot right beside the windmill tower or on a pad isn't blocked or fired by it, so it can't get stuck |
 | Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |
@@ -76,6 +79,9 @@ Gameplay rules never touch nodes or drawing, so they run headless in tests.
 - `scripts/course/`: `HoleData`, `CourseData`, `Terrain` (baked height and surface lookup), and `Obstacle` with one subclass per hazard
 - `scripts/game/hole_game.gd`: one hole's rules. Views read it and listen to its signals
 - `scripts/game/course_run.gd`: progress through the course and scores so far
+- `scripts/course/map_library.gd` and `hole_io.gd`: saved maps, restoring originals, the course order
+- `scripts/editor/`: `EditorDoc` holds every editing rule with no drawing, `MapEditor` and `EditorUI` are the screen
+- `scripts/app.gd`: moves between the title menu, playing and the editor
 - `scripts/view/`: everything drawn. Nothing here changes game rules
 - `data/`: clubs and holes as `.tres`, so adding one needs no new code
 - `tests/`: `test_runner.tscn` for rules, `shots.tscn` for screenshots

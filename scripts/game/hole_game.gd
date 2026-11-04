@@ -72,6 +72,13 @@ func restart() -> void:
 	_begin_aim()
 
 
+## Starts play from any spot on the hole, for testing a map.
+func start_from(x: float) -> void:
+	ball.place(x)
+	_last_spot_x = x
+	_begin_aim()
+
+
 func current_club() -> ClubData:
 	return clubs[club_index]
 

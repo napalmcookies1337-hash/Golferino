@@ -13,5 +13,5 @@ wind = 6.0
 points = PackedVector2Array(0, 290, 60, 300, 130, 302, 300, 305, 480, 295, 620, 290, 680, 305, 730, 355, 900, 362, 1010, 350, 1060, 300, 1120, 275, 1200, 268, 1330, 266, 1420, 268, 1480, 250, 1600, 215)
 surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 680, "type": 1}, {"from": 1060, "to": 1180, "type": 1}, {"from": 1180, "to": 1440, "type": 2}]
 water_spans = [{"from": 670, "to": 1065, "level": 325.0}]
-obstacles = [{"kind": "goose", "from": 720.0, "to": 1040.0, "start": 760.0, "height": 75.0, "speed": 60.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 880.0, "height": 105.0, "speed": 48.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 1000.0, "height": 55.0, "speed": 70.0}, {"kind": "pad", "x": 590.0, "lean": -30.0}, {"kind": "pad", "x": 1105.0, "lean": 25.0}]
+obstacles = [{"kind": "goose", "from": 720.0, "to": 1040.0, "start": 760.0, "height": 75.0, "speed": 60.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 880.0, "height": 105.0, "speed": 48.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 1000.0, "height": 55.0, "speed": 70.0}, {"kind": "pad", "x": 590.0, "rotation": -30.0}, {"kind": "pad", "x": 1155.0, "rotation": 20.0}]
 tree_xs = PackedFloat32Array(20, 280, 450, 1470, 1560)

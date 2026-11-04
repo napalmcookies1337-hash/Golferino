@@ -4,11 +4,13 @@ extends Node2D
 
 const VARIANTS := 3
 
-var game: HoleGame
+var hole: HoleData
+var terrain: Terrain
 
 
-func setup(p_game: HoleGame) -> void:
-	game = p_game
+func setup(p_hole: HoleData, p_terrain: Terrain) -> void:
+	hole = p_hole
+	terrain = p_terrain
 
 
 func _ready() -> void:
@@ -16,7 +18,7 @@ func _ready() -> void:
 	for i in VARIANTS:
 		textures.append(ImageTexture.create_from_image(_make_tree(i)))
 	var index: int = 0
-	for x: float in game.hole.tree_xs:
+	for x: float in hole.tree_xs:
 		_add_tree(x, textures[index % VARIANTS])
 		index += 1
 
@@ -27,7 +29,7 @@ func _add_tree(x: float, texture: ImageTexture) -> void:
 	sprite.centered = false
 	sprite.position = Vector2(
 			round(x - texture.get_width() / 2.0),
-			round(game.terrain.ground_y(x) + 3.0 - texture.get_height()))
+			round(terrain.ground_y(x) + 3.0 - texture.get_height()))
 	add_child(sprite)
 
 

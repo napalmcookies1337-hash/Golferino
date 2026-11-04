@@ -7,12 +7,12 @@ const PAD_HELPS := Color("5fd068")
 const PAD_NEUTRAL := Color("ffe25a")
 const PAD_HURTS := Color("f0703a")
 
-var game: HoleGame
+var obstacles: Array[Obstacle] = []
 var _time: float = 0.0
 
 
-func setup(p_game: HoleGame) -> void:
-	game = p_game
+func setup(p_obstacles: Array[Obstacle]) -> void:
+	obstacles = p_obstacles
 
 
 func _process(delta: float) -> void:
@@ -21,7 +21,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	for obstacle in game.obstacles:
+	for obstacle in obstacles:
 		if obstacle is CartObstacle:
 			_draw_cart(obstacle)
 		elif obstacle is WindmillObstacle:
@@ -35,29 +35,26 @@ func _draw() -> void:
 
 
 func _draw_pad(pad: BouncePadObstacle) -> void:
-	# The colour and arrows say which way it fires: green toward the cup, orange away.
+	# The spring face's colour and arrows say which way it fires: green toward the cup,
+	# orange away, yellow straight up.
 	var color: Color = PAD_NEUTRAL
 	if not pad.is_flat():
 		color = PAD_HELPS if pad.faces_cup() else PAD_HURTS
 
-	# The plate dips when it fires, and springs back.
-	var dip: Vector2 = -pad.normal * pad.squash * 2.5
-	var a: Vector2 = (pad.plate_a() + dip).round()
-	var b: Vector2 = (pad.plate_b() + dip).round()
-
-	if not pad.is_flat():
-		var low: Vector2 = a if a.y > b.y else b
-		var high: Vector2 = a if a.y <= b.y else b
-		var wedge := PackedVector2Array([low, high, Vector2(high.x, pad.ground + 1.0), Vector2(low.x, pad.ground + 1.0)])
-		draw_colored_polygon(wedge, Color("3a3a4c"))
-		draw_line(high, Vector2(high.x, pad.ground), OUTLINE, 2.0)
-
-	draw_line(a, b, OUTLINE, 5.0)
-	draw_line(a, b, color, 3.0)
+	var half_length: float = BouncePadObstacle.HALF_LENGTH
+	var half_thick: float = BouncePadObstacle.HALF_THICKNESS
+	draw_set_transform(pad.center, deg_to_rad(pad.rotation_deg))
+	# Local axes: +x along the pad, -y out of the spring face.
+	draw_rect(Rect2(-half_length - 1.0, -half_thick - 1.0, half_length * 2.0 + 2.0, half_thick * 2.0 + 2.0), OUTLINE)
+	draw_rect(Rect2(-half_length, -half_thick, half_length * 2.0, half_thick * 2.0), Color("4a4a5e"))
+	# The spring strip sits proud of the body, and dips when it fires.
+	var strip_y: float = -half_thick + pad.squash * 1.5
+	draw_rect(Rect2(-half_length, strip_y, half_length * 2.0, 2.0), color)
+	draw_set_transform(Vector2.ZERO)
 
 	var bob: float = 3.0 + sin(_time * 4.0) * 1.5 + pad.squash * 6.0
 	for row in 2:
-		_draw_chevron(pad.center + pad.normal * (5.0 + bob + float(row) * 5.0), pad.normal, color)
+		_draw_chevron(pad.center + pad.normal * (6.0 + bob + float(row) * 5.0), pad.normal, color)
 
 
 func _draw_chevron(at: Vector2, direction: Vector2, color: Color) -> void:
@@ -89,20 +86,21 @@ func _draw_cart(cart: CartObstacle) -> void:
 
 
 func _draw_windmill(mill: WindmillObstacle) -> void:
-	var x: float = round(mill.x)
-	var ground: float = round(mill.ground)
 	var hub: Vector2 = mill.hub().round()
-	# A tapered tower, slightly wider at the base.
+	# A tapered tower, slightly wider at the base, drawn upright then tilted as a whole.
+	draw_set_transform(mill.base().round(), deg_to_rad(mill.rotation_deg))
+	var top: float = -WindmillObstacle.TOWER_HEIGHT
 	for row in int(WindmillObstacle.TOWER_HEIGHT) + 2:
-		var y: float = ground - float(row) + 2.0
+		var y: float = 2.0 - float(row)
 		var half: float = round(lerpf(9.0, 5.0, float(row) / WindmillObstacle.TOWER_HEIGHT))
-		draw_rect(Rect2(x - half - 1, y, half * 2 + 3, 1), OUTLINE)
+		draw_rect(Rect2(-half - 1, y, half * 2 + 3, 1), OUTLINE)
 		var brick: bool = row % 6 == 0
-		draw_rect(Rect2(x - half, y, half * 2 + 1, 1), Color("c9b08a") if brick else Color("e3cfa4"))
-		draw_rect(Rect2(x + half - 2, y, 2, 1), Color("b39a78"))
-	draw_rect(Rect2(x - 3, ground - 10, 7, 11), Color("5d3f2b"))
-	var roof := PackedVector2Array([hub + Vector2(-8, -1), hub + Vector2(8, -1), hub + Vector2(0, -11)])
+		draw_rect(Rect2(-half, y, half * 2 + 1, 1), Color("c9b08a") if brick else Color("e3cfa4"))
+		draw_rect(Rect2(half - 2, y, 2, 1), Color("b39a78"))
+	draw_rect(Rect2(-3, -10, 7, 11), Color("5d3f2b"))
+	var roof := PackedVector2Array([Vector2(-8, top - 1), Vector2(8, top - 1), Vector2(0, top - 11)])
 	draw_colored_polygon(roof, Color("a92b35"))
+	draw_set_transform(Vector2.ZERO)
 
 	for i in WindmillObstacle.BLADES:
 		var tip: Vector2 = mill.blade_tip(i).round()
@@ -112,19 +110,19 @@ func _draw_windmill(mill: WindmillObstacle) -> void:
 
 
 func _draw_sprinkler(sprinkler: SprinklerObstacle) -> void:
-	var x: float = round(sprinkler.x)
-	var ground: float = round(sprinkler.ground)
-	draw_rect(Rect2(x - 2, ground - 4, 5, 5), OUTLINE)
-	draw_rect(Rect2(x - 1, ground - 3, 3, 3), Color("8d97a8"))
+	var base: Vector2 = sprinkler.base().round()
+	draw_rect(Rect2(base.x - 2, base.y - 4, 5, 5), OUTLINE)
+	draw_rect(Rect2(base.x - 1, base.y - 3, 3, 3), Color("8d97a8"))
 	if not sprinkler.is_on():
 		return
+	var across: Vector2 = sprinkler.direction.orthogonal()
 	var droplets: int = 26
 	for i in droplets:
 		var along: float = fmod(float(i) / float(droplets) + _time * 0.9, 1.0)
-		var y: float = ground - 4.0 - along * sprinkler.height
 		var spread: float = sin(float(i) * 2.399) * SprinklerObstacle.HALF_WIDTH * minf(along * 2.5, 1.0)
+		var at: Vector2 = base + sprinkler.direction * (4.0 + along * sprinkler.height) + across * spread
 		var color: Color = Color("d8f4ff") if i % 2 == 0 else Color("7fc6ec")
-		draw_rect(Rect2(round(x + spread), round(y), 2, 2), color)
+		draw_rect(Rect2(at.round(), Vector2(2, 2)), color)
 
 
 func _draw_goose(goose: GooseObstacle) -> void:

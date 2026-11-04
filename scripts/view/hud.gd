@@ -18,6 +18,8 @@ const DIM := Color("8f97a8")
 var game: HoleGame
 var camera: FollowCamera
 var run: CourseRun
+## A line that stays on screen, such as the test-play reminder.
+var banner: String = ""
 var _message: String = ""
 var _message_time: float = 0.0
 var _result_name: String = ""
@@ -54,6 +56,8 @@ func _draw() -> void:
 	_draw_spin_panel()
 	_draw_meter()
 	_draw_hint()
+	if banner != "":
+		PixelFont.draw_centered(self, banner, SCREEN_WIDTH / 2.0, 44.0, Color("9fdcf2"))
 	if camera.is_free_looking() and game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(self, "FREE LOOK", SCREEN_WIDTH / 2.0, 12.0, ACCENT)
 	if game.phase == HoleGame.Phase.AIM and game.is_playing_away():
