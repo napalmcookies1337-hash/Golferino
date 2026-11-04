@@ -1973,18 +1973,24 @@ func _finish_shot(game: HoleGame) -> void:
 func _test_coins_and_payouts() -> void:
 	var state: RunState = _new_run_state()
 	_check(state.coins == 0, "a run starts with no coins")
-	_check(state.hole_payout(4, 4) == 5, "par pays 5")
-	_check(state.hole_payout(3, 4) == 8, "a birdie pays 8")
-	_check(state.hole_payout(2, 4) == 12, "an eagle pays 12")
-	_check(state.hole_payout(1, 5) == 20, "4 under pays 20")
-	_check(state.hole_payout(5, 4) == 2, "a bogey pays 2")
-	_check(state.hole_payout(9, 4) == 0, "anything worse pays nothing")
+	for hole_index in 3:
+		_check(state.hole_payout(hole_index, 4, 4) == 3, "hole %d pays 3" % (hole_index + 1))
+	for hole_index in range(3, 10):
+		_check(state.hole_payout(hole_index, 4, 4) == 5, "hole %d pays 5" % (hole_index + 1))
+	for strokes: int in [1, 3, 4, 5, 12]:
+		_check(state.hole_payout(0, strokes, 4) == 3, "the score doesn't change the pay (%d strokes)" % strokes)
 	state.begin_hole()
 	state.collect_coin()
-	state.collect_trick(6)
-	var summary: Dictionary = state.finish_hole(state.course.current_hole().par)
-	_check(state.coins == 1 + 6 + 5, "coins come from pickups, tricks and score")
-	_check(int(summary["pickups"]) == 1 and int(summary["tricks"]) == 6 and int(summary["payout"]) == 5, "the summary shows where they came from")
+	_check(state.collect_trick(6) == 0, "a trick shot pays nothing without the Showman")
+	var summary: Dictionary = state.finish_hole(state.course.current_hole().par - 2)
+	_check(state.coins == 1 + 3, "coins only come from the hole and pickups")
+	_check(int(summary["pickups"]) == 1 and int(summary["tricks"]) == 0 and int(summary["payout"]) == 3, "the summary shows where they came from")
+	state.spare = 0
+	state.course.advance()
+	state.begin_hole()
+	var coins_before: int = state.coins
+	state.leave_hole_unfinished(state.course.current_hole().par)
+	_check(state.coins == coins_before, "an unfinished hole pays nothing")
 
 
 func _test_coin_pickups() -> void:
@@ -2273,20 +2279,19 @@ func _test_prices_climb() -> void:
 	_check(short.price_of(Items.by_id("skipper")) == 3, "a two-hole course's only shop is at the starting price")
 
 	# What a hole earned, in words that can't be taken for points.
-	_check(RunState.coins_text({ "payout": 0, "pickups": 3, "tricks": 0 }) == "+3 COINS: 3 PICKED UP", "only sources that paid are named (%s)" % RunState.coins_text({ "payout": 0, "pickups": 3, "tricks": 0 }))
+	_check(RunState.coins_text({ "payout": 3, "pickups": 0, "tricks": 0 }) == "+3 COINS: 3 FOR HOLE", "only sources that paid are named")
 	_check(RunState.coins_text({ "payout": 5, "pickups": 3, "tricks": 4 }) == "+12 COINS: 5 FOR HOLE, 3 PICKED UP, 4 TRICKS", "every source is named")
-	_check(RunState.coins_text({ "payout": 0, "pickups": 0, "tricks": 0 }) == "NO COINS THIS HOLE", "a hole with no coins says so")
-	_check(RunState.coins_text({ "payout": 20, "pickups": 8, "tricks": 15 }).length() <= 49, "the longest line fits the panel")
+	_check(RunState.coins_text({ "payout": 13, "pickups": 16, "tricks": 15 }).length() <= 48, "the longest line fits the panel")
 
-	# Coins left really do reach the final score, as in a run of 7 on hole 1 and 3 pickups.
+	# Coins left really do reach the final score: 7 on hole 1 with 3 pickups leaves 6 coins.
 	var run: RunState = _new_run_state()
 	run.begin_hole()
 	for _i in 3:
 		run.collect_coin()
 	run.finish_hole(7)
 	run.ending = RunState.Ending.GAVE_UP
-	_check(_score_row(run, "COINS LEFT") == 6, "3 coins left are worth 6 points")
-	_check(int(run.final_score()["total"]) == 56, "that run scores 56")
+	_check(_score_row(run, "COINS LEFT") == 12, "6 coins left are worth 12 points")
+	_check(int(run.final_score()["total"]) == 62, "that run scores 62")
 
 
 func _test_buying() -> void:
@@ -2340,12 +2345,15 @@ func _test_perks() -> void:
 	state.begin_hole()
 	_check(state.collect_coin() == 2, "the coin purse doubles pickups")
 	state.perks.append("showman")
-	_check(state.collect_trick(5) == 10, "the showman doubles tricks")
+	_check(state.collect_trick(5) == 5, "the showman makes trick shots pay")
 	state.perks.append("birdie_bank")
-	_check(state.hole_payout(3, 4) == 13, "the birdie bank pays extra under par")
-	_check(state.hole_payout(4, 4) == 5, "the birdie bank doesn't pay for par")
+	_check(state.hole_payout(0, 3, 4) == 8, "the birdie bank pays extra under par")
+	_check(state.hole_payout(0, 4, 4) == 3, "the birdie bank doesn't pay for par")
+	_check(state.hole_payout(0, 5, 4) == 3, "the birdie bank doesn't pay over par")
 	state.perks.append("steady_pay")
-	_check(state.hole_payout(4, 4) == 8, "steady pay adds to par")
+	_check(state.hole_payout(0, 4, 4) == 6, "steady pay adds to par")
+	_check(state.hole_payout(5, 4, 4) == 8, "perks add to a later hole's pay too")
+	_check(state.hole_payout(0, 5, 4) == 3, "steady pay doesn't pay over par")
 	state.perks.append("extra_shelf")
 	_check(state.roll_stock().size() == RunState.SHOP_SHELVES + 1, "the extra shelf adds to the stock")
 
@@ -2393,9 +2401,9 @@ func _test_final_score() -> void:
 	for i in 2:
 		state.finish_hole(state.course.current_hole().par - 1)
 		state.course.advance()
-	# Two birdies: 2 holes, 2 under, 10 spare, and coins of 10 + 16.
+	# Two birdies: 2 holes, 2 under, 10 spare, and coins of 10 + 3 + 3.
 	var score: Dictionary = state.final_score()
-	var expected: int = 2 * 100 + 2 * 100 + 10 * 50 + 26 * 2
+	var expected: int = 2 * 100 + 2 * 100 + 10 * 50 + 16 * 2
 	_check(int(score["total"]) == expected, "the final score adds up (%d, %d)" % [score["total"], expected])
 	_check((score["rows"] as Array).size() == 4, "no rival bonus before beating it")
 	state.ending = RunState.Ending.BEAT_RIVAL

@@ -9,12 +9,10 @@ const SHOP_SHELVES := 4
 ## What everything costs in the first shop.
 const START_PRICE := 3
 
-## Coins for a hole's score, by strokes against par. Anything else pays the last number.
-const PAYOUT_UNDER := { -1: 8, -2: 12, -3: 16 }
-const PAYOUT_BIG_UNDER := 20
-const PAYOUT_PAR := 5
-const PAYOUT_BOGEY := 2
-const PAYOUT_WORSE := 0
+## Coins for completing a hole, whatever the score. They rise from this hole number on.
+const PAYOUT_EARLY := 3
+const PAYOUT_LATE := 5
+const PAYOUT_LATE_FROM_HOLE := 4
 
 const SCORE_PER_HOLE := 100
 const SCORE_PER_UNDER_PAR := 100
@@ -90,8 +88,9 @@ func collect_coin() -> int:
 	return value
 
 
+## Trick shots only pay with the Showman perk. Returns what this one paid.
 func collect_trick(base_coins: int) -> int:
-	var value: int = base_coins * int(perk_number("trick", 1.0))
+	var value: int = base_coins * int(perk_number("trick", 0.0))
 	coins += value
 	hole_tricks += value
 	return value
@@ -103,7 +102,7 @@ func finish_hole(strokes: int) -> Dictionary:
 	course.record_score(strokes)
 	var banked: int = par - strokes
 	spare += banked
-	var payout: int = hole_payout(strokes, par)
+	var payout: int = hole_payout(course.hole_index, strokes, par)
 	coins += payout
 	return { "payout": payout, "pickups": hole_pickups, "tricks": hole_tricks, "banked": banked }
 
@@ -117,8 +116,6 @@ static func coins_text(summary: Dictionary) -> String:
 		total += amount
 		if amount > 0:
 			parts.append("%d %s" % [amount, source[1]])
-	if total == 0:
-		return "NO COINS THIS HOLE"
 	return "+%d COINS: %s" % [total, ", ".join(parts)]
 
 
@@ -127,14 +124,15 @@ func leave_hole_unfinished(strokes: int) -> void:
 	spare = live_spare(strokes, course.current_hole().par)
 
 
-func hole_payout(strokes: int, par: int) -> int:
-	var difference: int = strokes - par
-	if difference == 0:
-		return PAYOUT_PAR + int(perk_number("par_bonus", 0.0))
-	if difference > 0:
-		return PAYOUT_BOGEY if difference == 1 else PAYOUT_WORSE
-	var coins_for_score: int = int(PAYOUT_UNDER.get(difference, PAYOUT_BIG_UNDER))
-	return coins_for_score + int(perk_number("under_par_bonus", 0.0))
+## What completing a hole pays, from its place in the course (0 is the first hole). The
+## score only matters to the perks that pay for it.
+func hole_payout(hole_index: int, strokes: int, par: int) -> int:
+	var payout: int = PAYOUT_EARLY if hole_index + 1 < PAYOUT_LATE_FROM_HOLE else PAYOUT_LATE
+	if strokes == par:
+		payout += int(perk_number("par_bonus", 0.0))
+	elif strokes < par:
+		payout += int(perk_number("under_par_bonus", 0.0))
+	return payout
 
 
 ## Uses the Safety Net if there's one left, returning the strokes it gives back.

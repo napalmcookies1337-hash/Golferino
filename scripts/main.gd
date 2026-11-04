@@ -351,8 +351,11 @@ func _on_coin_collected(at: Vector2) -> void:
 
 
 func _on_trick_shot(trick_name: String, coins: int) -> void:
-	if run_state != null:
-		hud.show_message("%s +%d COINS" % [trick_name, run_state.collect_trick(coins)], 1.6)
+	if run_state == null:
+		return
+	var paid: int = run_state.collect_trick(coins)
+	if paid > 0:
+		hud.show_message("%s +%d COINS" % [trick_name, paid], 1.6)
 
 
 # Stays on screen a moment, unless a Safety Net catches it.

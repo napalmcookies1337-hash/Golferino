@@ -43,7 +43,7 @@ const CATALOG: Array[Dictionary] = [
 	{ "id": "birdie_bank", "kind": KIND_PERK, "name": "BIRDIE BANK", "text": "+5 COINS UNDER PAR", "price": 20, "effects": { "under_par_bonus": 5 } },
 	{ "id": "mulligan", "kind": KIND_PERK, "name": "MULLIGAN", "text": "1 FREE PENALTY A HOLE", "price": 26, "effects": { "free_penalties": 1 } },
 	{ "id": "safety_net", "kind": KIND_PERK, "name": "SAFETY NET", "text": "SAVES YOU ONCE: +3", "price": 28, "effects": { "safety_net": 3 } },
-	{ "id": "showman", "kind": KIND_PERK, "name": "SHOWMAN", "text": "TRICK SHOTS PAY DOUBLE", "price": 18, "effects": { "trick": 2 } },
+	{ "id": "showman", "kind": KIND_PERK, "name": "SHOWMAN", "text": "TRICK SHOTS PAY COINS", "price": 18, "effects": { "trick": 1 } },
 	{ "id": "extra_shelf", "kind": KIND_PERK, "name": "EXTRA SHELF", "text": "SHOP STOCKS ONE MORE", "price": 22, "effects": { "shelves": 1 }, "unlock": 5 },
 	{ "id": "steady_pay", "kind": KIND_PERK, "name": "STEADY PAY", "text": "+3 COINS FOR PAR", "price": 18, "effects": { "par_bonus": 3 }, "unlock": 6 },
 
