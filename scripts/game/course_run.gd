@@ -1,7 +1,7 @@
 class_name CourseRun
 extends RefCounted
 ## Tracks progress through a course: which hole is next, and the scores so far.
-## The stroke budget, shop and duel will build on this in Milestone 4.
+## RunState builds the stroke budget, coins and shop on top of this.
 
 var course: CourseData
 var hole_index: int = 0

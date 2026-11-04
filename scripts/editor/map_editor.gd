@@ -34,6 +34,7 @@ const OBJECTS: Array[Dictionary] = [
 	{ "label": "MILL", "kind": "windmill" },
 	{ "label": "SPRINKLER", "kind": "sprinkler" },
 	{ "label": "GOOSE", "kind": "goose" },
+	{ "label": "COIN", "kind": "coin" },
 	{ "label": "TRUNK", "kind": "trunk" },
 	{ "label": "LEAVES", "kind": "leaves" },
 ]
@@ -847,7 +848,7 @@ func _draw_property(canvas: EditorUI, row: Dictionary, x: float, y: float) -> fl
 func _selection_name() -> String:
 	var type: String = str(selection.get("type", ""))
 	if type == "obstacle":
-		var names := { "pad": "BOUNCE PAD", "cart": "GOLF CART", "windmill": "WINDMILL", "sprinkler": "SPRINKLER", "goose": "GOOSE" }
+		var names := { "pad": "BOUNCE PAD", "cart": "GOLF CART", "windmill": "WINDMILL", "sprinkler": "SPRINKLER", "goose": "GOOSE", "coin": "COIN" }
 		return str(names.get(str(doc.entry_of(selection)["kind"]), "OBJECT"))
 	if type == "scenery":
 		return "TRUNK (SCENERY)" if str(doc.piece_of(selection)["kind"]) == "trunk" else "LEAVES (SCENERY)"

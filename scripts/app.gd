@@ -5,7 +5,10 @@ const MAIN_SCENE := preload("res://scenes/main.tscn")
 
 ## Tests point this at their own folder, so they never touch the player's maps.
 var maps_dir: String = MapLibrary.DEFAULT_DIR
+## The same, for high scores and unlocks.
+var profile_path: String = Profile.DEFAULT_PATH
 var library: MapLibrary
+var profile: Profile
 var _screen: Node
 var _editor: MapEditor
 
@@ -13,6 +16,7 @@ var _editor: MapEditor
 func _ready() -> void:
 	Controls.register()
 	library = MapLibrary.new(maps_dir)
+	profile = Profile.new(profile_path)
 	_show_title()
 
 
@@ -39,14 +43,23 @@ func _show_title() -> void:
 	title.setup(library)
 	title.play_chosen.connect(_start_course, CONNECT_DEFERRED)
 	title.editor_chosen.connect(_open_editor, CONNECT_DEFERRED)
+	title.scores_chosen.connect(_show_scores, CONNECT_DEFERRED)
 	title.quit_chosen.connect(func() -> void: get_tree().quit())
 	_swap_screen(title)
+
+
+func _show_scores() -> void:
+	var scores := HighScoresScreen.new()
+	scores.setup(profile)
+	scores.done.connect(_show_title, CONNECT_DEFERRED)
+	_swap_screen(scores)
 
 
 func _start_course() -> void:
 	var main: Node = MAIN_SCENE.instantiate()
 	main.embedded = true
 	main.library = library
+	main.profile = profile
 	main.exit_requested.connect(_show_title, CONNECT_DEFERRED)
 	_swap_screen(main)
 

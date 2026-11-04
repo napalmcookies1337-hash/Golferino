@@ -1,16 +1,132 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "HOLE 7"
-title = "SPRINKLER HILL"
-par = 4
-tee_x = 90.0
 cup_x = 1240.0
-wind = -10.0
 points = PackedVector2Array(0, 340, 60, 350, 130, 352, 280, 345, 450, 320, 600, 300, 700, 296, 800, 302, 850, 330, 940, 334, 990, 305, 1050, 280, 1120, 270, 1250, 268, 1340, 270, 1400, 250, 1530, 215)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 845, "type": 1}, {"from": 845, "to": 990, "type": 3}, {"from": 990, "to": 1100, "type": 1}, {"from": 1100, "to": 1360, "type": 2}]
-obstacles = [{"kind": "sprinkler", "x": 640.0, "height": 80.0, "on_time": 2.5, "off_time": 2.0}, {"kind": "sprinkler", "x": 1060.0, "height": 70.0, "on_time": 2.0, "off_time": 2.5, "offset": 2.0}, {"kind": "pad", "x": 510.0, "rotation": -25.0}, {"kind": "pad", "x": 770.0, "rotation": 20.0}]
-scenery = [{"kind": "trunk", "x": 20.0, "height": 0.0}, {"kind": "leaves", "x": 20.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 400.0, "height": 0.0}, {"kind": "leaves", "x": 400.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 770.0, "height": 0.0}, {"kind": "leaves", "x": 770.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 1410.0, "height": 0.0}, {"kind": "leaves", "x": 1410.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 1490.0, "height": 0.0}, {"kind": "leaves", "x": 1490.0, "height": 41.0, "variant": 1}]
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 845,
+"type": 1
+}, {
+"from": 845,
+"to": 990,
+"type": 3
+}, {
+"from": 990,
+"to": 1100,
+"type": 1
+}, {
+"from": 1100,
+"to": 1360,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 20.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 20.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 400.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 400.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 770.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 770.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1410.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1410.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1490.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1490.0
+}]
+obstacles = [{
+"height": 80.0,
+"kind": "sprinkler",
+"off_time": 2.0,
+"on_time": 2.5,
+"x": 640.0
+}, {
+"height": 70.0,
+"kind": "sprinkler",
+"off_time": 2.5,
+"offset": 2.0,
+"on_time": 2.0,
+"x": 1060.0
+}, {
+"kind": "pad",
+"rotation": -25.0,
+"x": 510.0
+}, {
+"kind": "pad",
+"rotation": 20.0,
+"x": 770.0
+}, {
+"kind": "coin",
+"x": 481.0,
+"y": 244.0
+}, {
+"kind": "coin",
+"x": 550.0,
+"y": 220.0
+}, {
+"kind": "coin",
+"x": 619.0,
+"y": 206.0
+}, {
+"kind": "coin",
+"x": 688.0,
+"y": 210.0
+}, {
+"kind": "coin",
+"x": 757.0,
+"y": 225.0
+}, {
+"kind": "coin",
+"x": 918.0,
+"y": 329.0
+}, {
+"kind": "coin",
+"x": 976.0,
+"y": 306.0
+}, {
+"kind": "coin",
+"x": 1033.0,
+"y": 278.0
+}]
+wind = -10.0
+title = "SPRINKLER HILL"

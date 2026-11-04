@@ -1,17 +1,197 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "BOSS HOLE"
-title = "THE GAUNTLET"
 par = 7
-tee_x = 90.0
 cup_x = 2770.0
-wind = -8.0
 points = PackedVector2Array(0, 330, 60, 340, 130, 342, 350, 345, 600, 335, 800, 340, 900, 345, 950, 385, 1100, 395, 1180, 385, 1230, 340, 1340, 315, 1600, 305, 1750, 300, 1830, 315, 1870, 335, 1930, 335, 1970, 312, 2080, 290, 2200, 280, 2260, 295, 2300, 345, 2420, 350, 2470, 300, 2540, 270, 2640, 255, 2780, 252, 2900, 254, 2960, 235, 3080, 200)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 910, "type": 1}, {"from": 1225, "to": 1825, "type": 1}, {"from": 1825, "to": 1975, "type": 3}, {"from": 1975, "to": 2265, "type": 1}, {"from": 2470, "to": 2630, "type": 1}, {"from": 2630, "to": 2910, "type": 2}]
-water_spans = [{"from": 900, "to": 1235, "level": 365.0}, {"from": 2270, "to": 2480, "level": 322.0}]
-obstacles = [{"kind": "cart", "from": 400.0, "to": 680.0, "speed": 60.0}, {"kind": "pad", "x": 760.0, "rotation": -30.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 980.0, "height": 70.0, "speed": 65.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 1100.0, "height": 105.0, "speed": 50.0}, {"kind": "goose", "from": 930.0, "to": 1210.0, "start": 1180.0, "height": 50.0, "speed": 75.0}, {"kind": "windmill", "x": 1620.0, "turn_speed": 1.1}, {"kind": "pad", "x": 1785.0, "rotation": 20.0}, {"kind": "sprinkler", "x": 2130.0, "height": 80.0, "on_time": 2.5, "off_time": 1.5}, {"kind": "pad", "x": 2030.0, "rotation": -25.0}, {"kind": "sprinkler", "x": 2560.0, "height": 70.0, "on_time": 2.0, "off_time": 2.0, "offset": 2.0}, {"kind": "pad", "x": 2650.0, "rotation": 0.0}]
-scenery = [{"kind": "trunk", "x": 20.0, "height": 0.0}, {"kind": "leaves", "x": 20.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 300.0, "height": 0.0}, {"kind": "leaves", "x": 300.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 1480.0, "height": 0.0}, {"kind": "leaves", "x": 1480.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 2030.0, "height": 0.0}, {"kind": "leaves", "x": 2030.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 2960.0, "height": 0.0}, {"kind": "leaves", "x": 2960.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 3040.0, "height": 0.0}, {"kind": "leaves", "x": 3040.0, "height": 45.0, "variant": 2}]
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 910,
+"type": 1
+}, {
+"from": 1225,
+"to": 1825,
+"type": 1
+}, {
+"from": 1825,
+"to": 1975,
+"type": 3
+}, {
+"from": 1975,
+"to": 2265,
+"type": 1
+}, {
+"from": 2470,
+"to": 2630,
+"type": 1
+}, {
+"from": 2630,
+"to": 2910,
+"type": 2
+}]
+water_spans = [{
+"from": 900,
+"level": 365.0,
+"to": 1235
+}, {
+"from": 2270,
+"level": 322.0,
+"to": 2480
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 20.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 20.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 300.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 300.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1480.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1480.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2030.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 2030.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2960.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 2960.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 3040.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 3040.0
+}]
+obstacles = [{
+"from": 400.0,
+"kind": "cart",
+"speed": 60.0,
+"to": 680.0
+}, {
+"kind": "pad",
+"rotation": -30.0,
+"x": 760.0
+}, {
+"from": 930.0,
+"height": 70.0,
+"kind": "goose",
+"speed": 65.0,
+"start": 980.0,
+"to": 1210.0
+}, {
+"from": 930.0,
+"height": 105.0,
+"kind": "goose",
+"speed": 50.0,
+"start": 1100.0,
+"to": 1210.0
+}, {
+"from": 930.0,
+"height": 50.0,
+"kind": "goose",
+"speed": 75.0,
+"start": 1180.0,
+"to": 1210.0
+}, {
+"kind": "windmill",
+"turn_speed": 1.1,
+"x": 1620.0
+}, {
+"kind": "pad",
+"rotation": 20.0,
+"x": 1785.0
+}, {
+"height": 80.0,
+"kind": "sprinkler",
+"off_time": 1.5,
+"on_time": 2.5,
+"x": 2130.0
+}, {
+"kind": "pad",
+"rotation": -25.0,
+"x": 2030.0
+}, {
+"height": 70.0,
+"kind": "sprinkler",
+"off_time": 2.0,
+"offset": 2.0,
+"on_time": 2.0,
+"x": 2560.0
+}, {
+"kind": "pad",
+"rotation": 0.0,
+"x": 2650.0
+}, {
+"kind": "coin",
+"x": 1001.0,
+"y": 293.0
+}, {
+"kind": "coin",
+"x": 1162.0,
+"y": 279.0
+}, {
+"kind": "coin",
+"x": 1323.0,
+"y": 225.0
+}, {
+"kind": "coin",
+"x": 1484.0,
+"y": 222.0
+}, {
+"kind": "coin",
+"x": 1644.0,
+"y": 231.0
+}, {
+"kind": "coin",
+"x": 2020.0,
+"y": 292.0
+}, {
+"kind": "coin",
+"x": 2154.0,
+"y": 273.0
+}, {
+"kind": "coin",
+"x": 2288.0,
+"y": 292.0
+}]
+wind = -8.0
+title = "THE GAUNTLET"

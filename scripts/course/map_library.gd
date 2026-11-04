@@ -7,6 +7,7 @@ extends RefCounted
 const COURSE_PATH := "res://data/course_01.tres"
 const DEFAULT_DIR := "user://maps"
 const ORDER_FILE := "course_order.json"
+const COIN_MIN_HEIGHT := 6.0
 
 ## How a map relates to the originals.
 enum Kind { ORIGINAL, EDITED, CUSTOM }
@@ -55,13 +56,31 @@ func list_ids() -> Array[String]:
 func load_hole(id: String) -> HoleData:
 	if FileAccess.file_exists(_user_path(id)):
 		var text: String = FileAccess.get_file_as_string(_user_path(id))
-		var saved: HoleData = HoleIO.from_dict(JSON.parse_string(text))
+		var data: Variant = JSON.parse_string(text)
+		var saved: HoleData = HoleIO.from_dict(data)
 		if saved != null:
+			if is_original(id) and not (data as Dictionary).has(HoleIO.COIN_VERSION_KEY):
+				_add_original_coins(saved, id)
 			return saved
 		push_warning("Couldn't read map %s, so it was skipped." % id)
 	if is_original(id):
 		return load_original(id)
 	return null
+
+
+# An edit saved before coins existed gets the original's, kept above its own ground.
+func _add_original_coins(hole: HoleData, id: String) -> void:
+	var terrain := Terrain.new(hole)
+	var obstacles: Array = hole.obstacles
+	for entry: Dictionary in load_original(id).obstacles:
+		if str(entry.get("kind", "")) != "coin":
+			continue
+		var coin: Dictionary = entry.duplicate()
+		var x: float = clampf(float(coin["x"]), 0.0, float(terrain.length))
+		coin["x"] = x
+		coin["y"] = minf(float(coin["y"]), terrain.ground_y(x) - COIN_MIN_HEIGHT)
+		obstacles.append(coin)
+	hole.obstacles = obstacles
 
 
 func load_original(id: String) -> HoleData:

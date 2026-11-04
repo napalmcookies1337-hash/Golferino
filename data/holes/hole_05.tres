@@ -1,15 +1,119 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "HOLE 5"
-title = "CART PATH"
-par = 4
-tee_x = 90.0
 cup_x = 1190.0
 points = PackedVector2Array(0, 270, 60, 280, 130, 282, 300, 295, 500, 305, 700, 305, 850, 300, 950, 285, 1050, 275, 1150, 272, 1290, 274, 1360, 255, 1480, 220)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 1070, "type": 1}, {"from": 1070, "to": 1310, "type": 2}]
-obstacles = [{"kind": "cart", "from": 480.0, "to": 860.0, "speed": 50.0}, {"kind": "pad", "x": 320.0, "rotation": 20.0}, {"kind": "pad", "x": 910.0, "rotation": -25.0}, {"kind": "pad", "x": 1020.0, "rotation": -40.0}]
-scenery = [{"kind": "trunk", "x": 20.0, "height": 0.0}, {"kind": "leaves", "x": 20.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 280.0, "height": 0.0}, {"kind": "leaves", "x": 280.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 930.0, "height": 0.0}, {"kind": "leaves", "x": 930.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 1350.0, "height": 0.0}, {"kind": "leaves", "x": 1350.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 1440.0, "height": 0.0}, {"kind": "leaves", "x": 1440.0, "height": 41.0, "variant": 1}]
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 1070,
+"type": 1
+}, {
+"from": 1070,
+"to": 1310,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 20.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 20.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 280.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 280.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 930.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 930.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1350.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1350.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1440.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1440.0
+}]
+obstacles = [{
+"from": 480.0,
+"kind": "cart",
+"speed": 50.0,
+"to": 860.0
+}, {
+"kind": "pad",
+"rotation": 20.0,
+"x": 320.0
+}, {
+"kind": "pad",
+"rotation": -25.0,
+"x": 910.0
+}, {
+"kind": "pad",
+"rotation": -40.0,
+"x": 1020.0
+}, {
+"kind": "coin",
+"x": 464.0,
+"y": 232.0
+}, {
+"kind": "coin",
+"x": 530.0,
+"y": 220.0
+}, {
+"kind": "coin",
+"x": 596.0,
+"y": 214.0
+}, {
+"kind": "coin",
+"x": 662.0,
+"y": 220.0
+}, {
+"kind": "coin",
+"x": 728.0,
+"y": 233.0
+}, {
+"kind": "coin",
+"x": 882.0,
+"y": 288.0
+}, {
+"kind": "coin",
+"x": 937.0,
+"y": 279.0
+}, {
+"kind": "coin",
+"x": 992.0,
+"y": 272.0
+}]
+title = "CART PATH"

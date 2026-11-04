@@ -18,3 +18,13 @@ extends Resource
 @export var is_putter: bool = false
 ## Length of the club in the golfer drawing, px.
 @export var draw_length: float = 13.0
+
+# Stickers change these on the run's own copy of the club.
+## Size of the meter's sweet spot.
+var window_scale: float = 1.0
+## How fast the meter runs.
+var meter_speed: float = 1.0
+## How badly a mistimed swing hurts.
+var miss_scale: float = 1.0
+## How strongly the cup pulls in a ball hit with this club.
+var cup_pull_scale: float = 1.0

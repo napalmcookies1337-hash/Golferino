@@ -1,17 +1,160 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "HOLE 4"
-title = "LONG MEADOW"
 par = 5
-tee_x = 90.0
 cup_x = 2030.0
-wind = 8.0
 points = PackedVector2Array(0, 300, 60, 310, 130, 312, 300, 320, 450, 300, 600, 310, 760, 330, 820, 372, 920, 376, 980, 330, 1100, 290, 1250, 300, 1400, 280, 1520, 270, 1570, 285, 1610, 305, 1660, 305, 1700, 283, 1800, 270, 1900, 255, 2000, 250, 2150, 252, 2230, 235, 2360, 200)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 780, "type": 1}, {"from": 985, "to": 1560, "type": 1}, {"from": 1560, "to": 1705, "type": 3}, {"from": 1705, "to": 1890, "type": 1}, {"from": 1890, "to": 2170, "type": 2}]
-water_spans = [{"from": 770, "to": 990, "level": 350.0}]
-obstacles = [{"kind": "pad", "x": 1750.0, "rotation": -30.0}, {"kind": "pad", "x": 1450.0, "rotation": 20.0}, {"kind": "pad", "x": 1840.0, "rotation": 0.0}]
-scenery = [{"kind": "trunk", "x": 18.0, "height": 0.0}, {"kind": "leaves", "x": 18.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 520.0, "height": 0.0}, {"kind": "leaves", "x": 520.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 700.0, "height": 0.0}, {"kind": "leaves", "x": 700.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 1180.0, "height": 0.0}, {"kind": "leaves", "x": 1180.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 1330.0, "height": 0.0}, {"kind": "leaves", "x": 1330.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 1780.0, "height": 0.0}, {"kind": "leaves", "x": 1780.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 2240.0, "height": 0.0}, {"kind": "leaves", "x": 2240.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 2320.0, "height": 0.0}, {"kind": "leaves", "x": 2320.0, "height": 41.0, "variant": 1}]
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 780,
+"type": 1
+}, {
+"from": 985,
+"to": 1560,
+"type": 1
+}, {
+"from": 1560,
+"to": 1705,
+"type": 3
+}, {
+"from": 1705,
+"to": 1890,
+"type": 1
+}, {
+"from": 1890,
+"to": 2170,
+"type": 2
+}]
+water_spans = [{
+"from": 770,
+"level": 350.0,
+"to": 990
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 18.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 18.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 520.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 520.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 700.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 700.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1180.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1180.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1330.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1330.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1780.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1780.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2240.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 2240.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2320.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 2320.0
+}]
+obstacles = [{
+"kind": "pad",
+"rotation": -30.0,
+"x": 1750.0
+}, {
+"kind": "pad",
+"rotation": 20.0,
+"x": 1450.0
+}, {
+"kind": "pad",
+"rotation": 0.0,
+"x": 1840.0
+}, {
+"kind": "coin",
+"x": 750.0,
+"y": 255.0
+}, {
+"kind": "coin",
+"x": 866.0,
+"y": 264.0
+}, {
+"kind": "coin",
+"x": 982.0,
+"y": 237.0
+}, {
+"kind": "coin",
+"x": 1099.0,
+"y": 204.0
+}, {
+"kind": "coin",
+"x": 1215.0,
+"y": 227.0
+}, {
+"kind": "coin",
+"x": 1487.0,
+"y": 263.0
+}, {
+"kind": "coin",
+"x": 1584.0,
+"y": 284.0
+}, {
+"kind": "coin",
+"x": 1681.0,
+"y": 285.0
+}]
+wind = 8.0
+title = "LONG MEADOW"

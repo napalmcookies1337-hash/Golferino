@@ -32,6 +32,19 @@ func _draw() -> void:
 			_draw_goose(obstacle)
 		elif obstacle is BouncePadObstacle:
 			_draw_pad(obstacle)
+		elif obstacle is CoinObstacle:
+			_draw_coin(obstacle)
+
+
+func _draw_coin(coin: CoinObstacle) -> void:
+	if coin.collected:
+		return
+	var at: Vector2 = coin.at.round()
+	# It turns on the spot, by narrowing and widening.
+	var half: float = round(absf(cos(_time * 3.0 + at.x * 0.05)) * 3.0)
+	draw_rect(Rect2(at.x - half - 1.0, at.y - 4.0, half * 2.0 + 3.0, 9.0), OUTLINE)
+	draw_rect(Rect2(at.x - half, at.y - 3.0, half * 2.0 + 1.0, 7.0), Color("ffd23c"))
+	draw_rect(Rect2(at.x - half, at.y - 3.0, 1.0, 7.0), Color("fff0a0"))
 
 
 func _draw_pad(pad: BouncePadObstacle) -> void:

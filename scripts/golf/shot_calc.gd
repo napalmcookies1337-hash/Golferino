@@ -17,6 +17,7 @@ static func compute(
 ) -> Dictionary:
 	var speed: float = club.max_speed * sqrt(clampf(power * lie_power, 0.0, 1.0))
 	var angle: float = club.loft_deg if angle_deg < 0.0 else angle_deg
+	accuracy *= club.miss_scale
 
 	# Putts have no accuracy check: the ball goes exactly as hard as the power set.
 	if club.is_putter:

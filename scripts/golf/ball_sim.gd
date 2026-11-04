@@ -28,6 +28,9 @@ const MAX_MOTION_TIME := 20.0
 const PIN_MIN_HEIGHT := 5.0
 const PIN_REBOUND := 0.25
 const PIN_DROP_DAMPING := 0.4
+## A skipping ball keeps this much speed, and has to land at least this fast.
+const SKIP_KEEP := 0.65
+const MIN_SKIP_SPEED := 60.0
 
 var terrain: Terrain
 var pos: Vector2 = Vector2.ZERO
@@ -40,6 +43,20 @@ var obstacles: Array[Obstacle] = []
 var wind: float = 0.0
 ## True for preview sims, so moving hazards don't affect what the player is shown.
 var ignore_moving: bool = false
+## Only the player's own ball picks up coins.
+var collects_coins: bool = false
+
+# What the ball is made of. Special balls change these.
+## Bounce kept on landing.
+var bounce_scale: float = 1.0
+## Slowdown while rolling.
+var roll_scale: float = 1.0
+## Pull over the cup.
+var cup_pull_scale: float = 1.0
+## How hard hazards knock it around.
+var knock_scale: float = 1.0
+## Times per shot it can skip off water.
+var water_skips: int = 0
 ## Where the current shot started. Solid things right next to this spot let the ball past.
 var launch_x: float = 0.0
 var launch_y: float = 0.0
@@ -52,6 +69,7 @@ var _hit_this_shot: Dictionary = {}
 var _roll_speed: float = 0.0
 var _launch_dir: float = 1.0
 var _motion_time: float = 0.0
+var _skips_left: int = 0
 
 
 func _init(p_terrain: Terrain) -> void:
@@ -73,6 +91,7 @@ func launch(velocity: Vector2, p_spin: float) -> void:
 	spin = p_spin
 	bounce_count = 0
 	_motion_time = 0.0
+	_skips_left = water_skips
 	_touching.clear()
 	_hit_this_shot.clear()
 	pad_uses.clear()
@@ -115,7 +134,7 @@ func step(dt: float) -> void:
 func _step_air(dt: float) -> void:
 	var accel: float = GRAVITY + spin * SPIN_LIFT
 	if terrain.in_cup(pos.x):
-		accel += CUP_PULL
+		accel += CUP_PULL * cup_pull_scale
 	vel.y += accel * dt
 	vel.x += wind * dt
 	var old_x: float = pos.x
@@ -190,6 +209,11 @@ func _collide(ground: float) -> void:
 	var impact_speed: float = vel.length()
 	pos.y = ground - RADIUS
 	if surface == Surface.Type.WATER:
+		if _skips_left > 0 and impact_speed > MIN_SKIP_SPEED:
+			_skips_left -= 1
+			vel = Vector2(vel.x * SKIP_KEEP, -absf(vel.y) * SKIP_KEEP)
+			bounced.emit(pos, surface, impact_speed)
+			return
 		_enter_water()
 		return
 
@@ -199,7 +223,7 @@ func _collide(ground: float) -> void:
 	var vn: float = vel.dot(normal)
 	var vt: float = vel.dot(tangent)
 
-	var new_vn: float = absf(vn) * float(props["restitution"])
+	var new_vn: float = absf(vn) * float(props["restitution"]) * bounce_scale
 	var new_vt: float = vt * float(props["impact_grip"])
 
 	# Backspin (negative) grabs and can pull the ball back. Topspin drives it on.
@@ -220,7 +244,7 @@ func _collide(ground: float) -> void:
 
 func _step_roll(dt: float) -> void:
 	var surface: int = terrain.surface_at(pos.x)
-	var friction: float = float(Surface.props(surface)["roll_friction"])
+	var friction: float = float(Surface.props(surface)["roll_friction"]) * roll_scale
 	var tangent: Vector2 = terrain.tangent(pos.x)
 	var slope_pull: float = GRAVITY * tangent.y
 

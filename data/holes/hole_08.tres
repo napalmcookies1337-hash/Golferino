@@ -1,17 +1,141 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "HOLE 8"
-title = "GOOSE POND"
-par = 4
-tee_x = 90.0
 cup_x = 1320.0
-wind = 6.0
 points = PackedVector2Array(0, 290, 60, 300, 130, 302, 300, 305, 480, 295, 620, 290, 680, 305, 730, 355, 900, 362, 1010, 350, 1060, 300, 1120, 275, 1200, 268, 1330, 266, 1420, 268, 1480, 250, 1600, 215)
-surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 680, "type": 1}, {"from": 1060, "to": 1180, "type": 1}, {"from": 1180, "to": 1440, "type": 2}]
-water_spans = [{"from": 670, "to": 1065, "level": 325.0}]
-obstacles = [{"kind": "goose", "from": 720.0, "to": 1040.0, "start": 760.0, "height": 75.0, "speed": 60.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 880.0, "height": 105.0, "speed": 48.0}, {"kind": "goose", "from": 720.0, "to": 1040.0, "start": 1000.0, "height": 55.0, "speed": 70.0}, {"kind": "pad", "x": 590.0, "rotation": -30.0}, {"kind": "pad", "x": 1155.0, "rotation": 20.0}]
-scenery = [{"kind": "trunk", "x": 20.0, "height": 0.0}, {"kind": "leaves", "x": 20.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 280.0, "height": 0.0}, {"kind": "leaves", "x": 280.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 450.0, "height": 0.0}, {"kind": "leaves", "x": 450.0, "height": 45.0, "variant": 2}, {"kind": "trunk", "x": 1470.0, "height": 0.0}, {"kind": "leaves", "x": 1470.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 1560.0, "height": 0.0}, {"kind": "leaves", "x": 1560.0, "height": 41.0, "variant": 1}]
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 680,
+"type": 1
+}, {
+"from": 1060,
+"to": 1180,
+"type": 1
+}, {
+"from": 1180,
+"to": 1440,
+"type": 2
+}]
+water_spans = [{
+"from": 670,
+"level": 325.0,
+"to": 1065
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 20.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 20.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 280.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 280.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 450.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 450.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1470.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1470.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1560.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1560.0
+}]
+obstacles = [{
+"from": 720.0,
+"height": 75.0,
+"kind": "goose",
+"speed": 60.0,
+"start": 760.0,
+"to": 1040.0
+}, {
+"from": 720.0,
+"height": 105.0,
+"kind": "goose",
+"speed": 48.0,
+"start": 880.0,
+"to": 1040.0
+}, {
+"from": 720.0,
+"height": 55.0,
+"kind": "goose",
+"speed": 70.0,
+"start": 1000.0,
+"to": 1040.0
+}, {
+"kind": "pad",
+"rotation": -30.0,
+"x": 590.0
+}, {
+"kind": "pad",
+"rotation": 20.0,
+"x": 1155.0
+}, {
+"kind": "coin",
+"x": 508.0,
+"y": 221.0
+}, {
+"kind": "coin",
+"x": 582.0,
+"y": 204.0
+}, {
+"kind": "coin",
+"x": 656.0,
+"y": 203.0
+}, {
+"kind": "coin",
+"x": 730.0,
+"y": 239.0
+}, {
+"kind": "coin",
+"x": 803.0,
+"y": 253.0
+}, {
+"kind": "coin",
+"x": 976.0,
+"y": 295.0
+}, {
+"kind": "coin",
+"x": 1037.0,
+"y": 316.0
+}, {
+"kind": "coin",
+"x": 1099.0,
+"y": 273.0
+}]
+wind = 6.0
+title = "GOOSE POND"

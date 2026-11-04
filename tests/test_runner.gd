@@ -60,6 +60,24 @@ func _ready() -> void:
 	_test_editor_undo()
 	_test_ball_against_a_post_can_escape()
 	_test_golfer_never_turns_alone()
+	_test_stroke_budget()
+	_test_budget_in_play()
+	_test_coins_and_payouts()
+	_test_coin_pickups()
+	_test_trick_shots()
+	_test_stickers()
+	_test_special_balls()
+	_test_shop_stock()
+	_test_buying()
+	_test_perks()
+	_test_item_catalog()
+	_test_final_score()
+	_test_profile()
+	_test_maps_gain_coins()
+	_test_duel_rules()
+	_test_rival_cheats()
+	_test_rival_plays_fairly_well()
+	_test_run_balance()
 	_test_cart()
 	_test_windmill()
 	_test_sprinkler()
@@ -1868,6 +1886,836 @@ func _test_preview_ignores_moving_hazards() -> void:
 	_run_to_stop(sim)
 	_check(sim.pos.x > 300.0, "previews roll through a cart (%.0f)" % sim.pos.x)
 	_check(game.ball.ignore_moving == false, "the real ball still hits moving hazards")
+
+
+func _new_run_state(unlocked: Array[String] = [], p_seed: int = 1) -> RunState:
+	var course := CourseRun.new(load(COURSE_PATH) as CourseData)
+	return RunState.new(course, _clubs(), unlocked, p_seed)
+
+
+func _test_stroke_budget() -> void:
+	var state: RunState = _new_run_state()
+	_check(state.spare == 8, "a run starts with 8 spare strokes")
+	var par: int = state.course.current_hole().par
+	_check(state.live_spare(par, par) == 8, "strokes up to par don't touch the budget")
+	_check(state.live_spare(par + 3, par) == 5, "strokes over par drain it as they're taken")
+	_check(state.stroke_limit(par) == par + 8, "the limit is par plus the spare strokes")
+	var summary: Dictionary = state.finish_hole(par - 1)
+	_check(state.spare == 9 and int(summary["banked"]) == 1, "beating par banks strokes")
+	state.course.advance()
+	par = state.course.current_hole().par
+	state.finish_hole(par + 3)
+	_check(state.spare == 6, "a bad hole drains them")
+	state.course.advance()
+	par = state.course.current_hole().par
+	state.leave_hole_unfinished(par + 2)
+	_check(state.spare == 4, "an unfinished hole settles the budget")
+	_check(not state.course.scores.has(state.course.hole_index), "an unfinished hole isn't on the card")
+
+
+func _test_budget_in_play() -> void:
+	# Ends as the ball stops, not when it's struck.
+	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	game.stroke_limit = 2
+	var endings: Array[bool] = []
+	game.out_of_strokes.connect(func() -> void: endings.append(true))
+	game.select_club(1)
+	game.strike_with(0.2, 0.0)
+	_finish_shot(game)
+	_check(endings.is_empty() and game.phase == HoleGame.Phase.AIM, "strokes left means play carries on")
+	game.select_club(1)
+	game.strike_with(0.2, 0.0)
+	_check(game.phase == HoleGame.Phase.BALL_MOVING, "the last stroke still plays out")
+	_finish_shot(game)
+	_check(endings.size() == 1 and game.phase == HoleGame.Phase.OUT_OF_STROKES, "running out ends the hole as the ball stops")
+	game.grant_strokes(2)
+	_check(game.phase == HoleGame.Phase.AIM and game.stroke_limit == 4, "strokes given back resume play")
+
+	# A penalty can use up the last stroke.
+	var water := HoleGame.new(_game().hole, _clubs())
+	water.stroke_limit = 2
+	var wet_endings: Array[bool] = []
+	water.out_of_strokes.connect(func() -> void: wet_endings.append(true))
+	water.strokes = 1
+	water._on_ball_hazard(Vector2.ZERO, "water")
+	_check(water.strokes == 2 and wet_endings.is_empty(), "a penalty stroke doesn't end things until the ball returns")
+	_finish_shot(water)
+	_check(wet_endings.size() == 1, "a penalty that uses the last stroke ends the run")
+
+	# Sinking the last stroke saves the run.
+	var cup_x: float = 300.0
+	var saved := HoleGame.new(_flat_hole({ "cup_x": cup_x }), _clubs())
+	saved.stroke_limit = 1
+	var saved_endings: Array[bool] = []
+	saved.out_of_strokes.connect(func() -> void: saved_endings.append(true))
+	saved.ball.place(cup_x - 40.0)
+	saved._begin_aim()
+	saved.select_club(2)
+	saved.strokes = 0
+	saved.strike_with(0.5, 0.0)
+	_finish_shot(saved)
+	if saved.phase == HoleGame.Phase.COMPLETE:
+		_check(saved_endings.is_empty(), "sinking the last stroke isn't running out")
+	else:
+		_check(saved_endings.size() == 1, "missing the last stroke is running out")
+
+
+func _finish_shot(game: HoleGame) -> void:
+	var steps: int = 0
+	while steps < 5000:
+		if game.phase == HoleGame.Phase.AIM or game.phase == HoleGame.Phase.COMPLETE or game.phase == HoleGame.Phase.OUT_OF_STROKES:
+			return
+		game.tick(DT)
+		steps += 1
+
+
+func _test_coins_and_payouts() -> void:
+	var state: RunState = _new_run_state()
+	_check(state.coins == 0, "a run starts with no coins")
+	_check(state.hole_payout(4, 4) == 5, "par pays 5")
+	_check(state.hole_payout(3, 4) == 8, "a birdie pays 8")
+	_check(state.hole_payout(2, 4) == 12, "an eagle pays 12")
+	_check(state.hole_payout(1, 5) == 20, "4 under pays 20")
+	_check(state.hole_payout(5, 4) == 2, "a bogey pays 2")
+	_check(state.hole_payout(9, 4) == 0, "anything worse pays nothing")
+	state.begin_hole()
+	state.collect_coin()
+	state.collect_trick(6)
+	var summary: Dictionary = state.finish_hole(state.course.current_hole().par)
+	_check(state.coins == 1 + 6 + 5, "coins come from pickups, tricks and score")
+	_check(int(summary["pickups"]) == 1 and int(summary["tricks"]) == 6 and int(summary["payout"]) == 5, "the summary shows where they came from")
+
+
+func _test_coin_pickups() -> void:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	var coin_x: float = 200.0
+	hole.obstacles = [{ "kind": "coin", "x": coin_x, "y": 296.0 }]
+	var game := HoleGame.new(hole, _clubs())
+	var picked: Array[Vector2] = []
+	game.coin_collected.connect(func(at: Vector2) -> void: picked.append(at))
+	game.select_club(2)
+	game.strike_with(1.0, 0.0)
+	_finish_shot(game)
+	_check(picked.size() == 1, "a rolling ball picks up a coin in its path")
+	_check(game.ball.pos.x > coin_x + 40.0, "a coin doesn't slow the ball or knock it about (%.0f)" % game.ball.pos.x)
+	var coin: CoinObstacle = game.obstacles[0]
+	_check(coin.collected, "a picked-up coin is gone")
+	game.ball.place(coin_x - 30.0)
+	game._begin_aim()
+	game.select_club(2)
+	game.strike_with(0.5, 0.0)
+	_finish_shot(game)
+	_check(picked.size() == 1, "a coin only pays once")
+	game.restart()
+	_check(not coin.collected, "restarting a test puts coins back")
+
+	var preview_only := HoleGame.new(hole, _clubs())
+	preview_only.select_club(2)
+	preview_only.preview()
+	_check(not (preview_only.obstacles[0] as CoinObstacle).collected, "the aim preview doesn't pick up coins")
+
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		var hole_data: HoleData = run.hole_at(i)
+		var terrain := Terrain.new(hole_data)
+		var coins: int = 0
+		var buried: int = 0
+		for entry: Dictionary in hole_data.obstacles:
+			if str(entry["kind"]) == "coin":
+				coins += 1
+				if float(entry["y"]) >= terrain.ground_y(float(entry["x"])):
+					buried += 1
+		_check(coins >= 5, "%s has coins to find (%d)" % [hole_data.display_name, coins])
+		_check(buried == 0, "%s has no coins underground" % hole_data.display_name)
+
+
+func _test_trick_shots() -> void:
+	# Each is the finish of a shot, set up directly, so only the choice of trick is tested.
+	var cases: Array = [
+		[1, false, false, false, "HOLE IN ONE!", 0.0],
+		[3, true, false, false, "BANK SHOT!", 0.0],
+		[3, false, false, false, "CHIP-IN!", 0.0],
+		[3, false, true, true, "LONG PUTT!", 200.0],
+		[3, false, true, true, "", 40.0],
+	]
+	for case: Array in cases:
+		var game := HoleGame.new(_flat_hole({ "cup_x": 500.0 }), _clubs())
+		var names: Array[String] = []
+		game.trick_shot.connect(func(trick: String, _coins: int) -> void: names.append(trick))
+		game.strokes = int(case[0])
+		game._shot_hit_pad = bool(case[1])
+		game._shot_by_putter = bool(case[2])
+		game._shot_from_green = bool(case[3])
+		game._shot_from_x = 500.0 - float(case[5])
+		game._pay_for_trick_finish()
+		var wanted: String = str(case[4])
+		_check(names == ([wanted] if wanted != "" else []), "a finish pays the right trick: '%s' (%s)" % [wanted, str(names)])
+
+	var pin_game := HoleGame.new(_flat_hole({ "cup_x": 500.0 }), _clubs())
+	var pin_names: Array[String] = []
+	pin_game.trick_shot.connect(func(trick: String, _coins: int) -> void: pin_names.append(trick))
+	pin_game.strokes = 2
+	pin_game._shot_by_putter = true
+	pin_game._shot_from_green = true
+	pin_game._shot_from_x = 480.0
+	pin_game._on_pin_hit(Vector2.ZERO)
+	pin_game._pay_for_trick_finish()
+	_check(pin_names == ["OFF THE PIN!"], "a ball off the pin pays")
+
+	# Rolling through a windmill's door pays once a shot, and only if it really went through.
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 0.0 }]
+	var through := HoleGame.new(hole, _clubs())
+	through.obstacles[0].angle = PI / 4.0
+	var door_tricks: Array[String] = []
+	through.trick_shot.connect(func(trick: String, _coins: int) -> void: door_tricks.append(trick))
+	through.ball.place(340.0)
+	through._begin_aim()
+	through.select_club(2)
+	through.strike_with(1.0, 0.0)
+	_finish_shot(through)
+	_check(through.ball.pos.x > 410.0 and door_tricks == ["THROUGH THE MILL!"], "rolling through the door pays (%s)" % str(door_tricks))
+
+	var short := HoleGame.new(hole, _clubs())
+	short.obstacles[0].angle = PI / 4.0
+	var short_tricks: Array[String] = []
+	short.trick_shot.connect(func(trick: String, _coins: int) -> void: short_tricks.append(trick))
+	short.ball.place(340.0)
+	short._begin_aim()
+	short.select_club(2)
+	short.strike_with(0.05, 0.0)
+	_finish_shot(short)
+	_check(short_tricks.is_empty(), "stopping short of the door pays nothing")
+
+	var preview_game := HoleGame.new(hole, _clubs())
+	preview_game.obstacles[0].angle = PI / 4.0
+	var preview_tricks: Array[String] = []
+	preview_game.trick_shot.connect(func(trick: String, _coins: int) -> void: preview_tricks.append(trick))
+	preview_game.ball.place(340.0)
+	preview_game._begin_aim()
+	preview_game.select_club(2)
+	preview_game.preview()
+	_check(preview_tricks.is_empty(), "the aim preview can't earn a trick")
+
+
+func _club_named(clubs: Array[ClubData], id: String) -> ClubData:
+	for club in clubs:
+		if club.id == id:
+			return club
+	return null
+
+
+func _test_stickers() -> void:
+	var base: ClubData = _club("iron")
+	var original_speed: float = base.max_speed
+	var striped: ClubData = Items.club_with_stickers(base, ["power_stripe"])
+	_check(striped.max_speed > original_speed, "Power Stripe adds speed")
+	_check(base.max_speed == original_speed, "stickers never change the original club")
+	var range_gain: float = pow(striped.max_speed / original_speed, 2.0)
+	_check(absf(range_gain - 1.08) < 0.01, "Power Stripe adds about 8%% range (%.3f)" % range_gain)
+	_check(Items.club_with_stickers(base, ["spin_doctor"]).spin_strength == base.spin_strength * 1.5, "Spin Doctor adds spin")
+	_check(Items.club_with_stickers(base, ["rough_rider"]).lie_sensitivity == base.lie_sensitivity * 0.5, "Rough Rider halves the lie penalty")
+	var wide: ClubData = Items.club_with_stickers(base, ["wide_angle"])
+	_check(wide.min_angle_deg == base.min_angle_deg - 10.0 and wide.max_angle_deg == base.max_angle_deg + 10.0, "Wide Angle widens both ends")
+	var two: ClubData = Items.club_with_stickers(base, ["wide_angle", "wide_angle", "wide_angle"])
+	_check(two.max_angle_deg <= HoleGame.MAX_LAUNCH_ANGLE and two.min_angle_deg >= HoleGame.MIN_LAUNCH_ANGLE, "angle stickers stay within the game's limits")
+	_check(absf(Items.club_with_stickers(base, ["power_stripe", "power_stripe"]).max_speed - original_speed * 1.04 * 1.04) < 0.01, "stickers stack")
+
+	# They reach the actual shot.
+	var plain_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	var plain := HoleGame.new(plain_hole, _clubs() as Array[ClubData])
+	plain.select_club(1)
+	var plain_speed: float = Vector2(plain.shot_for(1.0, 0.0)["velocity"]).length()
+	var clubs: Array[ClubData] = []
+	for club in _clubs():
+		clubs.append(Items.club_with_stickers(club, ["power_stripe", "sweet_tape", "steady_hand", "forgiver"]))
+	var stickered := HoleGame.new(plain_hole, clubs)
+	stickered.select_club(1)
+	_check(Vector2(stickered.shot_for(1.0, 0.0)["velocity"]).length() > plain_speed, "a sticker changes the shot")
+	_check(stickered.meter.perfect_window > plain.meter.perfect_window, "Sweet Tape widens the meter's sweet spot")
+	_check(stickered.meter.time_scale < 1.0, "Steady Hand slows the meter")
+	var miss_plain: Dictionary = plain.shot_for(1.0, 0.8)
+	var miss_kind: Dictionary = stickered.shot_for(1.0, 0.8)
+	_check(Vector2(miss_kind["velocity"]).length() > Vector2(miss_plain["velocity"]).length(), "Forgiver softens a miss")
+
+	var meter := SwingMeter.new()
+	meter.time_scale = 0.5
+	meter.press()
+	meter.tick(0.2)
+	_check(absf(meter.cursor - 0.1 / SwingMeter.RISE_TIME) < 0.001, "the meter's speed follows its time scale")
+	meter.reset()
+	_check(meter.time_scale == 0.5, "a meter reset keeps its speed")
+
+
+func _test_special_balls() -> void:
+	# Lands the same shot with each ball, to see what it changes.
+	var plain_x: float = _landing_with_ball("")
+	var sticky_x: float = _landing_with_ball("sticky_ball")
+	var rubber_x: float = _landing_with_ball("rubber_ball")
+	_check(sticky_x < plain_x - 5.0, "a sticky ball runs out less (%.0f, %.0f)" % [sticky_x, plain_x])
+	_check(rubber_x > plain_x + 5.0, "a rubber ball runs out more (%.0f, %.0f)" % [rubber_x, plain_x])
+
+	var windy: HoleData = _flat_hole({ "cup_x": 990.0 })
+	windy.wind = 40.0
+	_check(is_equal_approx(HoleGame.new(windy, _clubs(), "wind_cutter").current_wind(), 12.0), "a Wind Cutter takes 30% of the wind")
+
+	# A skipper crosses water that a plain ball drowns in.
+	var pond: HoleData = _flat_hole({ "cup_x": 990.0 })
+	pond.points = PackedVector2Array([Vector2(0, 300), Vector2(400, 300), Vector2(420, 330), Vector2(560, 330), Vector2(580, 300), Vector2(1000, 300)])
+	pond.water_spans = [{ "from": 405, "to": 575, "level": 306.0 }]
+	var results: Dictionary = {}
+	for ball_id: String in ["", "skipper"]:
+		var game := HoleGame.new(pond, _clubs(), ball_id)
+		var sim: BallSim = game.ball
+		sim.pos = Vector2(430.0, 250.0)
+		sim.launch(Vector2(120.0, 30.0), 0.0)
+		var steps: int = 0
+		var splashes: Array[bool] = []
+		sim.hazard.connect(func(_at: Vector2, _kind: String) -> void: splashes.append(true))
+		while sim.is_moving() and steps < 2000 and splashes.is_empty():
+			sim.step(DT)
+			steps += 1
+		results[ball_id] = sim.pos.x
+	_check(float(results["skipper"]) > float(results[""]) + 20.0, "a skipper bounces off water (%.0f, %.0f)" % [results["skipper"], results[""]])
+
+	# The aim preview uses the ball in play.
+	var plain := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	var rubbery := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), "rubber_ball")
+	_check(plain.new_preview_sim().bounce_scale == 1.0 and rubbery.new_preview_sim().bounce_scale == 1.3, "the preview matches the ball in play")
+
+	# Hazards knock a heavy ball less.
+	var heavy_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	heavy_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 0.0 }]
+	var rebounds: Dictionary = {}
+	for ball_id: String in ["", "heavy_ball"]:
+		var game := HoleGame.new(heavy_hole, _clubs(), ball_id)
+		game.ball.ignore_moving = true
+		game.ball.pos = Vector2(380.0, 270.0)
+		game.ball.launch(Vector2(200.0, -1.0), 0.0)
+		for _i in 10:
+			game.ball.step(DT)
+		rebounds[ball_id] = game.ball.vel.x
+	_check(float(rebounds["heavy_ball"]) > float(rebounds[""]), "a heavy ball rebounds less (%.0f, %.0f)" % [rebounds["heavy_ball"], rebounds[""]])
+
+
+func _landing_with_ball(ball_id: String) -> float:
+	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), ball_id)
+	game.select_club(1)
+	game.strike_with(0.6, 0.0)
+	_finish_shot(game)
+	return game.ball.pos.x
+
+
+func _test_shop_stock() -> void:
+	var state: RunState = _new_run_state()
+	var kinds_seen: Dictionary = {}
+	var ids_seen: Dictionary = {}
+	for _round in 200:
+		var stock: Array[Dictionary] = state.roll_stock()
+		_check(stock.size() == RunState.SHOP_SHELVES, "the shop has %d shelves" % RunState.SHOP_SHELVES)
+		_check(stock[0]["kind"] == Items.KIND_STICKER and stock[1]["kind"] == Items.KIND_STICKER, "the first two shelves are stickers")
+		_check(stock[2]["kind"] != Items.KIND_STICKER, "the third shelf is never a sticker")
+		var unique: Dictionary = {}
+		for item in stock:
+			unique[item["id"]] = true
+			kinds_seen[item["kind"]] = true
+			ids_seen[item["id"]] = true
+			_check(not item.has("unlock"), "locked items aren't sold")
+		_check(unique.size() == stock.size(), "no item is on two shelves")
+	for kind: String in [Items.KIND_STICKER, Items.KIND_BALL, Items.KIND_PERK, Items.KIND_STROKES]:
+		_check(kinds_seen.has(kind), "the stock includes %s" % kind)
+
+	# Runs with the same seed get the same stock, and ones with different seeds don't.
+	var a: Array[Dictionary] = _new_run_state([], 5).roll_stock()
+	_check(a == _new_run_state([], 5).roll_stock(), "the same seed rolls the same stock")
+	var differs: bool = false
+	for seed_value in range(6, 16):
+		if _new_run_state([], seed_value).roll_stock() != a:
+			differs = true
+	_check(differs, "different runs get different stock")
+
+	# Unlocks reach the shop.
+	var unlocked: Array[String] = Items.unlock_order()
+	var open_state: RunState = _new_run_state(unlocked)
+	var saw_unlock: bool = false
+	for _round in 200:
+		for item in open_state.roll_stock():
+			if item.has("unlock"):
+				saw_unlock = true
+	_check(saw_unlock, "unlocked items appear in the shop")
+
+	# It doesn't sell what you already have.
+	var owner: RunState = _new_run_state()
+	owner.ball_id = "skipper"
+	owner.perks.append("coupon")
+	for _round in 200:
+		for item in owner.roll_stock():
+			_check(item["id"] != "skipper" and item["id"] != "coupon", "the shop doesn't sell what you've got")
+
+
+func _test_buying() -> void:
+	var state: RunState = _new_run_state()
+	var ball: Dictionary = Items.by_id("skipper")
+	_check(not state.buy(ball), "no coins, no sale")
+	state.coins = 100
+	_check(state.buy(ball) and state.ball_id == "skipper", "buying a ball equips it")
+	_check(state.coins == 100 - int(ball["price"]), "buying costs its price")
+	state.buy(Items.by_id("wind_cutter"))
+	_check(state.ball_id == "wind_cutter", "a new ball replaces the old one")
+	var strokes_before: int = state.spare
+	state.buy(Items.by_id("spare_strokes"))
+	_check(state.spare == strokes_before + 2, "bonus strokes go on the budget")
+	state.buy(Items.by_id("coupon"))
+	_check(state.perks.has("coupon"), "buying a perk keeps it")
+
+	var fresh: RunState = _new_run_state()
+	fresh.coins = 500
+	var sticker: Dictionary = Items.by_id("power_stripe")
+	_check(not fresh.buy(sticker), "stickers need a club")
+	_check(not fresh.buy_sticker(sticker, "putter"), "a sticker won't go on a club it doesn't fit")
+	var coins_before: int = fresh.coins
+	_check(fresh.coins == coins_before, "a refused sticker costs nothing")
+	for _i in 3:
+		_check(fresh.buy_sticker(sticker, "iron"), "a club takes up to 3 stickers")
+	_check(fresh.club_is_full("iron"), "three stickers fill a club")
+	var before_replace: int = fresh.coins
+	_check(not fresh.buy_sticker(Items.by_id("sweet_tape"), "iron"), "a full club needs one chosen to replace")
+	_check(fresh.coins == before_replace, "no replacement chosen, no charge")
+	_check(fresh.buy_sticker(Items.by_id("sweet_tape"), "iron", 1), "a new sticker can replace a chosen one")
+	_check(fresh.stickers["iron"] == ["power_stripe", "sweet_tape", "power_stripe"], "only the chosen sticker is lost")
+	_check(fresh.stickers["driver"].is_empty(), "stickers stay on their own club")
+	var clubs: Array[ClubData] = fresh.clubs()
+	var iron: ClubData = _club_named(clubs, "iron")
+	_check(iron.max_speed > _club("iron").max_speed and iron.window_scale > 1.0, "the bag plays with its stickers")
+	_check(_club_named(clubs, "driver").max_speed == _club("driver").max_speed, "other clubs stay plain")
+
+
+func _test_perks() -> void:
+	var state: RunState = _new_run_state()
+	state.coins = 1000
+	var plain_price: int = state.price_of(Items.by_id("skipper"))
+	state.perks.append("coupon")
+	_check(state.price_of(Items.by_id("skipper")) == ceili(plain_price * 0.8), "the coupon cuts prices")
+	state.perks.append("coin_purse")
+	state.begin_hole()
+	_check(state.collect_coin() == 2, "the coin purse doubles pickups")
+	state.perks.append("showman")
+	_check(state.collect_trick(5) == 10, "the showman doubles tricks")
+	state.perks.append("birdie_bank")
+	_check(state.hole_payout(3, 4) == 13, "the birdie bank pays extra under par")
+	_check(state.hole_payout(4, 4) == 5, "the birdie bank doesn't pay for par")
+	state.perks.append("steady_pay")
+	_check(state.hole_payout(4, 4) == 8, "steady pay adds to par")
+	state.perks.append("extra_shelf")
+	_check(state.roll_stock().size() == RunState.SHOP_SHELVES + 1, "the extra shelf adds to the stock")
+
+	var net: RunState = _new_run_state()
+	_check(net.use_safety_net() == 0, "no net, no save")
+	net.perks.append("safety_net")
+	var before: int = net.spare
+	_check(net.use_safety_net() == 3 and net.spare == before + 3, "the net gives 3 strokes")
+	_check(net.use_safety_net() == 0, "the net only works once a run")
+
+	# A mulligan forgives one penalty a hole.
+	var game := HoleGame.new(_game().hole, _clubs())
+	game.free_penalties = 1
+	var forgiven: Array[bool] = []
+	game.penalty_forgiven.connect(func() -> void: forgiven.append(true))
+	game._on_ball_hazard(Vector2.ZERO, "water")
+	_check(game.strokes == 0 and forgiven.size() == 1, "the first penalty is free")
+	_finish_shot(game)
+	game._on_ball_hazard(Vector2.ZERO, "water")
+	_check(game.strokes == 1 and forgiven.size() == 1, "the next one costs a stroke")
+
+
+func _test_item_catalog() -> void:
+	var ids: Dictionary = {}
+	for item: Dictionary in Items.CATALOG:
+		var id: String = str(item["id"])
+		_check(not ids.has(id), "%s has a unique id" % id)
+		ids[id] = true
+		_check(str(item["name"]).length() <= 14, "%s has a name that fits a card" % id)
+		_check(str(item["text"]).length() <= 22, "%s has text that fits a card" % id)
+		_check(int(item["price"]) > 0, "%s has a price" % id)
+		for text: String in [str(item["name"]), str(item["text"])]:
+			for i in text.length():
+				_check(text[i] == " " or PixelFont.GLYPHS.has(text[i]), "%s only uses letters the font has" % id)
+		if item["kind"] == Items.KIND_STICKER:
+			_check(not (item["clubs"] as Array).is_empty(), "%s fits at least one club" % id)
+	_check(Items.unlock_order().size() >= 6, "there's plenty to unlock")
+	var seen_order: Array[String] = Items.unlock_order()
+	_check(seen_order[0] == "forgiver", "unlocks come in order")
+
+
+func _test_final_score() -> void:
+	var state: RunState = _new_run_state()
+	state.coins = 10
+	for i in 2:
+		state.finish_hole(state.course.current_hole().par - 1)
+		state.course.advance()
+	# Two birdies: 2 holes, 2 under, 10 spare, and coins of 10 + 16.
+	var score: Dictionary = state.final_score()
+	var expected: int = 2 * 100 + 2 * 100 + 10 * 50 + 26 * 2
+	_check(int(score["total"]) == expected, "the final score adds up (%d, %d)" % [score["total"], expected])
+	_check((score["rows"] as Array).size() == 4, "no rival bonus before beating it")
+	state.ending = RunState.Ending.BEAT_RIVAL
+	var winning: Dictionary = state.final_score()
+	_check(int(winning["total"]) == expected + 1000, "beating the rival adds its bonus")
+	_check(state.is_finished_run(), "a duel finishes the run")
+	state.ending = RunState.Ending.OUT_OF_STROKES
+	_check(not state.is_finished_run(), "running out isn't a finished run")
+
+	var terrible: RunState = _new_run_state()
+	terrible.spare = -5
+	terrible.finish_hole(30)
+	_check(int(terrible.final_score()["total"]) == 0, "the score never goes below zero")
+	_check(int(_score_row(terrible, "SPARE")) == 0, "spare strokes never score below zero")
+
+
+func _score_row(state: RunState, label_start: String) -> int:
+	for row: Dictionary in state.final_score()["rows"]:
+		if str(row["label"]).begins_with(label_start):
+			return int(row["points"])
+	return -1
+
+
+func _test_profile() -> void:
+	var path: String = "user://test_profile.json"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var profile := Profile.new(path)
+	_check(profile.high_scores.is_empty() and profile.unlocked.is_empty(), "a new profile starts empty")
+
+	var lost: RunState = _new_run_state()
+	lost.ending = RunState.Ending.LOST_TO_RIVAL
+	var first: Dictionary = profile.record_run(lost)
+	_check(int(first["place"]) == 1, "the first score is the best so far")
+	_check((first["unlocked"] as Array).size() == 1 and profile.unlocked == ["forgiver"], "a finished run unlocks one item")
+
+	var out: RunState = _new_run_state()
+	out.ending = RunState.Ending.OUT_OF_STROKES
+	out.spare = 0
+	var dead: Dictionary = profile.record_run(out)
+	_check((dead["unlocked"] as Array).is_empty(), "running out unlocks nothing")
+	_check(profile.runs_finished == 1, "running out isn't a finished run")
+
+	var won: RunState = _new_run_state()
+	won.ending = RunState.Ending.BEAT_RIVAL
+	var victory: Dictionary = profile.record_run(won)
+	_check(int(victory["place"]) == 1, "a better score goes to the top")
+	_check((victory["unlocked"] as Array).size() == 2, "beating the rival unlocks two")
+
+	var reloaded := Profile.new(path)
+	_check(reloaded.high_scores.size() == 3 and reloaded.runs_finished == 2, "scores survive a restart")
+	_check(reloaded.unlocked.size() == 3, "unlocks survive a restart")
+	_check(int(reloaded.high_scores[0]["score"]) >= int(reloaded.high_scores[1]["score"]), "scores stay in order")
+
+	for _i in 20:
+		var filler: RunState = _new_run_state()
+		filler.ending = RunState.Ending.LOST_TO_RIVAL
+		reloaded.record_run(filler)
+	_check(reloaded.high_scores.size() == Profile.MAX_SCORES, "only the top scores are kept")
+	_check(reloaded.unlocked.size() == Items.unlock_order().size(), "everything can be unlocked, and it stops there")
+
+	var bad_file := FileAccess.open(path, FileAccess.WRITE)
+	bad_file.store_string(JSON.stringify({ "high_scores": ["oops", { "score": "x" }], "unlocked": ["no_such_item", 3], "runs_finished": "many" }))
+	bad_file.close()
+	var damaged := Profile.new(path)
+	_check(damaged.unlocked.is_empty() and damaged.runs_finished == 0, "a damaged profile is cleaned up")
+	DirAccess.remove_absolute(path)
+
+
+func _test_maps_gain_coins() -> void:
+	var dir: String = "user://test_coin_maps"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	for file_name in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute("%s/%s" % [dir, file_name])
+	var library := MapLibrary.new(dir)
+	var original_coins: int = _count_coins(library.load_original("hole_01"))
+	_check(original_coins > 0, "the original has coins")
+
+	# A map saved before coins existed: no version marker, and no coins.
+	var old_data: Dictionary = HoleIO.to_dict(library.load_original("hole_01"))
+	old_data.erase(HoleIO.COIN_VERSION_KEY)
+	var kept: Array = []
+	for entry: Dictionary in old_data["obstacles"]:
+		if str(entry["kind"]) != "coin":
+			kept.append(entry)
+	old_data["obstacles"] = kept
+	var file := FileAccess.open("%s/hole_01.json" % dir, FileAccess.WRITE)
+	file.store_string(JSON.stringify(old_data))
+	file.close()
+	var migrated: HoleData = library.load_hole("hole_01")
+	_check(_count_coins(migrated) == original_coins, "an old edited map gains the original's coins")
+
+	# Once saved it keeps exactly what the player left, even no coins at all.
+	var none: Array = []
+	for entry: Dictionary in migrated.obstacles:
+		if str(entry["kind"]) != "coin":
+			none.append(entry)
+	migrated.obstacles = none
+	library.save_hole("hole_01", migrated)
+	_check(_count_coins(library.load_hole("hole_01")) == 0, "coins removed in the editor stay removed")
+
+	# Coins are in the editor like any other object.
+	var doc := EditorDoc.new(HoleIO.blank_hole("COINS"))
+	var selection: Dictionary = doc.add_object("coin", Vector2(400, 120))
+	var coin: Dictionary = doc.entry_of(selection)
+	_check(str(coin["kind"]) == "coin" and float(coin["y"]) == 120.0, "a coin can be placed anywhere")
+	_check(doc.pick(Vector2(402, 121), 4.0) == selection, "a placed coin can be clicked")
+	doc.move_selection(selection, Vector2(500, 90))
+	_check(float(doc.entry_of(selection)["x"]) == 500.0 and float(doc.entry_of(selection)["y"]) == 90.0, "a coin can be moved")
+	var round_trip: HoleData = HoleIO.from_dict(JSON.parse_string(JSON.stringify(HoleIO.to_dict(doc.hole))))
+	_check(_count_coins(round_trip) == 1, "a coin survives saving")
+	var bad: Dictionary = HoleIO.to_dict(doc.hole)
+	bad["obstacles"] = [{ "kind": "coin", "x": 10.0 }, { "kind": "coin", "y": 10.0 }]
+	_check(_count_coins(HoleIO.from_dict(bad)) == 0, "a coin missing its position is dropped")
+	for file_name in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute("%s/%s" % [dir, file_name])
+
+
+func _count_coins(hole: HoleData) -> int:
+	var count: int = 0
+	for entry: Dictionary in hole.obstacles:
+		if str(entry["kind"]) == "coin":
+			count += 1
+	return count
+
+
+func _duel_game(cup_x: float = 990.0) -> HoleGame:
+	var game := HoleGame.new(_flat_hole({ "cup_x": cup_x }), _clubs())
+	game.start_duel(Rival.new(game, _clubs(), 3))
+	return game
+
+
+func _test_duel_rules() -> void:
+	# Settling is checked directly, for every case in the rule.
+	var cases: Array = [
+		# Your strokes, you holed, its strokes, it holed, decided, you won.
+		[4, true, 5, true, true, true, "fewer strokes wins"],
+		[5, true, 4, true, true, false, "more strokes loses"],
+		[4, true, 4, true, true, false, "a tie goes to the rival"],
+		[4, true, 4, false, true, true, "the rival can't catch you once it's used your score"],
+		[4, true, 3, false, false, false, "the rival still has a stroke to tie"],
+		[3, false, 5, true, false, false, "you can still beat it with a stroke to spare"],
+		[4, false, 5, true, true, false, "you can only tie it, so it's over"],
+		[3, false, 3, false, false, false, "nobody's done yet"],
+	]
+	for case: Array in cases:
+		var game: HoleGame = _duel_game()
+		game.strokes = int(case[0])
+		game.player_holed = bool(case[1])
+		game.rival.strokes = int(case[2])
+		game.rival.holed = bool(case[3])
+		var decided: bool = game._settle_duel()
+		_check(decided == bool(case[4]), "duel: %s (decided)" % str(case[6]))
+		if decided:
+			_check(game.duel_won == bool(case[5]), "duel: %s (winner)" % str(case[6]))
+			_check(game.phase == HoleGame.Phase.COMPLETE, "duel: %s (hole ends)" % str(case[6]))
+		game.end_duel()
+
+	# Turns alternate, on a hole too long for the rival to hole out in one.
+	var long_hole: HoleData = _flat_hole({ "cup_x": 2900.0 })
+	long_hole.points = PackedVector2Array([Vector2(0, 300), Vector2(1500, 300), Vector2(3000, 300)])
+	long_hole.surface_spans = [{ "from": 0, "to": 3000, "type": Surface.Type.FAIRWAY }]
+	var game := HoleGame.new(long_hole, _clubs())
+	game.start_duel(Rival.new(game, _clubs(), 3))
+	game.select_club(1)
+	game.strike_with(0.3, 0.0)
+	var steps: int = 0
+	while game.phase == HoleGame.Phase.BALL_MOVING and steps < 3000:
+		game.tick(DT)
+		steps += 1
+	_check(game.phase == HoleGame.Phase.RIVAL_TURN, "the rival plays after the player")
+	_check(game.active_ball() == game.rival.ball, "the camera watches the rival's ball on its turn")
+	game.press_swing()
+	_check(game.strokes == 1, "the player can't swing on the rival's turn")
+	steps = 0
+	while game.phase == HoleGame.Phase.RIVAL_TURN and steps < 6000:
+		game.tick(DT)
+		steps += 1
+	_check(game.phase == HoleGame.Phase.AIM, "the player plays after the rival")
+	_check(game.rival.strokes == 1, "the rival took a stroke")
+	_check(game.rival.ball.pos.x > game.hole.tee_x + 20.0, "the rival's ball moved up the hole")
+	_check(game.active_ball() == game.ball, "the camera comes back for the player's turn")
+	game.end_duel()
+
+	# Holing out hands over to the rival, which plays out alone until it's settled.
+	var finisher: HoleGame = _duel_game()
+	var wins: Array[bool] = []
+	finisher.hole_finished.connect(func(_strokes: int, _name: String) -> void: wins.append(true))
+	finisher.strokes = 1
+	finisher.ball.state = BallSim.State.HOLED
+	finisher._on_ball_holed()
+	_check(finisher.player_holed and finisher.phase == HoleGame.Phase.RIVAL_TURN, "holing out leaves the rival to play")
+	steps = 0
+	while finisher.phase == HoleGame.Phase.RIVAL_TURN and steps < 20000:
+		finisher.tick(DT)
+		steps += 1
+	_check(finisher.phase == HoleGame.Phase.COMPLETE and wins.size() == 1, "the duel settles itself")
+	finisher.end_duel()
+
+	# The budget still rules on the boss hole.
+	var broke: HoleGame = _duel_game()
+	broke.stroke_limit = 1
+	var ran_out: Array[bool] = []
+	broke.out_of_strokes.connect(func() -> void: ran_out.append(true))
+	broke.select_club(1)
+	broke.strike_with(0.3, 0.0)
+	steps = 0
+	while broke.phase == HoleGame.Phase.BALL_MOVING and steps < 3000:
+		broke.tick(DT)
+		steps += 1
+	_check(ran_out.size() == 1, "running out on the boss hole ends the run")
+	broke.end_duel()
+
+
+func _test_rival_cheats() -> void:
+	var game: HoleGame = _duel_game()
+	var rival: Rival = game.rival
+	var said: Array[String] = []
+	rival.announced.connect(func(text: String) -> void: said.append(text))
+
+	var plain_wind: float = game.current_wind()
+	rival._tricks_left.assign(["gust"])
+	_check(rival._pull_trick(), "the rival can fan the wind")
+	_check(game.current_wind() < plain_wind, "the gust blows against the player")
+	_check(game.ball.wind == game.current_wind(), "the gust reaches the ball")
+	var shot_x: float = _landing_after_shot(game)
+	_check(shot_x > 0.0 and is_equal_approx(game.current_wind(), plain_wind), "the gust is gone after one shot")
+
+	game.set_meter_cheat(Rival.GREASE_SPEED)
+	game._begin_aim()
+	_check(game.meter.time_scale == Rival.GREASE_SPEED, "grease speeds up the player's meter")
+	game.strokes = 0
+	var greased_x: float = _landing_after_shot(game)
+	_check(greased_x > 0.0, "a greased shot still plays")
+	game._begin_aim()
+	_check(game.meter.time_scale == 1.0, "the grease wears off after one shot")
+
+	rival.strokes = 1
+	rival._tricks_left.assign(["pencil"])
+	_check(not rival._pull_trick(), "it won't erase its only stroke")
+	rival.strokes = 3
+	rival._tricks_left.assign(["pencil"])
+	_check(rival._pull_trick() and rival.strokes == 2, "the rival can erase a stroke")
+
+	rival.ball.place(300.0)
+	var before: float = rival.ball.pos.x
+	rival._tricks_left.assign(["kick"])
+	_check(rival._pull_trick() and rival.ball.pos.x > before and rival.ball.pos.x < game.hole.cup_x, "a kick moves it toward the cup")
+	rival.ball.place(game.hole.cup_x - 20.0)
+	rival._tricks_left.assign(["kick"])
+	_check(not rival._pull_trick(), "it won't kick when it's already by the cup")
+
+	# Never into water, and never past the cup.
+	var wet: HoleData = _flat_hole({ "cup_x": 990.0 })
+	wet.points = PackedVector2Array([Vector2(0, 300), Vector2(400, 300), Vector2(420, 330), Vector2(800, 330), Vector2(820, 300), Vector2(1000, 300)])
+	wet.water_spans = [{ "from": 405, "to": 815, "level": 306.0 }]
+	var wet_game := HoleGame.new(wet, _clubs())
+	wet_game.start_duel(Rival.new(wet_game, _clubs(), 3))
+	wet_game.rival.ball.place(380.0)
+	_check(not wet_game.rival._kick_ball(), "it won't kick into water")
+	wet_game.end_duel()
+
+	_check(said.size() >= 3, "every trick is announced")
+
+	# The free drop works once.
+	var drop: HoleGame = _duel_game()
+	drop.rival.strokes = 2
+	drop.rival._on_ball_hazard(Vector2.ZERO, "water")
+	_check(drop.rival.strokes == 2, "the first water ball is a free drop")
+	drop.rival._on_ball_hazard(Vector2.ZERO, "water")
+	_check(drop.rival.strokes == 3, "after that it takes a penalty like anyone")
+	drop.end_duel()
+
+	# Cheats come every other turn, and run out.
+	var turns: HoleGame = _duel_game()
+	var tally: Array[String] = []
+	turns.rival.announced.connect(func(text: String) -> void: tally.append(text))
+	turns.rival.strokes = 4
+	turns.rival.ball.place(300.0)
+	turns.rival._turns = 1
+	turns.rival._end_shot()
+	_check(tally.is_empty() and turns.rival.is_turn_over(), "no cheat on an odd turn")
+	turns.rival._turns = 2
+	turns.rival._end_shot()
+	_check(tally.size() == 1 and turns.rival.stage == Rival.Stage.CHEATING, "a cheat on an even turn")
+	turns.end_duel()
+	game.end_duel()
+
+
+func _landing_after_shot(game: HoleGame) -> float:
+	game.rival.holed = true
+	game.select_club(1)
+	game.strike_with(0.3, 0.0)
+	var steps: int = 0
+	while game.phase == HoleGame.Phase.BALL_MOVING and steps < 3000:
+		game.tick(DT)
+		steps += 1
+	game.rival.holed = false
+	return game.ball.pos.x
+
+
+# Plays the rival alone on the real boss hole, many times, for how good it really is.
+func _test_rival_plays_fairly_well() -> void:
+	var boss: HoleData = load("res://data/holes/hole_boss.tres")
+	var total: int = 0
+	var worst: int = 0
+	var best: int = 99
+	var rounds: int = 16
+	var unfinished: int = 0
+	var slowest: int = 0
+	for round_index in rounds:
+		var game := HoleGame.new(boss, _clubs())
+		game.start_duel(Rival.new(game, _clubs(), round_index))
+		game.strokes = 99
+		game.player_holed = true
+		game._start_rival_turn()
+		var steps: int = 0
+		while game.phase == HoleGame.Phase.RIVAL_TURN and not game.rival.holed and steps < 120000:
+			var started: int = Time.get_ticks_usec()
+			game.tick(DT)
+			slowest = maxi(slowest, Time.get_ticks_usec() - started)
+			steps += 1
+		if not game.rival.holed:
+			unfinished += 1
+		total += game.rival.strokes
+		worst = maxi(worst, game.rival.strokes)
+		best = mini(best, game.rival.strokes)
+		game.end_duel()
+	var average: float = float(total) / float(rounds)
+	print("rival on the boss hole: average %.1f, best %d, worst %d, unfinished %d, slowest frame %d ms" % [average, best, worst, unfinished, slowest / 1000])
+	_check(unfinished == 0, "the rival always finishes")
+	_check(average > 4.5 and average < 12.0, "the rival is a real but beatable opponent (%.1f)" % average)
+
+
+# Simulated players through whole runs, for how long the budget lasts and what coins buy.
+func _test_run_balance() -> void:
+	for skill: Array in [["steady", 0.04, 0.02], ["average", 0.08, 0.04], ["sloppy", 0.14, 0.08]]:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 7
+		var runs: int = 3
+		var reached_boss: int = 0
+		var coin_total: int = 0
+		var spare_total: int = 0
+		for _run in runs:
+			var state: RunState = _new_run_state()
+			var alive: bool = true
+			for i in state.course.hole_count() - 1:
+				var strokes: int = _play_round(state.course.current_hole(), rng, float(skill[1]), float(skill[2]))
+				var par: int = state.course.current_hole().par
+				if strokes < 0 or strokes >= par + state.spare:
+					alive = false
+					break
+				state.finish_hole(strokes)
+				state.course.advance()
+			if alive:
+				reached_boss += 1
+				spare_total += state.spare
+			coin_total += state.coins
+		print("%s player: reached the boss in %d of %d runs, %.0f coins a run from scores alone, %.1f spare on arrival" % [
+				skill[0], reached_boss, runs, float(coin_total) / float(runs), float(spare_total) / float(maxi(reached_boss, 1))])
 
 
 func _test_course_progression() -> void:

@@ -5,6 +5,7 @@ extends Node
 
 const OUT_DIR := "res://tests/shots"
 const MAPS_DIR := "user://check_maps"
+const PROFILE_PATH := "user://check_profile.json"
 
 var app: Node
 var _failures: int = 0
@@ -18,6 +19,9 @@ func _ready() -> void:
 		DirAccess.remove_absolute("%s/%s" % [absolute, file_name])
 	app = (load("res://scenes/app.tscn") as PackedScene).instantiate()
 	app.maps_dir = MAPS_DIR
+	if FileAccess.file_exists(PROFILE_PATH):
+		DirAccess.remove_absolute(PROFILE_PATH)
+	app.profile_path = PROFILE_PATH
 	add_child(app)
 	_run()
 
@@ -32,6 +36,7 @@ func _run() -> void:
 	await _open_and_add_objects()
 	await _rotation()
 	await _ground_and_paint()
+	await _coin_in_editor()
 	await _settings_panel()
 	await _save_and_reload()
 	await _test_play()
@@ -342,6 +347,22 @@ func _one_press_putt() -> void:
 	await _wait(0.3)
 
 
+func _coin_in_editor() -> void:
+	var map_editor: MapEditor = editor()
+	_press_key(KEY_4)
+	await _wait(0.1)
+	map_editor.add_kind = "coin"
+	await _wait(0.1)
+	await _save("editor_16d_coin_tool")
+	await _click(Vector2(200, 100))
+	await _wait(0.1)
+	var coin: Dictionary = map_editor.doc.entry_of(map_editor.selection)
+	_expect(str(coin.get("kind", "")) == "coin", "clicking the map places a coin")
+	await _save("editor_16e_coin_placed")
+	_press_key(KEY_1)
+	await _wait(0.1)
+
+
 func _course_order() -> void:
 	var map_editor: MapEditor = editor()
 	_press_key(KEY_ESCAPE)
@@ -404,7 +425,25 @@ func _play_edited_course() -> void:
 	await _save("editor_21_run_uses_edits")
 	_press_key(KEY_ESCAPE)
 	await _wait(0.3)
-	_expect(app._screen is TitleScreen, "Esc in a run goes back to the menu")
+	_expect(app._screen.pause_menu != null, "Esc in a run pauses it")
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.8)
+	_expect(app._screen.run_over != null, "ending a run shows the final score")
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "the final score goes back to the menu")
+	_expect(app.profile.high_scores.size() == 1, "an ended run is saved to the high scores")
+	await _click(Vector2(320, 236))
+	await _wait(0.3)
+	_expect(app._screen is HighScoresScreen, "HIGH SCORES opens from the menu")
+	await _save("editor_22_high_scores")
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "the high scores go back to the menu")
+	await _save("editor_23_title_again")
+	DirAccess.remove_absolute(PROFILE_PATH)
 
 
 func _test_main() -> Node:

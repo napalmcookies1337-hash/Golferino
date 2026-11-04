@@ -5,7 +5,9 @@ extends RefCounted
 
 const MIN_POINT_GAP := 2.0
 const MAX_LENGTH := 8000.0
-const KNOWN_KINDS := ["pad", "cart", "windmill", "sprinkler", "goose"]
+const KNOWN_KINDS := ["pad", "cart", "windmill", "sprinkler", "goose", "coin"]
+## Maps saved before coins existed don't have this, so they get the original hole's coins.
+const COIN_VERSION_KEY := "coin_version"
 const LEAF_VARIANTS := 3
 
 
@@ -32,6 +34,7 @@ static func to_dict(hole: HoleData) -> Dictionary:
 		"water_spans": hole.water_spans.duplicate(true),
 		"obstacles": hole.obstacles.duplicate(true),
 		"scenery": hole.scenery.duplicate(true),
+		COIN_VERSION_KEY: 1,
 	}
 
 
@@ -161,6 +164,8 @@ static func _has_required_keys(entry: Dictionary) -> bool:
 	match str(entry["kind"]):
 		"cart", "goose":
 			return _is_number(entry.get("from")) and _is_number(entry.get("to"))
+		"coin":
+			return _is_number(entry.get("x")) and _is_number(entry.get("y"))
 		_:
 			return _is_number(entry.get("x"))
 

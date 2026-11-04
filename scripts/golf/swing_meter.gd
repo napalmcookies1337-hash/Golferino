@@ -24,6 +24,8 @@ const MIN_RETURN_POWER := 0.2
 var stage: int = Stage.IDLE
 ## Set by the current lie. Kept across resets.
 var perfect_window: float = PERFECT_WINDOW
+## Set by the club and the rival's tricks. Kept across resets.
+var time_scale: float = 1.0
 var cursor: float = 0.0
 var power: float = 0.0
 ## 0 is perfect. Positive is early (up to 1), negative is late (down to -1).
@@ -63,7 +65,8 @@ func press() -> void:
 			_lock_accuracy()
 
 
-func tick(dt: float) -> void:
+func tick(real_dt: float) -> void:
+	var dt: float = real_dt * time_scale
 	match stage:
 		Stage.SWEEPING:
 			cursor += _sweep_direction * dt / SWEEP_TIME

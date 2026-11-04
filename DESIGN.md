@@ -30,13 +30,13 @@ mode comes later: leave room for it, do not build it yet.
 | Meter return | Takes the same time at any power, so short shots stay timeable |
 | Flagstick | A ball hitting the pin in flight is knocked back and drops near the cup. Low putts pass under it |
 | Stickers | Clubs are not sold. Shop sells stickers; each club holds up to 3 and each gives that club a bonus. A new sticker on a full club replaces one the player chooses, and the old one is lost |
-| Run structure | Fixed 9 holes, then the boss hole |
-| Losing a run | Stroke budget, starting at about 8 spare strokes. Beating par banks strokes, bogeys drain them. Zero ends the run immediately, even mid-hole, including on the boss hole |
-| Shop | Between holes, random mixed stock: stickers, special balls, passive perks, bonus strokes |
-| Coins | Score payout + course pickups + trick shot bonuses |
-| Boss | Turn-based duel on a gauntlet hole. Lowest strokes wins; ties go to the rival. The rival cheats. Losing ends the run but the score still counts |
-| Final score | Strokes under par, leftover strokes and coins, bonus for beating the rival, on a scorecard |
-| Between runs | Finished runs unlock new stickers and perks for the shop (variety, not power). High scores saved |
+| Run structure | Fixed 9 holes, then the boss hole. A shop after every hole, including before the boss |
+| Losing a run | Stroke budget, starting at 8 spare strokes. Beating par banks strokes, and strokes over par drain them as they're taken, including penalties. The stroke that uses up the last spare plays out: sinking it saves the run, and otherwise the run ends as the ball stops. Applies on the boss hole too. Restarting a hole is only for testing maps |
+| Shop | Between holes, random mixed stock on 4 shelves: two stickers, one ball, perk or bonus strokes, and one of anything. Special balls last until replaced, perks for the rest of the run |
+| Coins | Score payout (under par 8/12/16/20, par 5, bogey 2, worse 0) + course pickups + trick shot bonuses (hole in one 15, bank shot off a pad 8, chip-in 6, long putt 5, off the pin 4, through a windmill's door 3). Coins are objects placed in the editor. Edited maps from before coins existed get the original hole's coins |
+| Boss | Turn-based duel on the course's last hole, player first. Lowest strokes wins; ties go to the rival, and it ends as soon as the result can't change. The rival uses plain clubs and sometimes mishits. It cheats: moving hazards pass through its ball, its first water ball is a free drop, and every second turn it pulls one of a headwind on your next shot, grease that speeds your next meter, a kick of its ball toward the cup, or erasing a stroke. Losing ends the run but the score still counts |
+| Final score | 100 per hole finished, 100 per stroke under par (minus if over), 50 per spare stroke left, 2 per coin left, 1000 for beating the rival, on a scorecard. An unfinished hole doesn't count for or against par |
+| Between runs | Finished runs (that reached a duel result) unlock shop items, one for losing and two for winning (variety, not power). Top 10 high scores saved, including runs that ended early |
 | Camera | Free scroll to inspect the hole before a shot, then smooth chase of the ball with some lead |
 | Course | One cohesive country-club look. Classic hazards first, escalating to moving and stranger ones |
 | Wind | Not part of the normal swing. Only on later holes and as a rival trick |
@@ -63,7 +63,7 @@ infinite mode, other platforms.
 | 7 | Sprinkler Hill | 4 | Sprinklers, headwind |
 | 8 | Goose Pond | 4 | Geese over a wide pond |
 | 9 | Clubhouse Climb | 5 | Everything so far |
-| Boss | The Gauntlet | 7 | Every hazard in sequence. Plays solo until the duel arrives in Milestone 4 |
+| Boss | The Gauntlet | 7 | Every hazard in sequence, in a duel with the rival |
 
 ## Milestones (stop for review at each)
 
@@ -82,6 +82,10 @@ Gameplay rules never touch nodes or drawing, so they run headless in tests.
 - `scripts/course/`: `HoleData`, `CourseData`, `Terrain` (baked height and surface lookup), and `Obstacle` with one subclass per hazard
 - `scripts/game/hole_game.gd`: one hole's rules. Views read it and listen to its signals
 - `scripts/game/course_run.gd`: progress through the course and scores so far
+- `scripts/game/run_state.gd`: one run's budget, coins, what's owned, the shop's stock and the final score
+- `scripts/game/items.gd`: everything the shop sells, as data, and how it changes the numbers
+- `scripts/game/rival.gd`: the rival's turns, choice of shots and cheats
+- `scripts/game/profile.gd`: high scores and unlocks, saved to `user://profile.json`
 - `scripts/course/map_library.gd` and `hole_io.gd`: saved maps, restoring originals, the course order
 - `scripts/editor/`: `EditorDoc` holds every editing rule with no drawing, `MapEditor` and `EditorUI` are the screen
 - `scripts/app.gd`: moves between the title menu, playing and the editor

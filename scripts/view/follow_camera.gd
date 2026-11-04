@@ -44,7 +44,7 @@ func _process(delta: float) -> void:
 		position = target
 		_placed = true
 		return
-	var moving: bool = game.phase == HoleGame.Phase.BALL_MOVING
+	var moving: bool = game.is_active_ball_moving()
 	var rate: float = CHASE_SMOOTH if moving else AIM_SMOOTH
 	if is_free_looking():
 		rate = 12.0
@@ -52,14 +52,14 @@ func _process(delta: float) -> void:
 
 
 func _target_position(delta: float) -> Vector2:
-	var ball: BallSim = game.ball
-	if game.phase == HoleGame.Phase.BALL_MOVING:
+	var ball: BallSim = game.active_ball()
+	if game.is_active_ball_moving():
 		look_offset = 0.0
 		return ball.pos + Vector2(ball.vel.x * CHASE_LEAD_X, ball.vel.y * CHASE_LEAD_Y - HEADROOM)
 
 	# Clamp the resting framing first, so being near a course edge doesn't count as looking.
 	var max_x: float = float(game.terrain.length) - HALF_WIDTH
-	var target_x: float = clampf(ball.pos.x + float(game.facing) * AIM_LEAD, HALF_WIDTH, max_x)
+	var target_x: float = clampf(ball.pos.x + float(game.active_facing()) * AIM_LEAD, HALF_WIDTH, max_x)
 	if game.phase == HoleGame.Phase.AIM:
 		var look_input: float = Input.get_axis("look_left", "look_right")
 		_look_held = _look_held + delta if look_input != 0.0 else 0.0

@@ -4,9 +4,10 @@ extends Node2D
 
 signal play_chosen
 signal editor_chosen
+signal scores_chosen
 signal quit_chosen
 
-const ITEMS := ["PLAY", "MAP EDITOR", "QUIT"]
+const ITEMS := ["PLAY", "MAP EDITOR", "HIGH SCORES", "QUIT"]
 const ITEM_TOP := 186.0
 const ITEM_GAP := 22.0
 const CENTER_X := 320.0
@@ -87,6 +88,8 @@ func _choose(index: int) -> void:
 		1:
 			editor_chosen.emit()
 		2:
+			scores_chosen.emit()
+		3:
 			quit_chosen.emit()
 
 

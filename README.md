@@ -48,10 +48,11 @@ Maps are saved in `%APPDATA%\Godot\app_userdata\Golferino\maps`.
 | Change club | Q / E, or 1 / 2 / 3 | LB / RB |
 | Spin | W / S | Y / B |
 | Flip to hit the other way (this shot only) | F | X |
-| Restart hole | R | Back |
+| Scorecard (or restart, when testing a map) | Tab (or R) | Back |
+| Pause, or end the run | Esc | Start |
+| Menus and the shop | Arrow keys or W / A / S / D, then Space | D-pad or left stick, then A |
 | Skip to next / previous hole (for reviewing) | Page Down / Page Up | |
 | Fullscreen on or off | F11 | |
-| Quit | Esc | |
 
 ## Tests
 

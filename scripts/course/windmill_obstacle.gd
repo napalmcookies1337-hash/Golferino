@@ -31,6 +31,9 @@ var _hub: Vector2
 var _tower_low: Vector2
 var _lintel_a: Vector2
 var _lintel_b: Vector2
+var _up: Vector2
+## Which side of the tower each ball was last on, while it's low and close to the door.
+var _door_side: Dictionary = {}
 
 
 func _init(terrain: Terrain, entry: Dictionary) -> void:
@@ -40,6 +43,7 @@ func _init(terrain: Terrain, entry: Dictionary) -> void:
 	rotation_deg = float(entry.get("rotation", 0.0))
 	turn_speed = float(entry.get("turn_speed", 1.2))
 	var up: Vector2 = Vector2.UP.rotated(deg_to_rad(rotation_deg))
+	_up = up
 	_hub = base() + up * TOWER_HEIGHT
 	_tower_low = base() + up * (DOOR_HEIGHT + TOWER_RADIUS)
 	var lintel: Vector2 = base() + up * (DOOR_HEIGHT + LINTEL_RADIUS)
@@ -73,6 +77,7 @@ func interact(ball: BallSim, _dt: float) -> bool:
 			touched = true
 	if ball.ignore_moving:
 		return touched
+	_check_door_pass(ball)
 	for i in BLADES:
 		# A blade moves faster toward its tip, so the hit takes the speed at that point.
 		var arm: Vector2 = ball.pos - _hub
@@ -80,3 +85,21 @@ func interact(ball: BallSim, _dt: float) -> bool:
 		if Obstacle.hit_capsule(ball, _hub, blade_tip(i), BLADE_RADIUS, BLADE_BOUNCE, blade_velocity):
 			touched = true
 	return touched
+
+
+# A shot counts as through the door when it crosses from one side to the other down low,
+# having started outside the tower.
+func _check_door_pass(ball: BallSim) -> void:
+	var offset: Vector2 = ball.pos - base()
+	var height: float = offset.dot(_up)
+	var along: float = offset.dot(_up.orthogonal())
+	# By id, because holding the ball itself would keep it and this windmill alive forever.
+	var ball_id: int = ball.get_instance_id()
+	if height < 0.0 or height > DOOR_HEIGHT or absf(along) > DOOR_HALF_WIDTH * 3.0 or absf(ball.launch_x - x) < Obstacle.LAUNCH_GRACE:
+		_door_side.erase(ball_id)
+		return
+	var side: float = signf(along)
+	if _door_side.has(ball_id) and float(_door_side[ball_id]) != side and side != 0.0:
+		ball.obstacle_hit.emit(ball.pos, "mill_door")
+	if side != 0.0:
+		_door_side[ball_id] = side

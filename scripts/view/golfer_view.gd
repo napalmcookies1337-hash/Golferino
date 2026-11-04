@@ -15,16 +15,16 @@ const PUTT_BACK := -38.0
 const PUTT_FOLLOW := 32.0
 
 const OUTLINE := Color("20202e")
-const SKIN := Color("f0b98a")
-const SHIRT := Color("e8584a")
-const SHIRT_DARK := Color("b83d3f")
-const PANTS := Color("f2ead0")
-const PANTS_DARK := Color("c9bd9e")
-const CAP := Color("2b8c8c")
 const SHOE := Color("3a2f33")
 const SHAFT := Color("c7ccd6")
 const CLUB_HEAD := Color("8d97a8")
 
+var skin := Color("f0b98a")
+var shirt := Color("e8584a")
+var shirt_dark := Color("b83d3f")
+var pants := Color("f2ead0")
+var pants_dark := Color("c9bd9e")
+var cap := Color("2b8c8c")
 var game: HoleGame
 var _arm_angle: float = 0.0
 var _hinge: float = 0.0
@@ -44,6 +44,12 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_phase_timer += delta
+	_update_pose()
+	scale.x = float(_facing())
+	queue_redraw()
+
+
+func _update_pose() -> void:
 	match game.phase:
 		HoleGame.Phase.AIM:
 			_stand_at_ball()
@@ -60,12 +66,30 @@ func _process(delta: float) -> void:
 			_arm_angle = lerpf(_top_angle, _address_angle(), eased)
 			_hinge = lerpf(_top_hinge, 0.0, eased)
 		HoleGame.Phase.BALL_MOVING, HoleGame.Phase.PENALTY, HoleGame.Phase.COMPLETE:
-			var t2: float = clampf(_phase_timer / 0.22, 0.0, 1.0)
-			var out: float = 1.0 - (1.0 - t2) * (1.0 - t2)
-			_arm_angle = lerpf(_address_angle(), _follow_angle(), out)
-			_hinge = lerpf(0.0, _follow_hinge(), out)
-	scale.x = float(game.facing)
-	queue_redraw()
+			_follow_through(_phase_timer)
+		HoleGame.Phase.RIVAL_TURN, HoleGame.Phase.OUT_OF_STROKES:
+			_stand_at_ball()
+			_arm_angle = _address_angle()
+			_hinge = 0.0
+
+
+func _follow_through(time_since_strike: float) -> void:
+	var t: float = clampf(time_since_strike / 0.22, 0.0, 1.0)
+	var out: float = 1.0 - (1.0 - t) * (1.0 - t)
+	_arm_angle = lerpf(_address_angle(), _follow_angle(), out)
+	_hinge = lerpf(0.0, _follow_hinge(), out)
+
+
+func _facing() -> int:
+	return game.facing
+
+
+func _ball_x() -> float:
+	return game.ball.pos.x
+
+
+func _club() -> ClubData:
+	return game.current_club()
 
 
 func _on_phase_changed(_phase: int) -> void:
@@ -80,22 +104,22 @@ func _update_backswing() -> void:
 	var meter: SwingMeter = game.meter
 	var following_cursor: bool = meter.stage == SwingMeter.Stage.RISING or meter.stage == SwingMeter.Stage.SWEEPING
 	var amount: float = meter.cursor if following_cursor else meter.power
-	var back: float = PUTT_BACK if game.current_club().is_putter else BACK_ANGLE
-	var hinge: float = 0.0 if game.current_club().is_putter else BACK_HINGE
+	var back: float = PUTT_BACK if _club().is_putter else BACK_ANGLE
+	var hinge: float = 0.0 if _club().is_putter else BACK_HINGE
 	_arm_angle = lerpf(_address_angle(), back, amount)
 	_hinge = lerpf(0.0, hinge, amount)
 
 
 func _follow_angle() -> float:
-	return PUTT_FOLLOW if game.current_club().is_putter else FOLLOW_ANGLE
+	return PUTT_FOLLOW if _club().is_putter else FOLLOW_ANGLE
 
 
 func _follow_hinge() -> float:
-	return 0.0 if game.current_club().is_putter else FOLLOW_HINGE
+	return 0.0 if _club().is_putter else FOLLOW_HINGE
 
 
 func _club_length() -> float:
-	return game.current_club().draw_length
+	return _club().draw_length
 
 
 # The lean that makes the club head just touch the ground at address.
@@ -107,7 +131,7 @@ func _address_angle() -> float:
 func _stand_at_ball() -> void:
 	var reach: float = ARM_LENGTH + _club_length()
 	var offset: float = sin(deg_to_rad(_address_angle())) * reach
-	var x: float = game.ball.pos.x - float(game.facing) * offset
+	var x: float = _ball_x() - float(_facing()) * offset
 	position = Vector2(round(x), round(game.terrain.ground_y(x)))
 
 
@@ -129,25 +153,29 @@ func _draw() -> void:
 	_limb(hip, shoulder, 8.0, OUTLINE)
 	draw_circle(head, 5.5, OUTLINE)
 
-	_limb(Vector2(-5, -1), hip + Vector2(-1, 0), 3.0, PANTS_DARK)
-	_limb(Vector2(5, -1), hip + Vector2(1, 0), 3.0, PANTS)
+	_limb(Vector2(-5, -1), hip + Vector2(-1, 0), 3.0, pants_dark)
+	_limb(Vector2(5, -1), hip + Vector2(1, 0), 3.0, pants)
 	draw_rect(Rect2(-8, -2, 5, 2), SHOE)
 	draw_rect(Rect2(3, -2, 5, 2), SHOE)
 
-	_limb(hip, shoulder, 6.0, SHIRT)
-	draw_rect(Rect2(hip.x - 3.0, hip.y - 1.0, 6, 2), SHIRT_DARK)
+	_limb(hip, shoulder, 6.0, shirt)
+	draw_rect(Rect2(hip.x - 3.0, hip.y - 1.0, 6, 2), shirt_dark)
 
-	draw_circle(head, 4.5, SKIN)
-	draw_rect(Rect2(head.x - 5.0, head.y - 5.0, 10, 4), CAP)
-	draw_rect(Rect2(head.x + 3.0, head.y - 2.0, 5, 1), CAP)
-	draw_rect(Rect2(head.x + 2.0, head.y, 1, 1), OUTLINE)
+	draw_circle(head, 4.5, skin)
+	draw_rect(Rect2(head.x - 5.0, head.y - 5.0, 10, 4), cap)
+	draw_rect(Rect2(head.x + 3.0, head.y - 2.0, 5, 1), cap)
+	_draw_face(head)
 
 	draw_line(hand, club_head, SHAFT, 1.0)
 	draw_rect(Rect2(club_head.x - 1.0, club_head.y - 1.0, 4, 2), CLUB_HEAD)
 
 	_limb(shoulder, hand, 4.0, OUTLINE)
-	_limb(shoulder, hand, 2.0, SHIRT_DARK)
-	draw_rect(Rect2(hand.x - 1.0, hand.y - 1.0, 3, 3), SKIN)
+	_limb(shoulder, hand, 2.0, shirt_dark)
+	draw_rect(Rect2(hand.x - 1.0, hand.y - 1.0, 3, 3), skin)
+
+
+func _draw_face(head: Vector2) -> void:
+	draw_rect(Rect2(head.x + 2.0, head.y, 1, 1), OUTLINE)
 
 
 func _limb(from: Vector2, to: Vector2, width: float, color: Color) -> void:

@@ -1,15 +1,94 @@
-[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="HoleData" format=3]
 
 [ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 display_name = "HOLE 6"
-title = "THE OLD MILL"
 par = 3
 tee_x = 80.0
 cup_x = 650.0
 points = PackedVector2Array(0, 300, 50, 310, 110, 312, 250, 316, 400, 318, 500, 316, 560, 306, 650, 302, 760, 304, 830, 285, 960, 250)
-surface_spans = [{"from": 50, "to": 110, "type": 4}, {"from": 110, "to": 535, "type": 1}, {"from": 535, "to": 790, "type": 2}]
-obstacles = [{"kind": "windmill", "x": 420.0, "turn_speed": 1.2}, {"kind": "pad", "x": 510.0, "rotation": -30.0}]
-scenery = [{"kind": "trunk", "x": 16.0, "height": 0.0}, {"kind": "leaves", "x": 16.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 840.0, "height": 0.0}, {"kind": "leaves", "x": 840.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 920.0, "height": 0.0}, {"kind": "leaves", "x": 920.0, "height": 45.0, "variant": 2}]
+surface_spans = [{
+"from": 50,
+"to": 110,
+"type": 4
+}, {
+"from": 110,
+"to": 535,
+"type": 1
+}, {
+"from": 535,
+"to": 790,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 16.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 16.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 840.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 840.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 920.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 920.0
+}]
+obstacles = [{
+"kind": "windmill",
+"turn_speed": 1.2,
+"x": 420.0
+}, {
+"kind": "pad",
+"rotation": -30.0,
+"x": 510.0
+}, {
+"kind": "coin",
+"x": 274.0,
+"y": 244.0
+}, {
+"kind": "coin",
+"x": 308.0,
+"y": 231.0
+}, {
+"kind": "coin",
+"x": 342.0,
+"y": 226.0
+}, {
+"kind": "coin",
+"x": 376.0,
+"y": 232.0
+}, {
+"kind": "coin",
+"x": 411.0,
+"y": 246.0
+}, {
+"kind": "coin",
+"x": 490.0,
+"y": 309.0
+}, {
+"kind": "coin",
+"x": 519.0,
+"y": 305.0
+}, {
+"kind": "coin",
+"x": 547.0,
+"y": 300.0
+}]
+title = "THE OLD MILL"

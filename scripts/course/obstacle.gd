@@ -17,6 +17,11 @@ func tick(_dt: float) -> void:
 	pass
 
 
+## Puts anything used up during play back, for restarting a hole.
+func reset() -> void:
+	pass
+
+
 ## True for things that move along a path and could otherwise push a ball with them.
 func hits_once_per_shot() -> bool:
 	return false
@@ -48,6 +53,8 @@ static func _build_one(entry: Dictionary, terrain: Terrain) -> Obstacle:
 			return GooseObstacle.new(terrain, entry)
 		"pad":
 			return BouncePadObstacle.new(terrain, entry)
+		"coin":
+			return CoinObstacle.new(terrain, entry)
 	push_error("Unknown obstacle kind: %s" % str(entry.get("kind", "")))
 	return null
 
@@ -68,7 +75,7 @@ static func hit_capsule(
 	var relative: Vector2 = ball.vel - surface_velocity
 	var into: float = relative.dot(normal)
 	if into < 0.0:
-		relative -= normal * into * (1.0 + restitution)
+		relative -= normal * into * (1.0 + restitution * ball.knock_scale)
 		ball.vel = relative + surface_velocity
 		ball.spin = 0.0
 	return true

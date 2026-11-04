@@ -231,6 +231,8 @@ func add_object(kind: String, at: Vector2) -> Dictionary:
 		"goose":
 			entry.merge({ "from": x - 100.0, "to": x + 100.0, "start": x, "speed": 60.0 })
 			entry["height"] = maxf(terrain.ground_y(x - 100.0) - at.y, 20.0)
+		"coin":
+			entry.merge({ "x": x, "y": at.y })
 	var obstacles: Array = hole.obstacles
 	obstacles.append(entry)
 	hole.obstacles = obstacles
@@ -336,6 +338,8 @@ func _object_center(entry: Dictionary) -> Vector2:
 		"goose":
 			var goose := GooseObstacle.new(terrain, entry)
 			return Vector2((goose.from_x + goose.to_x) / 2.0, goose.base_y)
+		"coin":
+			return Vector2(float(entry["x"]), float(entry["y"]))
 		_:
 			return Vector2(float(entry["x"]), terrain.ground_y(float(entry["x"])))
 
@@ -405,7 +409,7 @@ func _move_piece(piece: Dictionary, at: Vector2, x: float) -> void:
 
 func _move_object(entry: Dictionary, at: Vector2, x: float) -> void:
 	match str(entry["kind"]):
-		"pad":
+		"pad", "coin":
 			entry["x"] = x
 			entry["y"] = clampf(at.y, -200.0, float(Terrain.WORLD_HEIGHT))
 		"cart":
@@ -489,7 +493,7 @@ func _hits_object(entry: Dictionary, at: Vector2, radius: float) -> bool:
 		"windmill":
 			var mill := WindmillObstacle.new(terrain, entry)
 			return Geometry2D.get_closest_point_to_segment(at, mill.base(), mill.hub()).distance_to(at) < radius + 14.0
-		"sprinkler":
+		"sprinkler", "coin":
 			return center.distance_to(at) < radius + 10.0
 		"cart":
 			return absf(at.x - center.x) < radius + CartObstacle.DRAWN_HALF_WIDTH \
