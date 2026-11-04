@@ -3,7 +3,7 @@
 An arcade side-view golf roguelite, built in Godot 4.6 with GDScript. Windows only.
 The approved design and architecture are in [DESIGN.md](DESIGN.md).
 
-**Status:** Milestone 1, a playable prototype with one hole.
+**Status:** Milestone 2, core golf mechanics on one hole.
 
 ## Run it
 
@@ -24,7 +24,6 @@ To work on it, open this folder in the Godot 4.6 editor and press F5.
 | Look along the hole | A / D or Left / Right | D-pad left / right or left stick |
 | Change club | Q / E, or 1 / 2 / 3 | LB / RB |
 | Spin | W / S | Y / B |
-| Hit the other way | F | X |
 | Restart hole | R | Back |
 | Fullscreen on or off | F11 | |
 | Quit | Esc | |

@@ -10,6 +10,10 @@ extends Resource
 @export var loft_deg: float = 45.0
 @export var min_angle_deg: float = 15.0
 @export var max_angle_deg: float = 75.0
+## How much spin this club can put on the ball.
+@export var spin_strength: float = 1.0
+## How badly bad lies hurt its range. 1 takes the surface's penalty as listed.
+@export var lie_sensitivity: float = 1.0
 ## Putters roll along the ground instead of launching.
 @export var is_putter: bool = false
 ## Length of the club in the golfer drawing, px.

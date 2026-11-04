@@ -91,13 +91,22 @@ func _draw_club_panel() -> void:
 			PixelFont.draw(self, ">", Vector2(13, y), ACCENT)
 		PixelFont.draw(self, game.clubs[i].display_name, Vector2(23, y), color)
 	var surface: Dictionary = Surface.props(game.lie_surface())
-	var lie_percent: int = int(round(float(surface["lie_power"]) * 100.0))
+	var lie_percent: int = int(round(game.lie_power() * 100.0))
 	if game.ball.state == BallSim.State.RESTING and surface.has("name"):
 		PixelFont.draw(self, str(surface["name"]), Vector2(74, 307), DIM)
-		PixelFont.draw(self, "%d%%" % lie_percent, Vector2(74, 321), DIM)
+		PixelFont.draw(self, "%d%%" % lie_percent + _slope_text(), Vector2(74, 321), DIM)
 	if not game.current_club().is_putter:
 		var angle_text: String = "ANGLE %d" % int(round(game.aim_angle))
 		PixelFont.draw(self, angle_text, Vector2(74, 335), ACCENT)
+
+
+func _slope_text() -> String:
+	if game.current_club().is_putter:
+		return ""
+	var tilt: int = int(round(game.launch_angle() - game.aim_angle))
+	if tilt == 0:
+		return ""
+	return " %+d" % tilt
 
 
 func _draw_spin_panel() -> void:
@@ -137,7 +146,7 @@ func _draw_meter() -> void:
 		var seg_x: float = sweet_x + t * METER_POWER_WIDTH
 		draw_rect(Rect2(seg_x, METER_TOP, METER_POWER_WIDTH / float(segments) + 1.0, METER_HEIGHT), color)
 
-	var window: float = SwingMeter.PERFECT_WINDOW * METER_POWER_WIDTH
+	var window: float = game.meter.perfect_window * METER_POWER_WIDTH
 	draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), Color("ffffff"))
 	draw_rect(Rect2(sweet_x, METER_TOP - 2.0, 1, METER_HEIGHT + 4.0), Color("20202e"))
 
@@ -164,7 +173,7 @@ func _draw_meter() -> void:
 func _draw_hint() -> void:
 	if game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(
-				self, "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  F FLIP  R RESTART",
+				self, "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  R RESTART",
 				SCREEN_WIDTH / 2.0, 346.0, TEXT)
 
 

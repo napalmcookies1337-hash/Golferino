@@ -2,7 +2,7 @@ class_name FlagView
 extends Node2D
 ## The pin and its waving pennant.
 
-const POLE_HEIGHT := 38.0
+const POLE_HEIGHT := Terrain.PIN_HEIGHT
 
 var terrain: Terrain
 var _time: float = 0.0

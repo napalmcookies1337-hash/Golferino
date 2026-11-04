@@ -12,8 +12,12 @@ const RETURN_TIME := 0.92
 const PERFECT_WINDOW := 0.035
 const EARLY_RANGE := 0.3
 const MISS_END := -0.18
+## Below this power the return stops slowing down further.
+const MIN_RETURN_POWER := 0.2
 
 var stage: int = Stage.IDLE
+## Set by the current lie. Kept across resets.
+var perfect_window: float = PERFECT_WINDOW
 var cursor: float = 0.0
 var power: float = 0.0
 ## 0 is perfect. Positive is early (up to 1), negative is late (down to -1).
@@ -49,7 +53,8 @@ func tick(dt: float) -> void:
 				power = 1.0
 				stage = Stage.RETURNING
 		Stage.RETURNING:
-			cursor -= dt / RETURN_TIME
+			# The return takes the same time at any power, so short shots stay timeable.
+			cursor -= dt * maxf(power, MIN_RETURN_POWER) / RETURN_TIME
 			if cursor <= MISS_END:
 				cursor = MISS_END
 				_lock_accuracy()
@@ -60,13 +65,13 @@ func is_done() -> bool:
 
 
 func _lock_accuracy() -> void:
-	accuracy = accuracy_for_cursor(cursor)
+	accuracy = accuracy_for_cursor(cursor, perfect_window)
 	stage = Stage.DONE
 
 
-static func accuracy_for_cursor(c: float) -> float:
-	if absf(c) <= PERFECT_WINDOW:
+static func accuracy_for_cursor(c: float, window: float = PERFECT_WINDOW) -> float:
+	if absf(c) <= window:
 		return 0.0
 	if c > 0.0:
-		return clampf((c - PERFECT_WINDOW) / EARLY_RANGE, 0.0, 1.0)
-	return -clampf((-c - PERFECT_WINDOW) / (-MISS_END - PERFECT_WINDOW), 0.0, 1.0)
+		return clampf((c - window) / EARLY_RANGE, 0.0, 1.0)
+	return -clampf((-c - window) / (-MISS_END - window), 0.0, 1.0)

@@ -13,6 +13,12 @@ mode comes later: leave room for it, do not build it yet.
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
 | Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
+| Direction | The golfer always hits toward the cup. There is no manual flip (removed after playtesting Milestone 1) |
+| Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |
+| Slopes | The launch angle tilts by half the ground's slope, and the ball always clears the slope it sits on. Landing downhill runs further, landing uphill runs less |
+| Spin | Depends on the club (Driver half as much as Iron), the lie, and how clean the strike is. A full miss has no spin |
+| Meter return | Takes the same time at any power, so short shots stay timeable |
+| Flagstick | A ball hitting the pin in flight is knocked back and drops near the cup. Low putts pass under it |
 | Stickers | Clubs are not sold. Shop sells stickers; each club holds up to 3 and each gives that club a bonus. A new sticker on a full club replaces one the player chooses, and the old one is lost |
 | Run structure | Fixed 9 holes, then the boss hole |
 | Losing a run | Stroke budget, starting at about 8 spare strokes. Beating par banks strokes, bogeys drain them. Zero ends the run immediately, even mid-hole, including on the boss hole |

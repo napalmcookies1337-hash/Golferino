@@ -4,6 +4,7 @@ extends RefCounted
 
 const CUP_HALF := 5.0
 const CUP_DEPTH := 11.0
+const PIN_HEIGHT := 38.0
 const WORLD_HEIGHT := 540
 
 var length: int = 0

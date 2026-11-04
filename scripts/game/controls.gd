@@ -16,7 +16,6 @@ static func register() -> void:
 	_add("spin_down", [KEY_S], [JOY_BUTTON_B])
 	_add("look_left", [KEY_A, KEY_LEFT], [JOY_BUTTON_DPAD_LEFT], JOY_AXIS_LEFT_X, -1.0)
 	_add("look_right", [KEY_D, KEY_RIGHT], [JOY_BUTTON_DPAD_RIGHT], JOY_AXIS_LEFT_X, 1.0)
-	_add("flip", [KEY_F], [JOY_BUTTON_X])
 	_add("restart", [KEY_R], [JOY_BUTTON_BACK])
 	_add("fullscreen", [KEY_F11], [])
 	_add("quit", [KEY_ESCAPE], [])

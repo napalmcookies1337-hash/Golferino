@@ -7,6 +7,7 @@ signal bounced(at: Vector2, surface: int, impact_speed: float)
 signal stopped
 signal holed
 signal hazard(at: Vector2, kind: String)
+signal pin_hit(at: Vector2)
 
 enum State { RESTING, AIRBORNE, ROLLING, HOLED, IN_WATER, OUT_OF_BOUNDS }
 
@@ -22,6 +23,10 @@ const SPIN_DECAY := 0.35
 ## Extra pull over the cup. A gentle arcade assist that makes putts drop more often.
 const CUP_PULL := 480.0
 const MAX_MOTION_TIME := 20.0
+## Below this height over the rim the ball passes the pin, so fast putts aren't rescued.
+const PIN_MIN_HEIGHT := 5.0
+const PIN_REBOUND := 0.25
+const PIN_DROP_DAMPING := 0.4
 
 var terrain: Terrain
 var pos: Vector2 = Vector2.ZERO
@@ -92,7 +97,9 @@ func _step_air(dt: float) -> void:
 	if terrain.in_cup(pos.x):
 		accel += CUP_PULL
 	vel.y += accel * dt
+	var old_x: float = pos.x
 	pos += vel * dt
+	_check_pin(old_x)
 
 	if terrain.in_cup(pos.x):
 		if pos.y > terrain.rim_y:
@@ -102,6 +109,20 @@ func _step_air(dt: float) -> void:
 	var ground: float = terrain.ground_y(pos.x)
 	if pos.y + RADIUS >= ground:
 		_collide(ground)
+
+
+func _check_pin(old_x: float) -> void:
+	var crossed: bool = (old_x - terrain.cup_x) * (pos.x - terrain.cup_x) <= 0.0 and old_x != pos.x
+	if not crossed:
+		return
+	var height: float = terrain.rim_y - pos.y
+	if height < PIN_MIN_HEIGHT or height > Terrain.PIN_HEIGHT:
+		return
+	pos.x = terrain.cup_x - signf(vel.x)
+	vel.x *= -PIN_REBOUND
+	vel.y *= PIN_DROP_DAMPING
+	spin = 0.0
+	pin_hit.emit(pos)
 
 
 func _step_inside_cup() -> void:

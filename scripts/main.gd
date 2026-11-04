@@ -78,6 +78,7 @@ func _connect_signals() -> void:
 	game.ball.bounced.connect(_on_ball_bounced)
 	game.ball.hazard.connect(_on_ball_hazard)
 	game.ball.holed.connect(_on_ball_holed)
+	game.ball.pin_hit.connect(_on_pin_hit)
 
 
 func _physics_process(delta: float) -> void:
@@ -104,8 +105,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		game.change_spin(1)
 	elif event.is_action_pressed("spin_down", false):
 		game.change_spin(-1)
-	elif event.is_action_pressed("flip", false):
-		game.flip_facing()
 	elif event.is_action_pressed("restart", false):
 		game.restart()
 	elif event.is_action_pressed("fullscreen", false):
@@ -145,6 +144,11 @@ func _on_ball_bounced(at: Vector2, surface: int, impact_speed: float) -> void:
 func _on_ball_hazard(at: Vector2, kind: String) -> void:
 	if kind == "water":
 		fx.splash(at)
+
+
+func _on_pin_hit(at: Vector2) -> void:
+	hud.show_message("OFF THE PIN!", 1.1)
+	fx.dust(at, Color("f4f4ea"), 6, 0)
 
 
 func _on_ball_holed() -> void:

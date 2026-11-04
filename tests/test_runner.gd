@@ -32,7 +32,18 @@ func _ready() -> void:
 	_test_aim_angle_rules()
 	_test_aim_angle_changes_shot()
 	_test_aim_bindings()
+	_test_flip_is_gone()
+	_test_short_shot_return()
+	_test_lie_effects()
+	_test_spin_needs_clean_strike()
+	_test_slope_tilts_launch()
+	_test_landing_slope_changes_run()
+	_test_steep_landing_stops_sooner()
+	_test_ball_settles_in_bowl()
+	_test_pin_hit()
 	_test_bot_finishes_hole()
+	_test_imperfect_player_scores()
+	_test_no_spot_is_a_trap()
 	print("%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 
@@ -351,7 +362,7 @@ func _test_aim_angle_changes_shot() -> void:
 	game.select_club(1)
 	var base_reach: float = Vector2(game.preview()["landing"]).x
 	game.adjust_aim(1.0, 0.8)
-	var high_angle: float = game.aim_angle
+	var high_angle: float = game.launch_angle()
 	var high_reach: float = Vector2(game.preview()["landing"]).x
 	_check(high_reach < base_reach, "a steeper iron lands shorter, and the preview shows it")
 
@@ -395,6 +406,198 @@ func _test_aim_bindings() -> void:
 	_check(y_button.is_action_pressed("spin_up"), "controller Y changes spin")
 
 
+func _test_flip_is_gone() -> void:
+	Controls.register()
+	_check(not InputMap.has_action("flip"), "there is no flip control")
+	var game: HoleGame = _game()
+	_check(not game.has_method("flip_facing"), "the game has no flip rule")
+	game.ball.place(1510.0)
+	game._begin_aim()
+	_check(game.facing == -1, "past the pin, the golfer faces back toward the cup")
+
+
+func _test_short_shot_return() -> void:
+	var times: Array[float] = []
+	for power: float in [1.0, 0.5, 0.2]:
+		var meter := SwingMeter.new()
+		meter.press()
+		meter.cursor = power
+		meter.press()
+		var elapsed: float = 0.0
+		while meter.cursor > 0.0:
+			meter.tick(DT)
+			elapsed += DT
+		times.append(elapsed)
+	_check(absf(times[0] - times[2]) < 0.05, "the return takes the same time at any power (%.2f, %.2f)" % [times[0], times[2]])
+
+	var tiny := SwingMeter.new()
+	tiny.press()
+	tiny.cursor = 0.05
+	tiny.press()
+	var elapsed_tiny: float = 0.0
+	while tiny.cursor > 0.0:
+		tiny.tick(DT)
+		elapsed_tiny += DT
+	_check(elapsed_tiny > 0.2, "even a tiny tap leaves time to react (%.2f)" % elapsed_tiny)
+
+
+func _test_lie_effects() -> void:
+	var game: HoleGame = _game()
+	game.ball.place(300.0)
+	game._begin_aim()
+	game.select_club(0)
+	_check(is_equal_approx(game.lie_power(), 1.0), "a clean lie has full range")
+	var clean_window: float = game.meter.perfect_window
+
+	game.ball.place(1650.0)
+	game._begin_aim()
+	_check(game.lie_surface() == Surface.Type.ROUGH, "ball is in the rough")
+	_check(game.meter.perfect_window < clean_window, "rough shrinks the sweet spot")
+	game.select_club(1)
+	var iron_rough: float = game.lie_power()
+	game.select_club(0)
+	var driver_rough: float = game.lie_power()
+	_check(driver_rough < iron_rough, "the driver suffers more from rough (%.2f, %.2f)" % [driver_rough, iron_rough])
+
+	game.ball.place(690.0)
+	game._begin_aim()
+	var sand_window: float = game.meter.perfect_window
+	_check(sand_window < clean_window * 0.7, "sand shrinks the sweet spot most")
+	game.select_club(0)
+	_check(game.lie_power() < 0.4, "the driver is weak from sand (%.2f)" % game.lie_power())
+	_check(SwingMeter.accuracy_for_cursor(0.03, sand_window) > 0.0, "a timing that's perfect on grass misses in sand")
+
+	var clean_spin: float = ShotCalc.compute(_club("iron"), 1.0, 0.0, -1, 1, 1.0)["spin"]
+	var rough_spin: float = ShotCalc.compute(_club("iron"), 1.0, 0.0, -1, 1, 1.0, -1.0, 0.4)["spin"]
+	_check(absf(rough_spin) < absf(clean_spin), "rough takes spin off the ball")
+
+
+func _test_spin_needs_clean_strike() -> void:
+	var perfect: float = ShotCalc.compute(_club("iron"), 1.0, 0.0, -1, 1, 1.0)["spin"]
+	var half: float = ShotCalc.compute(_club("iron"), 1.0, 0.5, -1, 1, 1.0)["spin"]
+	var missed: float = ShotCalc.compute(_club("iron"), 1.0, -1.0, -1, 1, 1.0)["spin"]
+	_check(is_equal_approx(perfect, -1.0), "a clean iron gets full spin")
+	_check(is_equal_approx(half, -0.5), "a half miss gets half the spin")
+	_check(is_zero_approx(missed), "a full miss gets none")
+	var driver: float = ShotCalc.compute(_club("driver"), 1.0, 0.0, -1, 1, 1.0)["spin"]
+	_check(absf(driver) < absf(perfect), "the driver spins less than the iron")
+
+
+func _test_slope_tilts_launch() -> void:
+	var game: HoleGame = _game()
+	game.ball.place(1200.0)
+	game._begin_aim()
+	game.select_club(1)
+	_check(game.terrain.slope(1200.0) < 0.0 and game.facing == 1, "this spot slopes up toward the cup")
+	_check(game.launch_angle() > game.aim_angle, "an upslope launches higher")
+
+	game.ball.place(350.0)
+	game._begin_aim()
+	game.select_club(1)
+	_check(game.terrain.slope(350.0) > 0.0, "this spot slopes down toward the cup")
+	_check(game.launch_angle() < game.aim_angle, "a downslope launches lower")
+
+	# Past the same slope, hitting back the other way reverses the effect.
+	game.ball.place(1200.0)
+	game._begin_aim()
+	game.select_club(1)
+	game.facing = -1
+	_check(game.launch_angle() < game.aim_angle, "the tilt depends on which way you're hitting")
+
+	var wall: HoleGame = _game()
+	wall.ball.place(705.0)
+	wall._begin_aim()
+	wall.select_club(0)
+	wall.adjust_aim(-1.0, 60.0)
+	var uphill: float = rad_to_deg(atan(-wall.terrain.slope(705.0)))
+	_check(wall.launch_angle() >= uphill + HoleGame.SLOPE_CLEARANCE - 0.01, "the ball always clears the slope it sits on")
+	var reach: float = absf(Vector2(wall.preview()["landing"]).x - wall.ball.pos.x)
+	_check(reach > 20.0, "a low driver no longer dies in a bunker wall (%.0f)" % reach)
+
+	game.ball.place(1200.0)
+	game._begin_aim()
+	game.select_club(1)
+	var expected: float = game.launch_angle()
+	game.strike_with(1.0, 0.0)
+	_check(absf(rad_to_deg(_elevation(game.ball.vel)) - expected) < 0.01, "the real shot uses the tilted angle")
+
+
+func _test_landing_slope_changes_run() -> void:
+	var flat_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	var down_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	down_hole.points = PackedVector2Array([Vector2(0, 300), Vector2(100, 300), Vector2(900, 480), Vector2(1000, 480)])
+	var up_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	up_hole.points = PackedVector2Array([Vector2(0, 400), Vector2(100, 400), Vector2(900, 220), Vector2(1000, 220)])
+
+	var after_landing: Array[float] = []
+	for hole: HoleData in [flat_hole, down_hole, up_hole]:
+		var sim := BallSim.new(Terrain.new(hole))
+		var land_xs: Array[float] = []
+		sim.bounced.connect(func(at: Vector2, _s: int, _i: float) -> void: land_xs.append(at.x))
+		sim.place(50.0)
+		sim.launch(Vector2(170.0, -120.0), 0.0)
+		_run_to_stop(sim)
+		after_landing.append(sim.pos.x - land_xs[0])
+	_check(after_landing[1] > after_landing[0], "landing downhill runs further (%.0f vs %.0f)" % [after_landing[1], after_landing[0]])
+	_check(after_landing[2] < after_landing[0], "landing uphill runs less (%.0f vs %.0f)" % [after_landing[2], after_landing[0]])
+
+
+func _test_steep_landing_stops_sooner() -> void:
+	var runs: Array[float] = []
+	for angle: float in [25.0, 70.0]:
+		var sim := BallSim.new(Terrain.new(_flat_hole({ "cup_x": 990.0 })))
+		var land_xs: Array[float] = []
+		sim.bounced.connect(func(at: Vector2, _s: int, _i: float) -> void: land_xs.append(at.x))
+		sim.place(20.0)
+		var shot: Dictionary = ShotCalc.compute(_club("iron"), 1.0, 0.0, 0, 1, 1.0, angle)
+		sim.launch(shot["velocity"], 0.0)
+		_run_to_stop(sim)
+		runs.append(sim.pos.x - land_xs[0])
+	_check(runs[1] < runs[0], "a steep landing runs less than a flat one (%.0f vs %.0f)" % [runs[1], runs[0]])
+
+
+func _test_ball_settles_in_bowl() -> void:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	hole.points = PackedVector2Array([Vector2(0, 200), Vector2(300, 400), Vector2(600, 200), Vector2(1000, 200)])
+	var sim := BallSim.new(Terrain.new(hole))
+	sim.place(120.0)
+	sim.launch(Vector2(1.0, 0.0), 0.0)
+	var steps: int = 0
+	while sim.is_moving() and steps < int(BallSim.MAX_MOTION_TIME * 50.0):
+		sim.step(DT)
+		steps += 1
+	_check(sim.state == BallSim.State.RESTING, "a ball settles in a bowl before the safety timeout")
+	_check(absf(sim.pos.x - 300.0) < 120.0, "it settles near the bottom (%.0f)" % sim.pos.x)
+
+
+func _test_pin_hit() -> void:
+	var terrain := Terrain.new(_flat_hole({ "cup_x": 300.0 }))
+	var sim := BallSim.new(terrain)
+	var hits: Array[Vector2] = []
+	sim.pin_hit.connect(func(at: Vector2) -> void: hits.append(at))
+	sim.place(280.0)
+	sim.pos.y = terrain.rim_y - 15.0
+	sim.launch(Vector2(200.0, -1.0), 0.0)
+	var guard: int = 0
+	while hits.is_empty() and guard < 120:
+		sim.step(DT)
+		guard += 1
+	_check(hits.size() == 1, "a ball at pin height hits the pin")
+	_check(sim.vel.x < 0.0 and absf(sim.vel.x) < 60.0, "the pin knocks it back and kills its speed")
+	_run_to_stop(sim)
+	_check(absf(sim.pos.x - 300.0) < 40.0, "the ball finishes close to the cup (%.0f)" % sim.pos.x)
+
+	var high := BallSim.new(terrain)
+	var high_hits: Array[Vector2] = []
+	high.pin_hit.connect(func(at: Vector2) -> void: high_hits.append(at))
+	high.place(280.0)
+	high.pos.y = terrain.rim_y - Terrain.PIN_HEIGHT - 20.0
+	high.launch(Vector2(200.0, -1.0), 0.0)
+	for _i in 20:
+		high.step(DT)
+	_check(high_hits.is_empty(), "a ball above the flag misses the pin")
+
+
 func _test_club_ranges() -> void:
 	var driver: float = _shot_distance("driver", 1.0, 0.0, 0)
 	var iron: float = _shot_distance("iron", 1.0, 0.0, 0)
@@ -427,15 +630,78 @@ func _test_bot_finishes_hole() -> void:
 	_check(game.strokes >= 2, "the hole isn't trivially one shot (%d)" % game.strokes)
 
 
+# Picks sensible shots but mistimes them like a person. Measures how hard the hole
+# plays, using a fixed seed so the result is repeatable.
+func _test_imperfect_player_scores() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026
+	for skill: Array in [["average", 0.06, 0.05], ["sloppy", 0.1, 0.1]]:
+		var rounds: int = 30
+		var total: int = 0
+		var worst: int = 0
+		var penalties: Array[String] = []
+		for _round in rounds:
+			var game: HoleGame = _game()
+			game.penalty_taken.connect(func(kind: String) -> void: penalties.append(kind))
+			var shots: int = 0
+			while game.phase != HoleGame.Phase.COMPLETE and shots < 20:
+				var power: float = _best_power(game)
+				power = clampf(power + rng.randfn(0.0, float(skill[1])), 0.02, 1.0)
+				var cursor: float = rng.randfn(0.0, float(skill[2]))
+				game.strike_with(power, SwingMeter.accuracy_for_cursor(cursor, game.meter.perfect_window))
+				var steps: int = 0
+				while game.phase != HoleGame.Phase.AIM and game.phase != HoleGame.Phase.COMPLETE and steps < 4000:
+					game.tick(DT)
+					steps += 1
+				shots += 1
+			total += game.strokes
+			worst = maxi(worst, game.strokes)
+			_check(game.phase == HoleGame.Phase.COMPLETE, "an imperfect player can finish the hole")
+		var average: float = float(total) / float(rounds)
+		print("%s player: average %.1f on par 4, worst %d, %d penalties in %d rounds" % [
+			skill[0], average, worst, penalties.size(), rounds])
+		_check(average < 9.0, "the hole isn't punishing for a %s player (%.1f)" % [skill[0], average])
+
+
+# Every spot a ball can sit must offer a club with a shot that stays out of trouble,
+# because water returns the ball to the same spot.
+func _test_no_spot_is_a_trap() -> void:
+	var game: HoleGame = _game()
+	var traps: Array[int] = []
+	for x in range(5, game.terrain.length - 5, 5):
+		if game.terrain.surface_at(float(x)) == Surface.Type.WATER or game.terrain.in_cup(float(x)):
+			continue
+		game.ball.place(float(x))
+		game._begin_aim()
+		if not _has_safe_shot(game):
+			traps.append(x)
+	_check(traps.is_empty(), "no spot on the hole is a trap (traps at %s)" % str(traps))
+
+	game.ball.place(977.0)
+	game._begin_aim()
+	_check(game.current_club().id == "iron", "the steep bank above the pond offers the iron")
+
+
+func _has_safe_shot(game: HoleGame) -> bool:
+	for step_index in range(1, 11):
+		var sim := BallSim.new(game.terrain)
+		sim.place(game.ball.pos.x)
+		var shot: Dictionary = game.shot_for(float(step_index) * 0.1, 0.0)
+		sim.launch(shot["velocity"], float(shot["spin"]))
+		_run_to_stop(sim)
+		if sim.state == BallSim.State.RESTING or sim.state == BallSim.State.HOLED:
+			return true
+	return false
+
+
 func _best_power(game: HoleGame) -> float:
 	var best_power: float = 1.0
 	var best_distance: float = INF
-	for step_index in range(1, 41):
-		var power: float = float(step_index) * 0.025
+	for step_index in range(1, 21):
+		var power: float = float(step_index) * 0.05
 		var sim := BallSim.new(game.terrain)
 		sim.place(game.ball.pos.x)
-		var shot: Dictionary = ShotCalc.compute(
-				game.current_club(), power, 0.0, game.spin, game.facing, game.lie_power())
+		var shot: Dictionary = game.shot_for(power, 0.0)
 		sim.launch(shot["velocity"], float(shot["spin"]))
 		_run_to_stop(sim)
 		var distance: float = absf(game.hole.cup_x - sim.pos.x)

@@ -16,6 +16,13 @@ const PREVIEW_STEP := 1.0 / 60.0
 const PREVIEW_MAX_STEPS := 600
 ## How fast holding the aim control changes the launch angle, degrees per second.
 const AIM_RATE := 30.0
+## Share of the ground's slope that tilts the launch angle.
+const SLOPE_TILT_SHARE := 0.5
+## On an upslope, the ball always leaves at least this far above the ground.
+const SLOPE_CLEARANCE := 6.0
+const MIN_LAUNCH_ANGLE := 3.0
+const MAX_LAUNCH_ANGLE := 85.0
+const MIN_LIE_POWER := 0.1
 
 var hole: HoleData
 var terrain: Terrain
@@ -27,7 +34,7 @@ var club_index: int = 0
 var spin: int = 0
 ## Launch angle for the next shot, degrees above level.
 var aim_angle: float = 0.0
-## 1 hits toward +x, -1 hits toward -x.
+## 1 hits toward +x, -1 hits toward -x. Always set toward the cup at the start of a shot.
 var facing: int = 1
 var phase: int = Phase.AIM
 var strokes: int = 0
@@ -67,8 +74,28 @@ func lie_surface() -> int:
 	return terrain.surface_at(ball.pos.x)
 
 
+## Share of the current club's range available from this lie. Driver suffers most.
 func lie_power() -> float:
-	return float(Surface.props(lie_surface())["lie_power"])
+	var loss: float = 1.0 - float(Surface.props(lie_surface())["lie_power"])
+	return maxf(1.0 - loss * current_club().lie_sensitivity, MIN_LIE_POWER)
+
+
+## The angle the ball will actually leave at: the aim, tilted by the slope it sits on.
+func launch_angle() -> float:
+	if current_club().is_putter:
+		return 0.0
+	var uphill: float = rad_to_deg(atan(-terrain.slope(ball.pos.x) * float(facing)))
+	var angle: float = aim_angle + uphill * SLOPE_TILT_SHARE
+	if uphill > 0.0:
+		angle = maxf(angle, uphill + SLOPE_CLEARANCE)
+	return clampf(angle, MIN_LAUNCH_ANGLE, MAX_LAUNCH_ANGLE)
+
+
+## The launch this lie and aim would give for the given meter results.
+func shot_for(power: float, accuracy: float) -> Dictionary:
+	return ShotCalc.compute(
+			current_club(), power, accuracy, spin, facing, lie_power(), launch_angle(),
+			float(Surface.props(lie_surface())["lie_spin"]))
 
 
 func distance_to_cup() -> float:
@@ -103,13 +130,6 @@ func change_spin(step_by: int) -> void:
 	if phase != Phase.AIM or current_club().is_putter:
 		return
 	spin = clampi(spin + step_by, -1, 1)
-	_preview_dirty = true
-
-
-func flip_facing() -> void:
-	if phase != Phase.AIM:
-		return
-	facing = -facing
 	_preview_dirty = true
 
 
@@ -178,8 +198,7 @@ static func score_name(p_strokes: int, par: int) -> String:
 
 
 func _strike() -> void:
-	var shot: Dictionary = ShotCalc.compute(
-			current_club(), meter.power, meter.accuracy, spin, facing, lie_power(), aim_angle)
+	var shot: Dictionary = shot_for(meter.power, meter.accuracy)
 	strokes += 1
 	_last_spot_x = ball.pos.x
 	last_quality = str(shot["quality"])
@@ -193,6 +212,8 @@ func _begin_aim() -> void:
 	_pick_club_for_lie()
 	if current_club().is_putter:
 		spin = 0
+	# Bad lies shrink the sweet spot, and the meter shows it before the swing.
+	meter.perfect_window = SwingMeter.PERFECT_WINDOW * float(Surface.props(lie_surface())["lie_window"])
 	_reset_aim()
 	_set_phase(Phase.AIM)
 
@@ -213,7 +234,35 @@ func _pick_club_for_lie() -> void:
 	for i in clubs.size():
 		if clubs[i].id == wanted:
 			club_index = i
-			return
+	if not current_club().is_putter and not _club_has_safe_shot(club_index):
+		for i in clubs.size():
+			if not clubs[i].is_putter and _club_has_safe_shot(i):
+				club_index = i
+				return
+
+
+# A slope can tilt a low club straight into a hazard at every power.
+func _club_has_safe_shot(index: int) -> bool:
+	var previous_club: int = club_index
+	var previous_aim: float = aim_angle
+	club_index = index
+	aim_angle = current_club().loft_deg
+	var safe: bool = false
+	for power: float in [1.0, 0.75, 0.5, 0.25]:
+		var sim := BallSim.new(terrain)
+		sim.place(ball.pos.x)
+		var shot: Dictionary = shot_for(power, 0.0)
+		sim.launch(shot["velocity"], float(shot["spin"]))
+		var steps: int = 0
+		while sim.is_moving() and steps < PREVIEW_MAX_STEPS * 3:
+			sim.step(PREVIEW_STEP)
+			steps += 1
+		if sim.state == BallSim.State.RESTING or sim.state == BallSim.State.HOLED:
+			safe = true
+			break
+	club_index = previous_club
+	aim_angle = previous_aim
+	return safe
 
 
 func _full_range_estimate(club_id: String) -> float:
@@ -227,8 +276,7 @@ func _full_range_estimate(club_id: String) -> float:
 func _build_preview() -> Dictionary:
 	var sim := BallSim.new(terrain)
 	sim.place(ball.pos.x)
-	var shot: Dictionary = ShotCalc.compute(
-			current_club(), 1.0, 0.0, spin, facing, lie_power(), aim_angle)
+	var shot: Dictionary = shot_for(1.0, 0.0)
 	sim.launch(shot["velocity"], float(shot["spin"]))
 	var path := PackedVector2Array()
 	var is_putt: bool = current_club().is_putter

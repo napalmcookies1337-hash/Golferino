@@ -35,12 +35,6 @@ func _run() -> void:
 	await _wait(0.05)
 	_expect(game.spin == 0, "S takes it back off")
 
-	_press_key(KEY_F)
-	await _wait(0.4)
-	await _save("01b_flipped")
-	_press_key(KEY_F)
-	await _wait(0.1)
-
 	_press_key(KEY_SPACE)
 	await _wait(0.75)
 	_expect(game.phase == HoleGame.Phase.SWING, "Space starts the swing")
@@ -75,9 +69,21 @@ func _run() -> void:
 	await _save("08_water")
 	await _wait_until_aim()
 
-	game.ball.place(680.0)
-	await _wait(0.5)
+	game.ball.place(690.0)
+	game._begin_aim()
+	await _wait(0.7)
 	await _save("09_sand")
+
+	game.ball.place(1200.0)
+	game._begin_aim()
+	await _wait(0.7)
+	await _save("09b_uphill")
+
+	game.ball.place(1510.0)
+	game._begin_aim()
+	await _wait(0.7)
+	_expect(game.facing == -1, "the golfer turns back after an overshoot")
+	await _save("09c_past_the_pin")
 
 	game.ball.place(1380.0)
 	game._begin_aim()
@@ -118,7 +124,7 @@ func _power_to_hole() -> float:
 		var power: float = float(i) * 0.01
 		var sim := BallSim.new(game.terrain)
 		sim.place(game.ball.pos.x)
-		var shot: Dictionary = ShotCalc.compute(game.current_club(), power, 0.0, 0, game.facing, 1.0)
+		var shot: Dictionary = game.shot_for(power, 0.0)
 		sim.launch(shot["velocity"], 0.0)
 		var guard: int = 0
 		while sim.is_moving() and guard < 4000:
