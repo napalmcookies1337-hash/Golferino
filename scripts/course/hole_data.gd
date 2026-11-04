@@ -12,5 +12,11 @@ extends Resource
 @export var surface_spans: Array = []
 ## Each entry: { "from": x, "to": x, "level": y }. Ground below level in range floods.
 @export var water_spans: Array = []
-## Decorative trees, by x position. They don't affect the ball.
+## Trees, by x position. Solid trunks under leaves that slow the ball.
 @export var tree_xs: PackedFloat32Array = PackedFloat32Array()
+## Each entry has a "kind" (cart, windmill, sprinkler, goose) plus that kind's settings.
+@export var obstacles: Array = []
+## Sideways push on the ball in the air. Positive blows toward the far end of the hole.
+@export var wind: float = 0.0
+## Shown when the hole starts.
+@export var title: String = ""

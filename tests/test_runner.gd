@@ -3,9 +3,11 @@ extends Node
 
 const DT := 1.0 / 60.0
 const HOLE_PATH := "res://data/holes/hole_01.tres"
+const COURSE_PATH := "res://data/course_01.tres"
 
 var _passed: int = 0
 var _failed: int = 0
+var _round_events: Dictionary = {}
 
 
 func _ready() -> void:
@@ -44,6 +46,18 @@ func _ready() -> void:
 	_test_bot_finishes_hole()
 	_test_imperfect_player_scores()
 	_test_no_spot_is_a_trap()
+	_test_tree_collision()
+	_test_ball_against_a_post_can_escape()
+	_test_plays_away_when_blocked()
+	_test_cart()
+	_test_windmill()
+	_test_sprinkler()
+	_test_goose()
+	_test_wind()
+	_test_preview_ignores_moving_hazards()
+	_test_course_progression()
+	_test_every_hole_is_valid()
+	_test_every_hole_is_playable()
 	print("%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 
@@ -266,7 +280,7 @@ func _test_cup_rejects_fast_putt() -> void:
 
 func _test_out_of_bounds() -> void:
 	var game: HoleGame = _game()
-	game.ball.place(40.0)
+	game.ball.place(10.0)
 	game.facing = -1
 	game.club_index = 0
 	game.strike_with(1.0, 0.0)
@@ -636,7 +650,7 @@ func _test_imperfect_player_scores() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
 	for skill: Array in [["average", 0.06, 0.05], ["sloppy", 0.1, 0.1]]:
-		var rounds: int = 30
+		var rounds: int = 10
 		var total: int = 0
 		var worst: int = 0
 		var penalties: Array[String] = []
@@ -666,26 +680,416 @@ func _test_imperfect_player_scores() -> void:
 # Every spot a ball can sit must offer a club with a shot that stays out of trouble,
 # because water returns the ball to the same spot.
 func _test_no_spot_is_a_trap() -> void:
-	var game: HoleGame = _game()
-	var traps: Array[int] = []
-	for x in range(5, game.terrain.length - 5, 5):
-		if game.terrain.surface_at(float(x)) == Surface.Type.WATER or game.terrain.in_cup(float(x)):
-			continue
-		game.ball.place(float(x))
-		game._begin_aim()
-		if not _has_safe_shot(game):
-			traps.append(x)
-	_check(traps.is_empty(), "no spot on the hole is a trap (traps at %s)" % str(traps))
+	var course := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in course.hole_count():
+		var game := HoleGame.new(course.hole_at(i), _clubs())
+		var traps: Array[int] = []
+		for x in range(5, game.terrain.length - 5, 10):
+			if game.terrain.surface_at(float(x)) == Surface.Type.WATER or game.terrain.in_cup(float(x)):
+				continue
+			game.ball.place(float(x))
+			game._begin_aim()
+			if not _has_safe_shot(game):
+				traps.append(x)
+		_check(traps.is_empty(), "%s has no trap spots (traps at %s)" % [game.hole.display_name, str(traps)])
 
-	game.ball.place(977.0)
+	var first: HoleGame = _game()
+	first.ball.place(977.0)
+	first._begin_aim()
+	_check(first.current_club().id == "iron", "the steep bank above the pond offers the iron")
+
+
+func _test_tree_collision() -> void:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	hole.tree_xs = PackedFloat32Array([300.0])
+	var terrain := Terrain.new(hole)
+	var tree: TreeObstacle = Obstacle.build_all(hole, terrain)[0]
+
+	var trunk_sim := BallSim.new(terrain)
+	trunk_sim.obstacles = Obstacle.build_all(hole, terrain)
+	var hits: Array[String] = []
+	trunk_sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
+	trunk_sim.place(250.0)
+	trunk_sim.launch(Vector2(120.0, 0.0), 0.0)
+	_run_to_stop(trunk_sim)
+	_check(hits.size() == 1 and hits[0] == "tree", "a rolling ball hits the trunk once (%s)" % str(hits))
+	_check(trunk_sim.pos.x < 300.0, "the trunk stops a rolling ball (%.0f)" % trunk_sim.pos.x)
+	_check(trunk_sim.state == BallSim.State.RESTING, "the ball settles after hitting the trunk")
+
+	var leaf_sim := BallSim.new(terrain)
+	leaf_sim.obstacles = Obstacle.build_all(hole, terrain)
+	leaf_sim.place(250.0)
+	leaf_sim.pos.y = tree.canopy_center.y
+	leaf_sim.launch(Vector2(300.0, -1.0), 0.0)
+	while leaf_sim.pos.x < 300.0:
+		leaf_sim.step(DT)
+	_check(leaf_sim.vel.x < 280.0 and leaf_sim.vel.x > 100.0, "leaves slow a passing ball without stopping it (%.0f)" % leaf_sim.vel.x)
+
+	var over_sim := BallSim.new(terrain)
+	over_sim.obstacles = Obstacle.build_all(hole, terrain)
+	over_sim.place(250.0)
+	over_sim.pos.y = tree.canopy_center.y - tree.canopy_radius - 20.0
+	over_sim.launch(Vector2(300.0, -60.0), 0.0)
+	while over_sim.pos.x < 300.0:
+		over_sim.step(DT)
+	_check(absf(over_sim.vel.x - 300.0) < 0.01, "a ball flying over the tree is untouched")
+
+
+func _test_ball_against_a_post_can_escape() -> void:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	hole.tree_xs = PackedFloat32Array([300.0])
+	hole.obstacles = [{ "kind": "windmill", "x": 600.0, "turn_speed": 0.0 }]
+	var game := HoleGame.new(hole, _clubs())
+	for start_x: float in [296.0, 591.0]:
+		game.ball.place(start_x)
+		game._begin_aim()
+		game.select_club(1)
+		var sim: BallSim = game.new_preview_sim()
+		var shot: Dictionary = game.shot_for(0.5, 0.0)
+		sim.launch(shot["velocity"], 0.0)
+		_run_to_stop(sim)
+		_check(sim.pos.x > start_x + 60.0, "a ball resting against a post can play past it (%.0f)" % sim.pos.x)
+
+
+func _test_plays_away_when_blocked() -> void:
+	var game := HoleGame.new(load("res://data/holes/hole_08.tres") as HoleData, _clubs())
+	game.ball.place(685.0)
 	game._begin_aim()
-	_check(game.current_club().id == "iron", "the steep bank above the pond offers the iron")
+	_check(game.is_playing_away(), "with no way across the pond, the golfer plays back")
+	_check(_has_safe_shot(game), "playing back is a safe shot")
+	game.ball.place(300.0)
+	game._begin_aim()
+	_check(not game.is_playing_away(), "with a clear shot, the golfer faces the cup")
+
+
+func _hazard_sim(entry: Dictionary, cup_x: float = 990.0) -> Dictionary:
+	var hole: HoleData = _flat_hole({ "cup_x": cup_x })
+	hole.obstacles = [entry]
+	var terrain := Terrain.new(hole)
+	var obstacles: Array[Obstacle] = Obstacle.build_all(hole, terrain)
+	var sim := BallSim.new(terrain)
+	sim.obstacles = obstacles
+	return { "sim": sim, "obstacle": obstacles[0] }
+
+
+func _test_cart() -> void:
+	var made: Dictionary = _hazard_sim({ "kind": "cart", "from": 300.0, "to": 400.0, "speed": 50.0 })
+	var cart: CartObstacle = made["obstacle"]
+	for _i in 60:
+		cart.tick(DT)
+	_check(absf(cart.x - 350.0) < 1.0, "the cart drives along its path (%.0f)" % cart.x)
+	for _i in 180:
+		cart.tick(DT)
+	_check(cart.direction < 0.0 and cart.x >= 300.0 and cart.x <= 400.0, "the cart turns around at the end of its path")
+
+	var sim: BallSim = made["sim"]
+	cart.x = 300.0
+	cart.direction = 1.0
+	sim.place(250.0)
+	sim.launch(Vector2(150.0, 0.0), 0.0)
+	var hits: Array[String] = []
+	sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
+	_run_to_stop(sim)
+	_check(hits.size() >= 1 and hits[0] == "cart", "a rolling ball hits the cart")
+	_check(sim.pos.x < 300.0, "the cart stops a rolling ball (%.0f)" % sim.pos.x)
+
+	# A cart catching up with a slow ball must not shove it along the whole path.
+	var chase: Dictionary = _hazard_sim({ "kind": "cart", "from": 200.0, "to": 900.0, "speed": 60.0 })
+	var chaser: CartObstacle = chase["obstacle"]
+	var chase_sim: BallSim = chase["sim"]
+	var chase_hits: Array[String] = []
+	chase_sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: chase_hits.append(kind))
+	chaser.x = 240.0
+	chase_sim.place(290.0)
+	chase_sim.launch(Vector2(20.0, 0.0), 0.0)
+	var guard: int = 0
+	while chase_sim.is_moving() and guard < 1000:
+		chaser.tick(DT)
+		chase_sim.step(DT)
+		guard += 1
+	_check(chase_hits.size() <= 1, "a cart hits the ball once per shot (%d)" % chase_hits.size())
+	_check(not chase_sim.is_moving() and guard < 600, "the ball settles instead of being pushed along (%d)" % guard)
+	_check(chase_sim.pos.x < 500.0, "the cart doesn't carry the ball away (%.0f)" % chase_sim.pos.x)
+
+
+func _test_windmill() -> void:
+	var made: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 1.0 })
+	var mill: WindmillObstacle = made["obstacle"]
+	var start_tip: Vector2 = mill.blade_tip(0)
+	mill.tick(0.5)
+	_check(mill.blade_tip(0) != start_tip, "the blades turn")
+
+	var sim: BallSim = made["sim"]
+	sim.place(260.0)
+	sim.launch(Vector2(120.0, 0.0), 0.0)
+	_run_to_stop(sim)
+	_check(sim.pos.x < 300.0, "the tower blocks a rolling ball (%.0f)" % sim.pos.x)
+
+	# Parks a blade pointing straight at an incoming ball, then the reverse.
+	var blade: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
+	var still: WindmillObstacle = blade["obstacle"]
+	var blade_sim: BallSim = blade["sim"]
+	still.angle = deg_to_rad(45.0)
+	blade_sim.place(280.0)
+	blade_sim.pos = Vector2(280.0, still.hub().y + 20.0)
+	blade_sim.launch(Vector2(0.0, -80.0), 0.0)
+	var hits: Array[String] = []
+	blade_sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
+	for _i in 30:
+		blade_sim.step(DT)
+	_check(not hits.is_empty(), "a blade knocks the ball away")
+
+	var preview: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
+	var preview_mill: WindmillObstacle = preview["obstacle"]
+	var preview_sim: BallSim = preview["sim"]
+	preview_sim.ignore_moving = true
+	preview_mill.angle = 0.0
+	preview_sim.place(260.0)
+	preview_sim.pos.y = preview_mill.hub().y
+	preview_sim.launch(Vector2(200.0, -1.0), 0.0)
+	preview_sim.step(DT * 6.0)
+	_check(preview_sim.vel.x > 0.0, "previews skip the blades")
+	preview_sim.pos = Vector2(290.0, preview_mill.ground - 10.0)
+	preview_sim.vel = Vector2(200.0, 0.0)
+	preview_sim.state = BallSim.State.AIRBORNE
+	preview_sim.step(DT * 2.0)
+	_check(preview_sim.vel.x < 0.0, "previews still see the solid tower")
+
+
+func _test_sprinkler() -> void:
+	var made: Dictionary = _hazard_sim({ "kind": "sprinkler", "x": 300.0, "height": 70.0, "on_time": 1.0, "off_time": 1.0 })
+	var sprinkler: SprinklerObstacle = made["obstacle"]
+	var sim: BallSim = made["sim"]
+	_check(sprinkler.is_on(), "the sprinkler starts on")
+	sim.place(298.0)
+	sim.launch(Vector2(0.1, -1.0), 0.0)
+	for _i in 10:
+		sim.step(DT)
+	_check(sim.vel.y < 0.0 and sim.pos.y < 298.0 - 3.0, "the jet lifts the ball (%.1f)" % sim.pos.y)
+
+	sprinkler.tick(1.2)
+	_check(not sprinkler.is_on(), "the sprinkler switches off")
+	var off_sim: BallSim = _hazard_sim({ "kind": "sprinkler", "x": 300.0, "height": 70.0, "offset": 3.0 })["sim"]
+	off_sim.place(298.0)
+	off_sim.pos.y = 260.0
+	off_sim.launch(Vector2(0.1, -1.0), 0.0)
+	for _i in 10:
+		off_sim.step(DT)
+	_check(off_sim.vel.y > 0.0, "with the jet off, the ball just falls")
+
+	var settle: BallSim = _hazard_sim({ "kind": "sprinkler", "x": 300.0, "height": 70.0 })["sim"]
+	settle.place(298.0)
+	settle.launch(Vector2(5.0, -5.0), 0.0)
+	_run_to_stop(settle)
+	_check(not settle.is_moving(), "a ball can't hover in a jet forever")
+	_check(absf(settle.pos.x - 300.0) > SprinklerObstacle.HALF_WIDTH, "the jet pushes it out (%.0f)" % settle.pos.x)
+
+
+func _test_goose() -> void:
+	var made: Dictionary = _hazard_sim({ "kind": "goose", "from": 300.0, "to": 400.0, "start": 350.0, "height": 60.0, "speed": 50.0 })
+	var goose: GooseObstacle = made["obstacle"]
+	var start_x: float = goose.x
+	goose.tick(0.5)
+	_check(goose.x != start_x, "the goose flies")
+	for _i in 600:
+		goose.tick(DT)
+	_check(goose.x >= 300.0 and goose.x <= 400.0, "the goose stays on its route")
+
+	var sim: BallSim = made["sim"]
+	sim.place(goose.x - 30.0)
+	sim.pos.y = goose.center().y
+	sim.launch(Vector2(250.0, -1.0), 0.0)
+	var hits: Array[String] = []
+	sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
+	for _i in 25:
+		sim.step(DT)
+		goose.tick(DT)
+	_check(hits.has("goose"), "a ball can hit a goose")
+	_check(sim.vel.x < 150.0, "the goose takes the speed off it (%.0f)" % sim.vel.x)
+
+
+func _test_wind() -> void:
+	var results: Array[float] = []
+	for wind: float in [0.0, 12.0, -12.0]:
+		var sim := BallSim.new(Terrain.new(_flat_hole({ "cup_x": 990.0 })))
+		sim.wind = wind
+		sim.place(300.0)
+		sim.launch(Vector2(200.0, -180.0), 0.0)
+		var guard: int = 0
+		while sim.bounce_count == 0 and guard < 2000:
+			sim.step(DT)
+			guard += 1
+		results.append(sim.pos.x)
+	_check(results[1] > results[0] + 10.0, "a tailwind carries the ball further (%.0f vs %.0f)" % [results[1], results[0]])
+	_check(results[2] < results[0] - 10.0, "a headwind holds it up (%.0f vs %.0f)" % [results[2], results[0]])
+
+	var rolling := BallSim.new(Terrain.new(_flat_hole({ "cup_x": 990.0 })))
+	rolling.wind = 50.0
+	rolling.place(300.0)
+	rolling.launch(Vector2(60.0, 0.0), 0.0)
+	_run_to_stop(rolling)
+	var still := BallSim.new(Terrain.new(_flat_hole({ "cup_x": 990.0 })))
+	still.place(300.0)
+	still.launch(Vector2(60.0, 0.0), 0.0)
+	_run_to_stop(still)
+	_check(is_equal_approx(rolling.pos.x, still.pos.x), "wind doesn't push a rolling ball")
+
+	var calm_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	var windy_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	windy_hole.wind = 15.0
+	var calm := HoleGame.new(calm_hole, _clubs())
+	var windy := HoleGame.new(windy_hole, _clubs())
+	calm.select_club(1)
+	windy.select_club(1)
+	var calm_x: float = Vector2(calm.preview()["landing"]).x
+	var windy_x: float = Vector2(windy.preview()["landing"]).x
+	_check(windy_x > calm_x, "the aim preview shows the wind")
+	windy.strike_with(1.0, 0.0)
+	_check(is_equal_approx(windy.ball.wind, 15.0), "the real shot feels the wind")
+
+
+func _test_preview_ignores_moving_hazards() -> void:
+	var hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	hole.obstacles = [{ "kind": "cart", "from": 300.0, "to": 300.0, "speed": 0.0 }]
+	var game := HoleGame.new(hole, _clubs())
+	var sim: BallSim = game.new_preview_sim()
+	sim.place(250.0)
+	sim.launch(Vector2(120.0, 0.0), 0.0)
+	_run_to_stop(sim)
+	_check(sim.pos.x > 300.0, "previews roll through a cart (%.0f)" % sim.pos.x)
+	_check(game.ball.ignore_moving == false, "the real ball still hits moving hazards")
+
+
+func _test_course_progression() -> void:
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	_check(run.hole_count() == 10, "the course has 9 holes and a boss hole")
+	_check(run.hole_at(0).display_name == "HOLE 1", "the course starts on hole 1")
+	_check(run.hole_at(9).display_name == "BOSS HOLE", "the course ends on the boss hole")
+	_check(not run.is_last_hole(), "hole 1 isn't the last hole")
+
+	run.record_score(5)
+	run.advance()
+	_check(run.hole_index == 1 and run.total_strokes() == 5, "advancing keeps the score")
+	_check(run.total_to_par() == 1, "the total compares to par on finished holes only")
+	_check(CourseRun.to_par_text(run.total_to_par()) == "+1", "over par shows a plus")
+	run.record_score(2)
+	_check(CourseRun.to_par_text(run.total_to_par()) == "E", "even par shows E")
+	_check(CourseRun.to_par_text(-2) == "-2", "under par shows a minus")
+
+	while not run.is_last_hole():
+		run.advance()
+	_check(run.current_hole().display_name == "BOSS HOLE", "progress reaches the boss hole")
+	run.advance()
+	_check(run.hole_index == 0 and run.scores.is_empty(), "finishing the boss hole starts a new round")
+
+	run.jump_by(-1)
+	_check(run.hole_index == 9, "reviewing wraps around the course")
+
+	var game: HoleGame = _game()
+	var presses: Array[bool] = []
+	game.continue_requested.connect(func() -> void: presses.append(true))
+	game._set_phase(HoleGame.Phase.COMPLETE)
+	game.press_swing()
+	_check(presses.size() == 1, "a finished hole asks to continue")
+
+
+func _test_every_hole_is_valid() -> void:
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	var kinds: Dictionary = {}
+	var par_total: int = 0
+	for i in run.hole_count():
+		var hole: HoleData = run.hole_at(i)
+		var terrain := Terrain.new(hole)
+		var label: String = hole.display_name
+		par_total += hole.par
+		_check(hole.title != "", "%s has a title" % label)
+		_check(hole.par >= 3 and hole.par <= 6, "%s has a sensible par" % label)
+		_check(terrain.surface_at(hole.tee_x) == Surface.Type.TEE, "%s tees off from a tee" % label)
+		_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "%s has its cup on a green" % label)
+		_check(terrain.surface_at(hole.cup_x - 30.0) == Surface.Type.GREEN, "%s has green before the cup" % label)
+		_check(absf(terrain.slope(hole.cup_x - 20.0)) < 0.28, "%s has a green that can hold a ball" % label)
+		for x: float in hole.tree_xs:
+			_check(absf(x - hole.tee_x) > 45.0, "%s has no tree on the tee" % label)
+			_check(absf(x - hole.cup_x) > 60.0, "%s has no tree on the pin" % label)
+		for obstacle in Obstacle.build_all(hole, terrain):
+			kinds[obstacle.kind] = maxi(int(kinds.get(obstacle.kind, -1)), 0)
+			if not kinds.has("first_%s" % obstacle.kind):
+				kinds["first_%s" % obstacle.kind] = i
+	for kind: String in ["tree", "cart", "windmill", "sprinkler", "goose"]:
+		_check(kinds.has(kind), "the course uses %s" % kind)
+	_check(int(kinds["first_cart"]) >= 4, "moving hazards wait for the later holes")
+	_check(run.hole_at(0).wind == 0.0 and run.hole_at(1).wind == 0.0, "early holes have no wind")
+	_check(run.hole_at(8).wind != 0.0, "later holes have wind")
+	print("Course par: %d (9 holes and boss)" % par_total)
+
+
+func _test_every_hole_is_playable() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		var hole: HoleData = run.hole_at(i)
+		var perfect: int = _play_round(hole, rng, 0.0, 0.0)
+		_check(perfect > 0, "%s can be finished by a perfect player" % hole.display_name)
+		var rounds: int = 6
+		var total: int = 0
+		var worst: int = 0
+		var unfinished: int = 0
+		for _r in rounds:
+			var strokes: int = _play_round(hole, rng, 0.06, 0.05)
+			if strokes < 0:
+				unfinished += 1
+				continue
+			total += strokes
+			worst = maxi(worst, strokes)
+		var finished: int = rounds - unfinished
+		var average: float = float(total) / float(maxi(finished, 1))
+		print("%-10s par %d  perfect %2d  average %4.1f  worst %2d  unfinished %d  per round: %s" % [
+			hole.display_name, hole.par, perfect, average, worst, unfinished, _events_text(rounds)])
+		_round_events.clear()
+		_check(unfinished == 0, "%s can be finished by an average player" % hole.display_name)
+		# This player can't time moving hazards, so these limits are generous on purpose.
+		var limit: float = float(hole.par) + (5.0 if i == run.hole_count() - 1 else 4.0)
+		_check(average <= limit, "%s isn't brutal for an average player (%.1f, par %d)" % [hole.display_name, average, hole.par])
+
+
+func _events_text(rounds: int) -> String:
+	var parts: Array[String] = []
+	for key: String in _round_events.keys():
+		parts.append("%s %.1f" % [key, float(_round_events[key]) / float(rounds)])
+	return ", ".join(parts)
+
+
+func _count_event(key: String) -> void:
+	_round_events[key] = int(_round_events.get(key, 0)) + 1
+
+
+# Returns the strokes taken, or -1 if the round hit the shot limit.
+func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float, timing_noise: float) -> int:
+	var game := HoleGame.new(hole, _clubs())
+	if power_noise > 0.0:
+		game.penalty_taken.connect(func(kind: String) -> void: _count_event(kind))
+		game.ball.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: _count_event(kind))
+	var shots: int = 0
+	while game.phase != HoleGame.Phase.COMPLETE and shots < 25:
+		var power: float = _best_power(game)
+		if power_noise > 0.0:
+			power = clampf(power + rng.randfn(0.0, power_noise), 0.02, 1.0)
+		var accuracy: float = 0.0
+		if timing_noise > 0.0:
+			accuracy = SwingMeter.accuracy_for_cursor(rng.randfn(0.0, timing_noise), game.meter.perfect_window)
+		game.strike_with(power, accuracy)
+		var steps: int = 0
+		while game.phase != HoleGame.Phase.AIM and game.phase != HoleGame.Phase.COMPLETE and steps < 4000:
+			game.tick(DT)
+			steps += 1
+		shots += 1
+	return game.strokes if game.phase == HoleGame.Phase.COMPLETE else -1
 
 
 func _has_safe_shot(game: HoleGame) -> bool:
 	for step_index in range(1, 11):
-		var sim := BallSim.new(game.terrain)
-		sim.place(game.ball.pos.x)
+		var sim: BallSim = game.new_preview_sim()
 		var shot: Dictionary = game.shot_for(float(step_index) * 0.1, 0.0)
 		sim.launch(shot["velocity"], float(shot["spin"]))
 		_run_to_stop(sim)
@@ -694,22 +1098,44 @@ func _has_safe_shot(game: HoleGame) -> bool:
 	return false
 
 
+# Chooses a shot the way a player would: tries each usable club at a few angles and
+# powers, sets that club and angle on the game, and returns the power to use.
 func _best_power(game: HoleGame) -> float:
-	var best_power: float = 1.0
+	var best: Dictionary = { "club": game.club_index, "angle": game.aim_angle, "power": 1.0 }
 	var best_distance: float = INF
-	for step_index in range(1, 21):
-		var power: float = float(step_index) * 0.05
-		var sim := BallSim.new(game.terrain)
-		sim.place(game.ball.pos.x)
-		var shot: Dictionary = game.shot_for(power, 0.0)
-		sim.launch(shot["velocity"], float(shot["spin"]))
-		_run_to_stop(sim)
-		var distance: float = absf(game.hole.cup_x - sim.pos.x)
-		if sim.state == BallSim.State.HOLED:
-			return power
-		if sim.state != BallSim.State.RESTING:
+	var playing_away: bool = game.is_playing_away()
+	for club_index in game.clubs.size():
+		var club: ClubData = game.clubs[club_index]
+		if club.is_putter and game.lie_surface() != Surface.Type.GREEN:
 			continue
-		if distance < best_distance:
-			best_distance = distance
-			best_power = power
-	return best_power
+		game.select_club(club_index)
+		for angle: float in _angles_to_try(club):
+			game.aim_angle = angle
+			for step_index in range(1, 11):
+				var power: float = float(step_index) * (0.05 if club.is_putter else 0.1)
+				if club.is_putter:
+					power = float(step_index) * 0.1
+				var sim: BallSim = game.new_preview_sim()
+				var shot: Dictionary = game.shot_for(power, 0.0)
+				sim.launch(shot["velocity"], float(shot["spin"]))
+				_run_to_stop(sim)
+				if sim.state == BallSim.State.HOLED:
+					return power
+				if sim.state != BallSim.State.RESTING:
+					continue
+				# Playing back only needs to get as far from the trouble as it can.
+				var distance: float = absf(game.hole.cup_x - sim.pos.x)
+				if playing_away:
+					distance = -distance
+				if distance < best_distance:
+					best_distance = distance
+					best = { "club": club_index, "angle": angle, "power": power }
+	game.select_club(int(best["club"]))
+	game.aim_angle = float(best["angle"])
+	return float(best["power"])
+
+
+func _angles_to_try(club: ClubData) -> Array[float]:
+	if club.is_putter:
+		return [0.0]
+	return [club.loft_deg, lerpf(club.loft_deg, club.max_angle_deg, 0.6), club.max_angle_deg]

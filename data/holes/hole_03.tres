@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "HOLE 3"
+title = "THE RIDGE"
+par = 4
+tee_x = 90.0
+cup_x = 1300.0
+points = PackedVector2Array(0, 330, 60, 340, 130, 342, 300, 340, 460, 318, 600, 270, 700, 250, 800, 262, 920, 290, 980, 292, 1010, 312, 1060, 314, 1090, 294, 1140, 270, 1200, 262, 1300, 260, 1400, 262, 1470, 240, 1600, 205)
+surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 985, "type": 1}, {"from": 985, "to": 1090, "type": 3}, {"from": 1090, "to": 1180, "type": 1}, {"from": 1180, "to": 1420, "type": 2}]
+tree_xs = PackedFloat32Array(20, 655, 745, 840, 1450, 1540)

@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CourseData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/course/course_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "GOLFERINO COUNTRY CLUB"
+hole_paths = PackedStringArray("res://data/holes/hole_01.tres", "res://data/holes/hole_02.tres", "res://data/holes/hole_03.tres", "res://data/holes/hole_04.tres", "res://data/holes/hole_05.tres", "res://data/holes/hole_06.tres", "res://data/holes/hole_07.tres", "res://data/holes/hole_08.tres", "res://data/holes/hole_09.tres", "res://data/holes/hole_boss.tres")

@@ -17,14 +17,16 @@ const DIM := Color("8f97a8")
 
 var game: HoleGame
 var camera: FollowCamera
+var run: CourseRun
 var _message: String = ""
 var _message_time: float = 0.0
 var _result_name: String = ""
 
 
-func setup(p_game: HoleGame, p_camera: FollowCamera) -> void:
+func setup(p_game: HoleGame, p_camera: FollowCamera, p_run: CourseRun) -> void:
 	game = p_game
 	camera = p_camera
+	run = p_run
 
 
 func _ready() -> void:
@@ -54,6 +56,8 @@ func _draw() -> void:
 	_draw_hint()
 	if camera.is_free_looking() and game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(self, "FREE LOOK", SCREEN_WIDTH / 2.0, 12.0, ACCENT)
+	if game.phase == HoleGame.Phase.AIM and game.is_playing_away():
+		PixelFont.draw_centered(self, "NO CLEAR SHOT: PLAYING BACK", SCREEN_WIDTH / 2.0, 26.0, ACCENT)
 	if _message_time > 0.0 and game.phase != HoleGame.Phase.COMPLETE:
 		PixelFont.draw_centered(self, _message, SCREEN_WIDTH / 2.0, 58.0, ACCENT, 2)
 	if game.phase == HoleGame.Phase.COMPLETE:
@@ -66,13 +70,21 @@ func _panel(rect: Rect2) -> void:
 
 
 func _draw_score_panel() -> void:
-	_panel(Rect2(8, 8, 118, 30))
+	_panel(Rect2(8, 8, 142, 30))
 	PixelFont.draw(self, "%s  PAR %d" % [game.hole.display_name, game.hole.par], Vector2(14, 13), TEXT)
 	PixelFont.draw(self, "STROKES %d" % game.strokes, Vector2(14, 25), ACCENT)
+	var total: String = "E" if run.scores.is_empty() else CourseRun.to_par_text(run.total_to_par())
+	PixelFont.draw(self, "TOTAL %s" % total, Vector2(90, 25), TEXT)
 
 
 func _draw_distance_panel() -> void:
-	_panel(Rect2(514, 8, 118, 30))
+	var has_wind: bool = game.hole.wind != 0.0
+	_panel(Rect2(514, 8, 118, 42 if has_wind else 30))
+	if has_wind:
+		var strength: int = int(absf(game.hole.wind))
+		# The hole's far end is to the right, so a positive wind blows right.
+		var text: String = "WIND >> %d" % strength if game.hole.wind > 0.0 else "WIND << %d" % strength
+		PixelFont.draw(self, text, Vector2(520, 37), Color("9fdcf2"))
 	var pin_yards: int = int(round(game.distance_to_cup() / YARD))
 	PixelFont.draw(self, "PIN  %d YD" % pin_yards, Vector2(520, 13), TEXT)
 	if game.phase == HoleGame.Phase.AIM or game.phase == HoleGame.Phase.SWING:
@@ -182,5 +194,12 @@ func _draw_result() -> void:
 	_panel(rect)
 	var center: float = SCREEN_WIDTH / 2.0
 	PixelFont.draw_centered(self, _result_name, center, 112.0, ACCENT, 3 if _result_name.length() <= 13 else 2)
-	PixelFont.draw_centered(self, "%d STROKES ON A PAR %d" % [game.strokes, game.hole.par], center, 146.0, TEXT)
-	PixelFont.draw_centered(self, "SPACE TO PLAY AGAIN", center, 166.0, DIM)
+	var stroke_word: String = "STROKE" if game.strokes == 1 else "STROKES"
+	PixelFont.draw_centered(self, "%d %s ON A PAR %d" % [game.strokes, stroke_word, game.hole.par], center, 146.0, TEXT)
+	var total: String = CourseRun.to_par_text(run.total_to_par())
+	if run.is_last_hole():
+		PixelFont.draw_centered(self, "COURSE TOTAL %d (%s)" % [run.total_strokes(), total], center, 158.0, ACCENT)
+		PixelFont.draw_centered(self, "SPACE TO PLAY AGAIN", center, 172.0, DIM)
+	else:
+		PixelFont.draw_centered(self, "TOTAL %s" % total, center, 158.0, TEXT)
+		PixelFont.draw_centered(self, "SPACE FOR NEXT HOLE", center, 172.0, DIM)

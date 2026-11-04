@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "HOLE 2"
+title = "SHORT HOP"
+par = 3
+tee_x = 70.0
+cup_x = 470.0
+points = PackedVector2Array(0, 280, 40, 290, 110, 292, 200, 296, 260, 300, 285, 322, 345, 324, 370, 304, 410, 292, 480, 290, 540, 292, 600, 270, 720, 240)
+surface_spans = [{"from": 40, "to": 110, "type": 4}, {"from": 110, "to": 275, "type": 1}, {"from": 275, "to": 372, "type": 3}, {"from": 372, "to": 395, "type": 1}, {"from": 395, "to": 548, "type": 2}]
+tree_xs = PackedFloat32Array(14, 590, 670)

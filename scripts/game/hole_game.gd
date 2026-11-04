@@ -7,6 +7,8 @@ signal phase_changed(phase: int)
 signal shot_struck(quality: String, power: float)
 signal hole_finished(strokes: int, score_name: String)
 signal penalty_taken(kind: String)
+## The player pressed swing on the finished hole.
+signal continue_requested
 
 enum Phase { AIM, SWING, DOWNSWING, BALL_MOVING, PENALTY, COMPLETE }
 
@@ -27,6 +29,7 @@ const MIN_LIE_POWER := 0.1
 var hole: HoleData
 var terrain: Terrain
 var ball: BallSim
+var obstacles: Array[Obstacle] = []
 var meter := SwingMeter.new()
 var clubs: Array[ClubData] = []
 var club_index: int = 0
@@ -50,7 +53,10 @@ func _init(p_hole: HoleData, p_clubs: Array[ClubData]) -> void:
 	hole = p_hole
 	clubs = p_clubs
 	terrain = Terrain.new(hole)
+	obstacles = Obstacle.build_all(hole, terrain)
 	ball = BallSim.new(terrain)
+	ball.obstacles = obstacles
+	ball.wind = hole.wind
 	ball.stopped.connect(_on_ball_stopped)
 	ball.holed.connect(_on_ball_holed)
 	ball.hazard.connect(_on_ball_hazard)
@@ -143,11 +149,24 @@ func press_swing() -> void:
 		Phase.SWING:
 			meter.press()
 		Phase.COMPLETE:
-			restart()
+			continue_requested.emit()
+
+
+## A sim that matches what the player is shown: same ground, trees and wind, but it
+## ignores moving hazards, which they have to time for themselves.
+func new_preview_sim() -> BallSim:
+	var sim := BallSim.new(terrain)
+	sim.obstacles = obstacles
+	sim.wind = hole.wind
+	sim.ignore_moving = true
+	sim.place(ball.pos.x)
+	return sim
 
 
 func tick(dt: float) -> void:
 	_phase_time += dt
+	for obstacle in obstacles:
+		obstacle.tick(dt)
 	match phase:
 		Phase.SWING:
 			meter.tick(dt)
@@ -209,7 +228,10 @@ func _strike() -> void:
 
 func _begin_aim() -> void:
 	facing = 1 if hole.cup_x >= ball.pos.x else -1
-	_pick_club_for_lie()
+	# If nothing clears the trouble ahead, the only way out is to play away from the cup.
+	if not _pick_club_for_lie():
+		facing = -facing
+		_pick_club_for_lie()
 	if current_club().is_putter:
 		spin = 0
 	# Bad lies shrink the sweet spot, and the meter shows it before the swing.
@@ -223,8 +245,14 @@ func _reset_aim() -> void:
 	_preview_dirty = true
 
 
+## True when the cup is behind the golfer because there's no safe shot toward it.
+func is_playing_away() -> bool:
+	return facing != (1 if hole.cup_x >= ball.pos.x else -1)
+
+
 # Offers a sensible club so most shots need no menu input. The player can change it.
-func _pick_club_for_lie() -> void:
+# Returns false if no club has a safe shot this way.
+func _pick_club_for_lie() -> bool:
 	var wanted: String = "iron"
 	if lie_surface() == Surface.Type.GREEN:
 		wanted = "putter"
@@ -234,11 +262,13 @@ func _pick_club_for_lie() -> void:
 	for i in clubs.size():
 		if clubs[i].id == wanted:
 			club_index = i
-	if not current_club().is_putter and not _club_has_safe_shot(club_index):
-		for i in clubs.size():
-			if not clubs[i].is_putter and _club_has_safe_shot(i):
-				club_index = i
-				return
+	if current_club().is_putter or _club_has_safe_shot(club_index):
+		return true
+	for i in clubs.size():
+		if not clubs[i].is_putter and _club_has_safe_shot(i):
+			club_index = i
+			return true
+	return false
 
 
 # A slope can tilt a low club straight into a hazard at every power.
@@ -249,8 +279,7 @@ func _club_has_safe_shot(index: int) -> bool:
 	aim_angle = current_club().loft_deg
 	var safe: bool = false
 	for power: float in [1.0, 0.75, 0.5, 0.25]:
-		var sim := BallSim.new(terrain)
-		sim.place(ball.pos.x)
+		var sim: BallSim = new_preview_sim()
 		var shot: Dictionary = shot_for(power, 0.0)
 		sim.launch(shot["velocity"], float(shot["spin"]))
 		var steps: int = 0
@@ -274,8 +303,7 @@ func _full_range_estimate(club_id: String) -> float:
 
 
 func _build_preview() -> Dictionary:
-	var sim := BallSim.new(terrain)
-	sim.place(ball.pos.x)
+	var sim: BallSim = new_preview_sim()
 	var shot: Dictionary = shot_for(1.0, 0.0)
 	sim.launch(shot["velocity"], float(shot["spin"]))
 	var path := PackedVector2Array()

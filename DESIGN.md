@@ -13,7 +13,9 @@ mode comes later: leave room for it, do not build it yet.
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
 | Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
-| Direction | The golfer always hits toward the cup. There is no manual flip (removed after playtesting Milestone 1) |
+| Direction | The golfer hits toward the cup, with no manual flip (removed after playtesting Milestone 1). If no club has a safe shot that way, they turn and play back, and the HUD says why |
+| Trees | Solid trunks under leaves that slow the ball. A ball starting a shot right beside a trunk or windmill tower passes it, so it can't get stuck |
+| Moving hazards | Golf cart, windmill, sprinkler, geese. Carts and geese hit a ball once per shot. The aim preview ignores moving hazards, so the player has to time them |
 | Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |
 | Slopes | The launch angle tilts by half the ground's slope, and the ball always clears the slope it sits on. Landing downhill runs further, landing uphill runs less |
 | Spin | Depends on the club (Driver half as much as Iron), the lie, and how clean the strike is. A full miss has no spin |
@@ -40,6 +42,21 @@ mode comes later: leave room for it, do not build it yet.
 Not in this version: multiplayer, online leaderboards, procedural holes,
 infinite mode, other platforms.
 
+## The course (par 42)
+
+| Hole | Name | Par | Introduces |
+|---|---|---|---|
+| 1 | The Opener | 4 | Trees, bunker, pond |
+| 2 | Short Hop | 3 | A bunker guarding the green |
+| 3 | The Ridge | 4 | Big elevation |
+| 4 | Long Meadow | 5 | First wind, two trouble spots |
+| 5 | Cart Path | 4 | Golf cart |
+| 6 | The Old Mill | 3 | Windmill |
+| 7 | Sprinkler Hill | 4 | Sprinklers, headwind |
+| 8 | Goose Pond | 4 | Geese over a wide pond |
+| 9 | Clubhouse Climb | 5 | Everything so far |
+| Boss | The Gauntlet | 6 | Every hazard in sequence. Plays solo until the duel arrives in Milestone 4 |
+
 ## Milestones (stop for review at each)
 
 1. Playable golf prototype: golfer, ball, basic course, camera, meter, a working shot
@@ -54,8 +71,9 @@ infinite mode, other platforms.
 Gameplay rules never touch nodes or drawing, so they run headless in tests.
 
 - `scripts/golf/`: `SwingMeter`, `ShotCalc`, `BallSim`, `Surface`, `ClubData`
-- `scripts/course/`: `HoleData`, `Terrain` (baked height and surface lookup)
+- `scripts/course/`: `HoleData`, `CourseData`, `Terrain` (baked height and surface lookup), and `Obstacle` with one subclass per hazard
 - `scripts/game/hole_game.gd`: one hole's rules. Views read it and listen to its signals
+- `scripts/game/course_run.gd`: progress through the course and scores so far
 - `scripts/view/`: everything drawn. Nothing here changes game rules
 - `data/`: clubs and holes as `.tres`, so adding one needs no new code
 - `tests/`: `test_runner.tscn` for rules, `shots.tscn` for screenshots

@@ -1,8 +1,6 @@
 class_name TreeView
 extends Node2D
-## Decorative trees behind the ground. They don't collide in this milestone.
-
-const VARIANTS := 3
+## Draws the trees. Their rules live in TreeObstacle.
 
 var game: HoleGame
 
@@ -13,24 +11,26 @@ func setup(p_game: HoleGame) -> void:
 
 func _ready() -> void:
 	var textures: Array[ImageTexture] = []
-	for i in VARIANTS:
+	for i in TreeObstacle.VARIANTS:
 		textures.append(ImageTexture.create_from_image(_make_tree(i)))
-	var index: int = 0
-	for x: float in game.hole.tree_xs:
-		var sprite := Sprite2D.new()
-		var texture: ImageTexture = textures[index % VARIANTS]
-		sprite.texture = texture
-		sprite.centered = false
-		sprite.position = Vector2(
-				round(x - texture.get_width() / 2.0),
-				round(game.terrain.ground_y(x) + 3.0 - texture.get_height()))
-		add_child(sprite)
-		index += 1
+	for obstacle in game.obstacles:
+		if obstacle is TreeObstacle:
+			_add_tree(obstacle, textures[obstacle.variant])
+
+
+func _add_tree(tree: TreeObstacle, texture: ImageTexture) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = texture
+	sprite.centered = false
+	sprite.position = Vector2(
+			round(tree.x - texture.get_width() / 2.0),
+			round(tree.ground + 3.0 - texture.get_height()))
+	add_child(sprite)
 
 
 func _make_tree(variant: int) -> Image:
-	var width: int = 44 + variant * 6
-	var height: int = 62 + variant * 8
+	var width: int = TreeObstacle.sprite_width(variant)
+	var height: int = TreeObstacle.sprite_height(variant)
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 900 + variant
@@ -50,20 +50,15 @@ func _make_tree(variant: int) -> Image:
 
 	for y in height:
 		for x in width:
-			var best: float = -1.0
+			var best: float = -1000.0
 			for blob in blobs:
 				var dx: float = float(x) - blob.x
 				var dy: float = float(y) - blob.y
-				var dist: float = sqrt(dx * dx + dy * dy)
-				if dist <= blob.z:
+				if sqrt(dx * dx + dy * dy) <= blob.z:
 					# Light comes from the upper left of each blob.
-					var lit: float = (-dx - dy) / (blob.z * 1.5) + 0.5
-					best = maxf(best, lit)
-			if best < 0.0 and best != -1.0:
-				best = 0.0
-			if best == -1.0:
-				continue
-			image.set_pixel(x, y, _leaf_color(best, x, y))
+					best = maxf(best, (-dx - dy) / (blob.z * 1.5) + 0.5)
+			if best > -1000.0:
+				image.set_pixel(x, y, _leaf_color(best, x, y))
 	return image
 
 

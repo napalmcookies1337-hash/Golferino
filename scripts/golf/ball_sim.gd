@@ -8,6 +8,7 @@ signal stopped
 signal holed
 signal hazard(at: Vector2, kind: String)
 signal pin_hit(at: Vector2)
+signal obstacle_hit(at: Vector2, kind: String)
 
 enum State { RESTING, AIRBORNE, ROLLING, HOLED, IN_WATER, OUT_OF_BOUNDS }
 
@@ -34,7 +35,16 @@ var vel: Vector2 = Vector2.ZERO
 var spin: float = 0.0
 var state: int = State.RESTING
 var bounce_count: int = 0
+var obstacles: Array[Obstacle] = []
+## Sideways push in the air, px/s^2. Positive blows toward +x.
+var wind: float = 0.0
+## True for preview sims, so moving hazards don't affect what the player is shown.
+var ignore_moving: bool = false
+## Where the current shot started. Solid things right next to this spot let the ball past.
+var launch_x: float = 0.0
 
+var _touching: Dictionary = {}
+var _hit_this_shot: Dictionary = {}
 var _roll_speed: float = 0.0
 var _launch_dir: float = 1.0
 var _motion_time: float = 0.0
@@ -59,6 +69,9 @@ func launch(velocity: Vector2, p_spin: float) -> void:
 	spin = p_spin
 	bounce_count = 0
 	_motion_time = 0.0
+	_touching.clear()
+	_hit_this_shot.clear()
+	launch_x = pos.x
 	_launch_dir = signf(velocity.x) if velocity.x != 0.0 else 1.0
 	if is_zero_approx(velocity.y):
 		_roll_speed = velocity.x
@@ -97,8 +110,10 @@ func _step_air(dt: float) -> void:
 	if terrain.in_cup(pos.x):
 		accel += CUP_PULL
 	vel.y += accel * dt
+	vel.x += wind * dt
 	var old_x: float = pos.x
 	pos += vel * dt
+	_interact_with_obstacles(dt)
 	_check_pin(old_x)
 
 	if terrain.in_cup(pos.x):
@@ -109,6 +124,31 @@ func _step_air(dt: float) -> void:
 	var ground: float = terrain.ground_y(pos.x)
 	if pos.y + RADIUS >= ground:
 		_collide(ground)
+
+
+func _interact_with_obstacles(dt: float) -> bool:
+	var touched_any: bool = false
+	for obstacle in obstacles:
+		if _ignored_this_shot(obstacle):
+			continue
+		if obstacle.interact(self, dt):
+			touched_any = true
+			if not _touching.has(obstacle):
+				_touching[obstacle] = true
+				obstacle_hit.emit(pos, obstacle.kind)
+			if obstacle.hits_once_per_shot():
+				_hit_this_shot[obstacle] = true
+		else:
+			_touching.erase(obstacle)
+	return touched_any
+
+
+# A cart or goose hits once and then passes, or it would shove a slow ball along with
+# it. It also can't hit a ball that's only just been struck beside it.
+func _ignored_this_shot(obstacle: Obstacle) -> bool:
+	if not obstacle.hits_once_per_shot():
+		return false
+	return _hit_this_shot.has(obstacle) or absf(pos.x - launch_x) < Obstacle.LAUNCH_GRACE
 
 
 func _check_pin(old_x: float) -> void:
@@ -208,6 +248,9 @@ func _step_roll(dt: float) -> void:
 		state = State.AIRBORNE
 		return
 	pos = Vector2(new_x, ground - RADIUS)
+	# Anything that touches a rolling ball knocks it off its roll.
+	if _interact_with_obstacles(dt):
+		state = State.AIRBORNE
 
 
 func _come_to_rest() -> void:

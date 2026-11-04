@@ -6,6 +6,9 @@ extends Camera2D
 const HALF_WIDTH := 320.0
 const AIM_LEAD := 120.0
 const LOOK_SPEED := 420.0
+## Holding look speeds up to this, so long holes don't take ages to scroll.
+const LOOK_MAX_SPEED := 1100.0
+const LOOK_RAMP_TIME := 1.0
 const AIM_SMOOTH := 5.0
 const CHASE_SMOOTH := 4.0
 const CHASE_LEAD_X := 0.35
@@ -15,6 +18,7 @@ const HEADROOM := 55.0
 var game: HoleGame
 var look_offset: float = 0.0
 var _placed: bool = false
+var _look_held: float = 0.0
 
 
 func setup(p_game: HoleGame) -> void:
@@ -57,7 +61,10 @@ func _target_position(delta: float) -> Vector2:
 	var max_x: float = float(game.terrain.length) - HALF_WIDTH
 	var target_x: float = clampf(ball.pos.x + float(game.facing) * AIM_LEAD, HALF_WIDTH, max_x)
 	if game.phase == HoleGame.Phase.AIM:
-		look_offset += Input.get_axis("look_left", "look_right") * LOOK_SPEED * delta
+		var look_input: float = Input.get_axis("look_left", "look_right")
+		_look_held = _look_held + delta if look_input != 0.0 else 0.0
+		var ramp: float = clampf(_look_held / LOOK_RAMP_TIME, 0.0, 1.0)
+		look_offset += look_input * lerpf(LOOK_SPEED, LOOK_MAX_SPEED, ramp) * delta
 		look_offset = clampf(look_offset, HALF_WIDTH - target_x, max_x - target_x)
 	else:
 		look_offset = 0.0

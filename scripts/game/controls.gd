@@ -17,6 +17,9 @@ static func register() -> void:
 	_add("look_left", [KEY_A, KEY_LEFT], [JOY_BUTTON_DPAD_LEFT], JOY_AXIS_LEFT_X, -1.0)
 	_add("look_right", [KEY_D, KEY_RIGHT], [JOY_BUTTON_DPAD_RIGHT], JOY_AXIS_LEFT_X, 1.0)
 	_add("restart", [KEY_R], [JOY_BUTTON_BACK])
+	# For reviewing the course. These skip holes without scoring, and won't ship in a real run.
+	_add("review_next_hole", [KEY_PAGEDOWN], [])
+	_add("review_prev_hole", [KEY_PAGEUP], [])
 	_add("fullscreen", [KEY_F11], [])
 	_add("quit", [KEY_ESCAPE], [])
 

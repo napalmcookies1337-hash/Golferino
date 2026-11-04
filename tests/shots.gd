@@ -5,98 +5,119 @@ extends Node
 const OUT_DIR := "res://tests/shots"
 
 var main: Node2D
-var game: HoleGame
 
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
+	# Clear out shots from earlier runs, so nothing stale gets reviewed.
+	for file_name in DirAccess.get_files_at(OUT_DIR):
+		DirAccess.remove_absolute("%s/%s" % [OUT_DIR, file_name])
 	main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	add_child(main)
-	game = main.game
 	_run()
 
 
-func _run() -> void:
-	await _wait(0.7)
-	_expect(not main.camera.is_free_looking(), "not free looking at the tee")
-	await _save("01_tee")
+func game() -> HoleGame:
+	return main.game
 
-	# These presses go through the real input system: keyboard, then controller.
+
+func _run() -> void:
+	await _test_real_input()
+	await _test_progression()
+	for i in main.run.hole_count():
+		await _shoot_hole(i)
+	await _shoot_hazards()
+	get_tree().quit()
+
+
+func _test_real_input() -> void:
+	await _wait(0.5)
+	_expect(not main.camera.is_free_looking(), "not free looking at the tee")
 	_press_key(KEY_E)
 	await _wait(0.05)
-	_expect(game.current_club().id == "iron", "E selects the next club")
+	_expect(game().current_club().id == "iron", "E selects the next club")
 	_press_key(KEY_1)
 	await _wait(0.05)
-	_expect(game.current_club().id == "driver", "1 selects the driver")
+	_expect(game().current_club().id == "driver", "1 selects the driver")
 	_press_key(KEY_W)
 	await _wait(0.05)
-	_expect(game.spin == 1, "W adds topspin")
+	_expect(game().spin == 1, "W adds topspin")
 	_press_key(KEY_S)
 	await _wait(0.05)
-	_expect(game.spin == 0, "S takes it back off")
+	_expect(game().spin == 0, "S takes it back off")
 
 	_press_key(KEY_SPACE)
-	await _wait(0.75)
-	_expect(game.phase == HoleGame.Phase.SWING, "Space starts the swing")
-	await _save("02_power_rising")
+	await _wait(0.6)
+	_expect(game().phase == HoleGame.Phase.SWING, "Space starts the swing")
 	_press_button(JOY_BUTTON_A)
-	await _wait(0.35)
-	_expect(game.meter.stage == SwingMeter.Stage.RETURNING, "controller A sets power")
-	await _save("03_returning")
-	while game.meter.cursor > 0.0:
+	await _wait(0.3)
+	_expect(game().meter.stage == SwingMeter.Stage.RETURNING, "controller A sets power")
+	while game().meter.cursor > 0.0:
 		await get_tree().physics_frame
 	_press_key(KEY_SPACE)
-	await _wait(0.9)
-	_expect(game.strokes == 1, "the third press hits the ball")
-	await _save("04_flight")
-	await _wait_until_aim()
-	await _save("05_landed")
-
-	# Look over the course without moving the ball.
-	Input.action_press("look_right")
-	await _wait(1.4)
-	await _save("06_free_look_pond")
-	await _wait(1.3)
-	await _save("07_free_look_green")
-	Input.action_release("look_right")
-	main.camera.look_offset = 0.0
 	await _wait(0.5)
+	_expect(game().strokes == 1, "the third press hits the ball")
+	await _save("00_flight")
 
-	game.ball.place(950.0)
-	game.club_index = 1
-	game.strike_with(0.3, 0.0)
-	await _wait(0.72)
-	await _save("08_water")
-	await _wait_until_aim()
 
-	game.ball.place(690.0)
-	game._begin_aim()
-	await _wait(0.7)
-	await _save("09_sand")
-
-	game.ball.place(1200.0)
-	game._begin_aim()
-	await _wait(0.7)
-	await _save("09b_uphill")
-
-	game.ball.place(1510.0)
-	game._begin_aim()
-	await _wait(0.7)
-	_expect(game.facing == -1, "the golfer turns back after an overshoot")
-	await _save("09c_past_the_pin")
-
-	game.ball.place(1380.0)
-	game._begin_aim()
-	await _wait(0.7)
-	await _save("10_putt")
-	game.select_club(2)
-	var sim_power: float = _power_to_hole()
-	game.strike_with(sim_power, 0.0)
-	while game.phase != HoleGame.Phase.COMPLETE:
+# Holes the current hole for real, then checks that Space moves on to the next one.
+func _test_progression() -> void:
+	game().ball.place(1438.0)
+	game().ball.launch(Vector2(1.0, 0.0), 0.0)
+	game()._set_phase(HoleGame.Phase.BALL_MOVING)
+	while game().phase != HoleGame.Phase.COMPLETE:
 		await get_tree().physics_frame
 	await _wait(0.35)
-	await _save("11_complete")
-	get_tree().quit()
+	await _save("00_hole_complete")
+	_expect(main.run.scores.has(0), "finishing a hole records its score")
+
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(main.run.hole_index == 1, "Space moves on to the next hole")
+	_expect(game().hole.display_name == "HOLE 2", "the new hole is loaded")
+	await _save("00_next_hole_title")
+	_press_key(KEY_PAGEUP)
+	await _wait(0.2)
+	_expect(main.run.hole_index == 0, "Page Up reviews the previous hole")
+
+
+# Saves a zoomed-out view of the whole hole, then the view from the tee.
+func _shoot_hole(index: int) -> void:
+	main.run.hole_index = index
+	main.load_current_hole()
+	await _wait(0.5)
+	var label: String = "hole_%02d" % (index + 1)
+	await _save("%s_tee" % label)
+
+	var camera: FollowCamera = main.camera
+	var length: float = float(game().terrain.length)
+	camera.set_process(false)
+	camera.limit_left = -10000
+	camera.limit_right = 10000
+	camera.limit_top = -10000
+	camera.limit_bottom = 10000
+	var fit: float = 640.0 / length
+	camera.zoom = Vector2(fit, fit)
+	camera.position = Vector2(length / 2.0, 290.0)
+	await _wait(0.15)
+	await _save("%s_overview" % label)
+
+
+func _shoot_hazards() -> void:
+	await _shoot_at(4, 560.0, "hazard_cart")
+	await _shoot_at(5, 300.0, "hazard_windmill")
+	await _shoot_at(6, 570.0, "hazard_sprinkler")
+	await _shoot_at(7, 650.0, "hazard_geese")
+	await _shoot_at(9, 2000.0, "hazard_boss_stage")
+
+
+func _shoot_at(hole_index: int, x: float, shot_name: String) -> void:
+	main.run.hole_index = hole_index
+	main.load_current_hole()
+	game().ball.place(x)
+	game()._begin_aim()
+	await _wait(1.0)
+	await _save(shot_name)
 
 
 func _expect(condition: bool, label: String) -> void:
@@ -117,28 +138,6 @@ func _press_button(button: JoyButton) -> void:
 		event.button_index = button
 		event.pressed = is_pressed
 		Input.parse_input_event(event)
-
-
-func _power_to_hole() -> float:
-	for i in range(1, 101):
-		var power: float = float(i) * 0.01
-		var sim := BallSim.new(game.terrain)
-		sim.place(game.ball.pos.x)
-		var shot: Dictionary = game.shot_for(power, 0.0)
-		sim.launch(shot["velocity"], 0.0)
-		var guard: int = 0
-		while sim.is_moving() and guard < 4000:
-			sim.step(1.0 / 60.0)
-			guard += 1
-		if sim.state == BallSim.State.HOLED:
-			return power
-	return 0.5
-
-
-func _wait_until_aim() -> void:
-	while game.phase != HoleGame.Phase.AIM:
-		await get_tree().physics_frame
-	await _wait(0.6)
 
 
 func _wait(seconds: float) -> void:

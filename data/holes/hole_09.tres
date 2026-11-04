@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="HoleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+display_name = "HOLE 9"
+title = "CLUBHOUSE CLIMB"
+par = 5
+tee_x = 90.0
+cup_x = 2060.0
+wind = 10.0
+points = PackedVector2Array(0, 400, 60, 410, 130, 412, 320, 405, 500, 380, 650, 370, 760, 385, 800, 420, 900, 425, 960, 385, 1100, 340, 1250, 330, 1400, 300, 1500, 290, 1570, 305, 1610, 325, 1660, 325, 1700, 300, 1820, 270, 1950, 250, 2030, 246, 2170, 248, 2250, 225, 2380, 190)
+surface_spans = [{"from": 60, "to": 130, "type": 4}, {"from": 130, "to": 770, "type": 1}, {"from": 970, "to": 1565, "type": 1}, {"from": 1565, "to": 1700, "type": 3}, {"from": 1700, "to": 1940, "type": 1}, {"from": 1940, "to": 2190, "type": 2}]
+water_spans = [{"from": 765, "to": 975, "level": 405.0}]
+obstacles = [{"kind": "cart", "from": 1080.0, "to": 1460.0, "speed": 55.0}, {"kind": "goose", "from": 790.0, "to": 960.0, "start": 840.0, "height": 70.0, "speed": 55.0}, {"kind": "windmill", "x": 1790.0, "turn_speed": 1.0}, {"kind": "sprinkler", "x": 1000.0, "height": 70.0, "on_time": 2.0, "off_time": 2.5}]
+tree_xs = PackedFloat32Array(18, 580, 1260, 1480, 2270, 2350)
