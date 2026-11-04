@@ -1,19 +1,21 @@
 class_name WindmillObstacle
 extends Obstacle
 ## A tower with four turning blades and a square door right through its base. Fly over
-## it, time a shot past the blades, or run the ball through the door.
+## it, or time a shot past the blades, which sweep down across the door.
 ## Rotation tilts the whole tower around its base, in degrees from straight up.
 
 const TOWER_HEIGHT := 46.0
 const TOWER_RADIUS := 7.0
 const TOWER_BOUNCE := 0.35
-## The blades' tips stop just above the door, so they never reach a ball rolling through.
-const DOOR_HEIGHT := 14.0
-const DOOR_HALF_WIDTH := 7.0
+## A ball can pass anywhere under this height. The door is drawn narrower than the tower,
+## but its sides don't block the ball, so a low shot can't jam against them.
+const DOOR_HEIGHT := 10.0
+const DOOR_HALF_WIDTH := 5.0
 ## A flat bar across the top of the door, under the rounded tower.
 const LINTEL_HALF_LENGTH := 6.0
 const LINTEL_RADIUS := 2.0
-const BLADE_LENGTH := 30.0
+## Long enough that a blade pointing down blocks a ball rolling along the ground.
+const BLADE_LENGTH := 44.0
 const BLADE_RADIUS := 1.5
 const BLADE_BOUNCE := 0.5
 const BLADES := 4

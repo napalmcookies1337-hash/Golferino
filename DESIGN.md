@@ -14,14 +14,14 @@ mode comes later: leave room for it, do not build it yet.
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
 | Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
-| Direction | The golfer starts each shot facing the cup, and the player can flip to hit the other way for that shot. If no club has a safe shot toward the cup at its default angle, the golfer starts turned back with the Iron offered, and the HUD says why |
+| Direction | The golfer always starts each shot facing the cup, and the player can flip to hit the other way for that shot. The game never turns them on its own |
 | Trees | Scenery only, with no effect on the ball. Solid trees were tried and removed after playtesting: in a side view they block everything behind them. A tree is two separate pieces, a trunk and one set of leaves, placed and moved independently. Older maps' trees split into pieces on loading |
 | Bounce pads | Plain rectangles (not ramps), on the ground or floating anywhere, at any rotation. The upper half is a spring that fires the ball straight out. The back and lower ends are ordinary solid bounces. Usually angled away from the hole as a hazard, sometimes toward it as a reward. Green faces the cup, orange faces away, yellow is flat. Weaker on repeat bounces, and stops after 3 per shot. The aim preview includes them. On the ground, an angled pad settles in around its middle. Original holes never have a pad that fires into water |
 | Map editor | In-game, from the title menu, mouse and keyboard. Drag ground points, paint surfaces, place and rotate objects, set every option in a side panel, with undo. Test from the tee or any spot; Esc returns exactly where you were and scores don't count |
 | Rotation | Pads, windmills and sprinklers rotate, with collisions following. Carts and geese stay level, because they travel along routes |
 | Your maps | Any map can be edited or made from blank. Maps save to `user://maps` as JSON. Originals are never changed: an edit is a copy that replaces it until restored. The player chooses the course's holes and order, and the last hole is the boss |
 | Moving hazards | Golf cart, windmill, sprinkler, geese. Carts and geese hit a ball once per shot. The aim preview ignores moving hazards, so the player has to time them |
-| Windmill door | A square hole runs through the tower's base, so a ball can pass through. The blades can't reach it |
+| Windmill door | A small square door runs through the tower's base, so a ball can pass through. The blades sweep down to the ground, so the player has to time it |
 | Putting | One press sets the power. Putts show no aim line, landing marker or reach, so they're judged purely by eye |
 | Posts | A ball starting a shot right beside the windmill tower or on a pad isn't blocked or fired by it, so it can't get stuck |
 | Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |

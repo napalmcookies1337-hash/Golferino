@@ -40,8 +40,6 @@ var aim_angle: float = 0.0
 ## 1 hits toward +x, -1 hits toward -x. Set toward the cup at the start of a shot, and
 ## the player can flip it for that shot.
 var facing: int = 1
-## True when the game turned the golfer away from the cup because it found no safe shot.
-var turned_back: bool = false
 var phase: int = Phase.AIM
 var strokes: int = 0
 var last_quality: String = ""
@@ -154,7 +152,6 @@ func flip_facing() -> void:
 	if phase != Phase.AIM:
 		return
 	facing = -facing
-	turned_back = false
 	_preview_dirty = true
 
 
@@ -260,12 +257,7 @@ func _strike() -> void:
 
 func _begin_aim() -> void:
 	facing = 1 if hole.cup_x >= ball.pos.x else -1
-	turned_back = false
-	# If nothing clears the trouble ahead, the only way out is to play away from the cup.
-	if not _pick_club_for_lie():
-		facing = -facing
-		turned_back = true
-		_pick_club_for_lie()
+	_pick_club_for_lie()
 	if current_club().is_putter:
 		spin = 0
 	# Bad lies shrink the sweet spot, and the meter shows it before the swing.
@@ -285,20 +277,11 @@ func _reset_aim() -> void:
 		meter.reset()
 
 
-## True when the cup is behind the golfer.
-func is_playing_away() -> bool:
-	return facing != (1 if hole.cup_x >= ball.pos.x else -1)
-
-
 # Offers a sensible club so most shots need no menu input. The player can change it.
-# Returns false if no club has a safe shot this way.
-func _pick_club_for_lie() -> bool:
+func _pick_club_for_lie() -> void:
 	var wanted: String = "iron"
 	if lie_surface() == Surface.Type.GREEN:
 		wanted = "putter"
-	elif is_playing_away():
-		# Playing back only needs a modest shot, and a driver could lose the whole hole.
-		wanted = "iron"
 	elif lie_surface() != Surface.Type.SAND and distance_to_cup() > _full_range_estimate("iron"):
 		# The driver's low loft can't clear a bunker wall, so sand always offers the iron.
 		wanted = "driver"
@@ -306,12 +289,11 @@ func _pick_club_for_lie() -> bool:
 		if clubs[i].id == wanted:
 			club_index = i
 	if current_club().is_putter or _club_has_safe_shot(club_index):
-		return true
+		return
 	for i in clubs.size():
 		if not clubs[i].is_putter and _club_has_safe_shot(i):
 			club_index = i
-			return true
-	return false
+			return
 
 
 # A slope can tilt a low club straight into a hazard at every power.

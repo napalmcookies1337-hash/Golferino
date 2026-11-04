@@ -60,8 +60,6 @@ func _draw() -> void:
 		PixelFont.draw_centered(self, banner, SCREEN_WIDTH / 2.0, 44.0, Color("9fdcf2"))
 	if camera.is_free_looking() and game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(self, "FREE LOOK", SCREEN_WIDTH / 2.0, 12.0, ACCENT)
-	if game.phase == HoleGame.Phase.AIM and game.turned_back:
-		PixelFont.draw_centered(self, "NO CLEAR SHOT: PLAYING BACK", SCREEN_WIDTH / 2.0, 26.0, ACCENT)
 	if _message_time > 0.0 and game.phase != HoleGame.Phase.COMPLETE:
 		PixelFont.draw_centered(self, _message, SCREEN_WIDTH / 2.0, 58.0, ACCENT, 2)
 	if game.phase == HoleGame.Phase.COMPLETE:

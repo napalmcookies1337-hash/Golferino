@@ -59,7 +59,7 @@ func _ready() -> void:
 	_test_editor_objects()
 	_test_editor_undo()
 	_test_ball_against_a_post_can_escape()
-	_test_plays_away_when_blocked()
+	_test_golfer_never_turns_alone()
 	_test_cart()
 	_test_windmill()
 	_test_sprinkler()
@@ -455,9 +455,8 @@ func _test_flip() -> void:
 	game.select_club(1)
 	var ahead: float = Vector2(game.preview()["landing"]).x
 	game.flip_facing()
-	_check(game.facing == -1 and game.is_playing_away(), "flipping turns the golfer around")
+	_check(game.facing == -1, "flipping turns the golfer around")
 	_check(Vector2(game.preview()["landing"]).x < 500.0 and ahead > 500.0, "the preview follows the flip")
-	_check(not game.turned_back, "a flip by the player isn't reported as no clear shot")
 	_check(game.current_club().id == "iron", "flipping keeps the chosen club")
 	game.strike_with(0.5, 0.0)
 	_check(game.ball.vel.x < 0.0, "a flipped shot goes the other way")
@@ -470,14 +469,6 @@ func _test_flip() -> void:
 		game.tick(DT)
 		steps += 1
 	_check(game.ball.pos.x < 500.0 and game.facing == 1, "the next shot faces the cup again")
-
-	# A flip works from a turned-back spot, and clears its message.
-	var blocked := HoleGame.new(load("res://data/holes/hole_08.tres") as HoleData, _clubs())
-	blocked.ball.place(685.0)
-	blocked._begin_aim()
-	_check(blocked.turned_back, "the game reports when it turned the golfer back")
-	blocked.flip_facing()
-	_check(not blocked.is_playing_away() and not blocked.turned_back, "the player can flip back toward the cup")
 
 	# Putts can flip too, while the meter keeps moving.
 	var putt := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
@@ -741,8 +732,21 @@ func _test_imperfect_player_scores() -> void:
 		_check(average < 9.0, "the hole isn't punishing for a %s player (%.1f)" % [skill[0], average])
 
 
-# Every spot a ball can sit must offer a club with a shot that stays out of trouble,
-# because water returns the ball to the same spot.
+# True if the player can find a safe shot by changing club or flipping.
+func _can_get_out(game: HoleGame) -> bool:
+	for _side in 2:
+		for club_index in game.clubs.size():
+			if game.clubs[club_index].is_putter and game.lie_surface() != Surface.Type.GREEN:
+				continue
+			game.select_club(club_index)
+			if _has_safe_shot(game):
+				return true
+		game.flip_facing()
+	return false
+
+
+# Every spot a ball can sit must offer a shot that stays out of trouble, because water
+# returns the ball to the same spot.
 func _test_no_spot_is_a_trap() -> void:
 	var course := CourseRun.new(load(COURSE_PATH) as CourseData)
 	for i in course.hole_count():
@@ -753,7 +757,7 @@ func _test_no_spot_is_a_trap() -> void:
 				continue
 			game.ball.place(float(x))
 			game._begin_aim()
-			if not _has_safe_shot(game):
+			if not _can_get_out(game):
 				traps.append(x)
 		_check(traps.is_empty(), "%s has no trap spots (traps at %s)" % [game.hole.display_name, str(traps)])
 
@@ -1521,16 +1525,28 @@ func _test_ball_against_a_post_can_escape() -> void:
 		_check(sim.pos.x > start_x + 60.0, "a ball resting against a post can play past it (%.0f)" % sim.pos.x)
 
 
-func _test_plays_away_when_blocked() -> void:
-	var game := HoleGame.new(load("res://data/holes/hole_08.tres") as HoleData, _clubs())
-	game.ball.place(685.0)
-	game._begin_aim()
-	_check(game.is_playing_away(), "with no way across the pond, the golfer plays back")
-	_check(_has_safe_shot(game), "playing back is a safe shot")
-	_check(game.current_club().id == "iron", "playing back offers the iron, not a full driver")
-	game.ball.place(300.0)
-	game._begin_aim()
-	_check(not game.is_playing_away(), "with a clear shot, the golfer faces the cup")
+func _test_golfer_never_turns_alone() -> void:
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		var hole: HoleData = run.hole_at(i)
+		var game := HoleGame.new(hole, _clubs())
+		var turned: int = 0
+		var x: float = 10.0
+		while x < float(game.terrain.length) - 10.0:
+			if game.terrain.surface_at(x) != Surface.Type.WATER:
+				game.ball.place(x)
+				game._begin_aim()
+				if game.facing != (1 if hole.cup_x >= x else -1):
+					turned += 1
+			x += 10.0
+		_check(turned == 0, "%s: the golfer always starts facing the cup" % hole.display_name)
+
+	# From the worst spot, where nothing clears the pond, a flip gets the ball out.
+	var blocked := HoleGame.new(load("res://data/holes/hole_08.tres") as HoleData, _clubs())
+	blocked.ball.place(685.0)
+	blocked._begin_aim()
+	blocked.flip_facing()
+	_check(_has_safe_shot(blocked), "flipping away from a blocked pond gives a safe shot")
 
 
 func _hazard_sim(entry: Dictionary, cup_x: float = 990.0) -> Dictionary:
@@ -1676,30 +1692,48 @@ func _test_windmill() -> void:
 		tilted_sim.step(DT)
 	_check((tilted_sim.pos - door_mid).dot(across) > 0.0, "a ball passes through a tilted door")
 
-	# A real putt rolls through the door from the fairway, with the blades still turning.
-	var course_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
-	course_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 2.0 }]
-	var putting := HoleGame.new(course_hole, _clubs())
-	putting.ball.place(340.0)
-	putting._begin_aim()
-	putting.select_club(2)
-	putting.strike_with(1.0, 0.0)
-	var rolled: int = 0
-	while putting.phase != HoleGame.Phase.AIM and rolled < 3000:
-		putting.tick(DT)
-		rolled += 1
-	_check(putting.ball.pos.x > 410.0, "a full putt reaches the far side of the windmill (%.0f)" % putting.ball.pos.x)
+	_check(WindmillObstacle.TOWER_HEIGHT - WindmillObstacle.BLADE_LENGTH < BallSim.RADIUS * 2.0, "a blade pointing down reaches a ball on the ground")
 
-	# A ball that stops in the doorway can play out either way.
-	putting.ball.place(400.0)
-	putting._begin_aim()
-	putting.select_club(1)
-	putting.strike_with(0.5, 0.0)
+	# The same putt gets through or gets knocked back depending on the blades' timing.
+	var passed: int = 0
+	var knocked: int = 0
+	var stuck: int = 0
+	for i in 24:
+		var course_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+		course_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 1.2 }]
+		var timed := HoleGame.new(course_hole, _clubs())
+		timed.ball.place(340.0)
+		timed._begin_aim()
+		timed.obstacles[0].angle = float(i) / 24.0 * PI / 2.0
+		timed.select_club(2)
+		timed.strike_with(1.0, 0.0)
+		var rolled: int = 0
+		while timed.phase != HoleGame.Phase.AIM and rolled < 3000:
+			timed.tick(DT)
+			rolled += 1
+		if timed.phase != HoleGame.Phase.AIM:
+			stuck += 1
+		elif timed.ball.pos.x > 410.0:
+			passed += 1
+		else:
+			knocked += 1
+	_check(stuck == 0, "turning blades never trap a ball")
+	_check(passed > 0 and knocked > 0, "getting through the door takes timing (%d through, %d knocked back)" % [passed, knocked])
+
+	# A ball that stops in the doorway can play out, when the blades are clear of it.
+	var door_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	door_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 0.0 }]
+	var in_door := HoleGame.new(door_hole, _clubs())
+	in_door.obstacles[0].angle = PI / 4.0
+	in_door.ball.place(400.0)
+	in_door._begin_aim()
+	in_door.select_club(2)
+	in_door.strike_with(1.0, 0.0)
 	var escaping: int = 0
-	while putting.phase != HoleGame.Phase.AIM and escaping < 3000:
-		putting.tick(DT)
+	while in_door.phase != HoleGame.Phase.AIM and escaping < 3000:
+		in_door.tick(DT)
 		escaping += 1
-	_check(putting.ball.pos.x > 440.0, "a ball resting in the door can play out (%.0f)" % putting.ball.pos.x)
+	_check(in_door.ball.pos.x > 410.0, "a ball resting in the door can play out (%.0f)" % in_door.ball.pos.x)
 
 	# Parks a blade pointing straight at an incoming ball, then the reverse.
 	var blade: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
@@ -1983,10 +2017,9 @@ func _has_safe_shot(game: HoleGame) -> bool:
 
 # Chooses a shot the way a player would: tries each usable club at a few angles and
 # powers, sets that club and angle on the game, and returns the power to use.
-func _best_power(game: HoleGame) -> float:
+func _best_power(game: HoleGame, playing_away: bool = false) -> float:
 	var best: Dictionary = { "club": game.club_index, "angle": game.aim_angle, "power": 1.0 }
 	var best_distance: float = INF
-	var playing_away: bool = game.is_playing_away()
 	for club_index in game.clubs.size():
 		var club: ClubData = game.clubs[club_index]
 		if club.is_putter and game.lie_surface() != Surface.Type.GREEN:
@@ -2013,6 +2046,10 @@ func _best_power(game: HoleGame) -> float:
 				if distance < best_distance:
 					best_distance = distance
 					best = { "club": club_index, "angle": angle, "power": power }
+	# Nothing safe this way, so flip and play back.
+	if best_distance == INF and not playing_away:
+		game.flip_facing()
+		return _best_power(game, true)
 	game.select_club(int(best["club"]))
 	game.aim_angle = float(best["angle"])
 	return float(best["power"])
