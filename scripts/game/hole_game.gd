@@ -39,8 +39,11 @@ var club_index: int = 0
 var spin: int = 0
 ## Launch angle for the next shot, degrees above level.
 var aim_angle: float = 0.0
-## 1 hits toward +x, -1 hits toward -x. Always set toward the cup at the start of a shot.
+## 1 hits toward +x, -1 hits toward -x. Set toward the cup at the start of a shot, and
+## the player can flip it for that shot.
 var facing: int = 1
+## True when the game turned the golfer away from the cup because it found no safe shot.
+var turned_back: bool = false
 var phase: int = Phase.AIM
 var strokes: int = 0
 var last_quality: String = ""
@@ -149,6 +152,21 @@ func change_spin(step_by: int) -> void:
 	_preview_dirty = true
 
 
+## Turns the golfer to hit the other way, for this shot only.
+func flip_facing() -> void:
+	if phase != Phase.AIM:
+		return
+	facing = -facing
+	turned_back = false
+	_preview_dirty = true
+
+
+## Putts are judged by eye, so they show no aim line.
+func shows_aim_line() -> bool:
+	var aiming: bool = phase == Phase.AIM or phase == Phase.SWING
+	return aiming and not current_club().is_putter
+
+
 ## The single swing button. What it does depends on the phase.
 func press_swing() -> void:
 	match phase:
@@ -248,9 +266,11 @@ func _strike() -> void:
 
 func _begin_aim() -> void:
 	facing = 1 if hole.cup_x >= ball.pos.x else -1
+	turned_back = false
 	# If nothing clears the trouble ahead, the only way out is to play away from the cup.
 	if not _pick_club_for_lie():
 		facing = -facing
+		turned_back = true
 		_pick_club_for_lie()
 	if current_club().is_putter:
 		spin = 0
@@ -271,7 +291,7 @@ func _reset_aim() -> void:
 		meter.reset()
 
 
-## True when the cup is behind the golfer because there's no safe shot toward it.
+## True when the cup is behind the golfer.
 func is_playing_away() -> bool:
 	return facing != (1 if hole.cup_x >= ball.pos.x else -1)
 

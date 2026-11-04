@@ -18,15 +18,14 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	if game.phase != HoleGame.Phase.AIM and game.phase != HoleGame.Phase.SWING:
+	if not game.shows_aim_line():
 		return
 	var preview: Dictionary = game.preview()
 	var path: PackedVector2Array = preview["path"]
 	if path.is_empty():
 		return
 
-	var is_putt: bool = game.current_club().is_putter
-	var count: int = path.size() if is_putt else int(float(path.size()) * ARC_SHARE)
+	var count: int = int(float(path.size()) * ARC_SHARE)
 	# A dark backing keeps the dots readable against bright sky.
 	for i in count:
 		var point: Vector2 = path[i].round()

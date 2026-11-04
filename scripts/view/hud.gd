@@ -60,7 +60,7 @@ func _draw() -> void:
 		PixelFont.draw_centered(self, banner, SCREEN_WIDTH / 2.0, 44.0, Color("9fdcf2"))
 	if camera.is_free_looking() and game.phase == HoleGame.Phase.AIM:
 		PixelFont.draw_centered(self, "FREE LOOK", SCREEN_WIDTH / 2.0, 12.0, ACCENT)
-	if game.phase == HoleGame.Phase.AIM and game.is_playing_away():
+	if game.phase == HoleGame.Phase.AIM and game.turned_back:
 		PixelFont.draw_centered(self, "NO CLEAR SHOT: PLAYING BACK", SCREEN_WIDTH / 2.0, 26.0, ACCENT)
 	if _message_time > 0.0 and game.phase != HoleGame.Phase.COMPLETE:
 		PixelFont.draw_centered(self, _message, SCREEN_WIDTH / 2.0, 58.0, ACCENT, 2)
@@ -194,10 +194,10 @@ func _draw_meter() -> void:
 
 func _draw_hint() -> void:
 	if game.phase == HoleGame.Phase.AIM:
-		var hint: String = "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  R RESTART"
+		var hint: String = "UP/DN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  F FLIP  R RESET"
 		# Putts stay on the ground, so angle and spin do nothing.
 		if game.current_club().is_putter:
-			hint = "A/D LOOK  Q/E CLUB  R RESTART"
+			hint = "A/D LOOK  Q/E CLUB  F FLIP  R RESET"
 		PixelFont.draw_centered(self, hint, SCREEN_WIDTH / 2.0, 346.0, TEXT)
 
 

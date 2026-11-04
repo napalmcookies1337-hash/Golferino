@@ -45,6 +45,13 @@ func _test_real_input() -> void:
 	_press_key(KEY_S)
 	await _wait(0.05)
 	_expect(game().spin == 0, "S takes it back off")
+	_press_key(KEY_F)
+	await _wait(0.8)
+	_expect(game().facing == -1, "F flips the golfer")
+	await _save("00_flipped")
+	_press_button(JOY_BUTTON_X)
+	await _wait(0.05)
+	_expect(game().facing == 1, "controller X flips the golfer back")
 
 	# The driver keeps the three-press swing. One-press putting is in editor_check.
 	_press_key(KEY_SPACE)

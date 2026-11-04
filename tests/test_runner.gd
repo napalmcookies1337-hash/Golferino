@@ -34,7 +34,7 @@ func _ready() -> void:
 	_test_aim_angle_rules()
 	_test_aim_angle_changes_shot()
 	_test_aim_bindings()
-	_test_flip_is_gone()
+	_test_flip()
 	_test_short_shot_return()
 	_test_lie_effects()
 	_test_spin_needs_clean_strike()
@@ -48,6 +48,7 @@ func _ready() -> void:
 	_test_no_spot_is_a_trap()
 	_test_trees_are_scenery()
 	_test_putting_is_one_press()
+	_test_aim_line_is_for_full_swings()
 	_test_tree_pieces()
 	_test_bounce_pads()
 	_test_pads_never_fire_into_water()
@@ -430,14 +431,67 @@ func _test_aim_bindings() -> void:
 	_check(y_button.is_action_pressed("spin_up"), "controller Y changes spin")
 
 
-func _test_flip_is_gone() -> void:
+func _test_flip() -> void:
 	Controls.register()
-	_check(not InputMap.has_action("flip"), "there is no flip control")
-	var game: HoleGame = _game()
-	_check(not game.has_method("flip_facing"), "the game has no flip rule")
-	game.ball.place(1510.0)
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_F
+	key.pressed = true
+	_check(key.is_action_pressed("flip"), "F flips the golfer")
+	var button := InputEventJoypadButton.new()
+	button.button_index = JOY_BUTTON_X
+	button.pressed = true
+	_check(button.is_action_pressed("flip"), "controller X flips the golfer")
+
+	var overshot := HoleGame.new(_flat_hole({ "cup_x": 300.0 }), _clubs())
+	overshot.ball.place(800.0)
+	overshot._begin_aim()
+	_check(overshot.facing == -1, "past the pin, the golfer faces back toward the cup")
+	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	game.ball.place(500.0)
 	game._begin_aim()
-	_check(game.facing == -1, "past the pin, the golfer faces back toward the cup")
+	_check(game.facing == 1, "short of the pin, the golfer faces the cup")
+
+	# The flip changes the shot itself, and the aim preview along with it.
+	game.select_club(1)
+	var ahead: float = Vector2(game.preview()["landing"]).x
+	game.flip_facing()
+	_check(game.facing == -1 and game.is_playing_away(), "flipping turns the golfer around")
+	_check(Vector2(game.preview()["landing"]).x < 500.0 and ahead > 500.0, "the preview follows the flip")
+	_check(not game.turned_back, "a flip by the player isn't reported as no clear shot")
+	_check(game.current_club().id == "iron", "flipping keeps the chosen club")
+	game.strike_with(0.5, 0.0)
+	_check(game.ball.vel.x < 0.0, "a flipped shot goes the other way")
+
+	# It can't happen mid-shot, and it lasts one shot.
+	game.flip_facing()
+	_check(game.facing == -1, "the golfer can't flip while the ball is moving")
+	var steps: int = 0
+	while game.phase != HoleGame.Phase.AIM and steps < 3000:
+		game.tick(DT)
+		steps += 1
+	_check(game.ball.pos.x < 500.0 and game.facing == 1, "the next shot faces the cup again")
+
+	# A flip works from a turned-back spot, and clears its message.
+	var blocked := HoleGame.new(load("res://data/holes/hole_08.tres") as HoleData, _clubs())
+	blocked.ball.place(685.0)
+	blocked._begin_aim()
+	_check(blocked.turned_back, "the game reports when it turned the golfer back")
+	blocked.flip_facing()
+	_check(not blocked.is_playing_away() and not blocked.turned_back, "the player can flip back toward the cup")
+
+	# Putts can flip too, while the meter keeps moving.
+	var putt := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	putt.select_club(2)
+	putt.flip_facing()
+	_check(putt.facing == -1 and putt.meter.stage == SwingMeter.Stage.SWEEPING, "a putt can flip with its meter still moving")
+
+
+func _test_aim_line_is_for_full_swings() -> void:
+	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	game.select_club(1)
+	_check(game.shows_aim_line(), "swings show an aim line")
+	game.select_club(2)
+	_check(not game.shows_aim_line(), "putts show no aim line")
 
 
 func _test_short_shot_return() -> void:
@@ -803,14 +857,14 @@ func _test_putting_is_one_press() -> void:
 		switched.tick(DT)
 	_check(switched.strokes == 1, "putting off the green is also one press")
 
-	# The aim line follows the meter, and shows where the putt will really finish.
+	# The reach readout follows the meter, and matches where the putt really finishes.
 	var aiming: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
 	aiming.select_club(2)
 	aiming.meter.cursor = 0.2
 	var short_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
 	aiming.meter.cursor = 0.9
 	var long_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
-	_check(long_reach > short_reach * 3.0, "the aim line follows the meter (%.0f, %.0f)" % [short_reach, long_reach])
+	_check(long_reach > short_reach * 3.0, "the reach follows the meter (%.0f, %.0f)" % [short_reach, long_reach])
 	aiming.meter.cursor = 0.6
 	var promised: float = Vector2(aiming.preview()["landing"]).x
 	aiming.press_swing()
@@ -818,7 +872,7 @@ func _test_putting_is_one_press() -> void:
 	while aiming.phase != HoleGame.Phase.AIM and rolling < 2000:
 		aiming.tick(DT)
 		rolling += 1
-	_check(absf(aiming.ball.pos.x - promised) < 2.0, "the putt finishes where the aim line showed (%.0f, %.0f)" % [aiming.ball.pos.x, promised])
+	_check(absf(aiming.ball.pos.x - promised) < 2.0, "the putt finishes at the reach shown (%.0f, %.0f)" % [aiming.ball.pos.x, promised])
 
 	var unmoved: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
 	unmoved.select_club(1)

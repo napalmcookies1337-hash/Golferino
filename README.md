@@ -47,6 +47,7 @@ Maps are saved in `%APPDATA%\Godot\app_userdata\Golferino\maps`.
 | Look along the hole | A / D or Left / Right | D-pad left / right or left stick |
 | Change club | Q / E, or 1 / 2 / 3 | LB / RB |
 | Spin | W / S | Y / B |
+| Flip to hit the other way (this shot only) | F | X |
 | Restart hole | R | Back |
 | Skip to next / previous hole (for reviewing) | Page Down / Page Up | |
 | Fullscreen on or off | F11 | |

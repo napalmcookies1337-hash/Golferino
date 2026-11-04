@@ -158,6 +158,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		game.change_spin(1)
 	elif event.is_action_pressed("spin_down", false):
 		game.change_spin(-1)
+	elif event.is_action_pressed("flip", false):
+		game.flip_facing()
 	elif event.is_action_pressed("restart", false):
 		game.restart()
 	elif event.is_action_pressed("review_next_hole", false):
