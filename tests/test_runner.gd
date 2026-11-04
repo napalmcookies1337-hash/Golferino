@@ -68,6 +68,7 @@ func _ready() -> void:
 	_test_stickers()
 	_test_special_balls()
 	_test_shop_stock()
+	_test_prices_climb()
 	_test_buying()
 	_test_perks()
 	_test_item_catalog()
@@ -2253,13 +2254,49 @@ func _test_shop_stock() -> void:
 			_check(item["id"] != "skipper" and item["id"] != "coupon", "the shop doesn't sell what you've got")
 
 
+func _test_prices_climb() -> void:
+	var state: RunState = _new_run_state()
+	for item: Dictionary in Items.CATALOG:
+		state.course.hole_index = 0
+		var label: String = str(item["name"])
+		_check(state.price_of(item) == 3, "%s costs 3 in the first shop" % label)
+		var last_price: int = 3
+		for shop_index in range(1, state.course.hole_count() - 1):
+			state.course.hole_index = shop_index
+			var price: int = state.price_of(item)
+			_check(price >= last_price, "%s never gets cheaper (%d, %d)" % [label, last_price, price])
+			last_price = price
+		_check(last_price == int(item["price"]), "%s reaches its full price by the last shop" % label)
+	# A very short custom course still works.
+	var holes: Array[HoleData] = [_flat_hole(), _flat_hole()]
+	var short := RunState.new(CourseRun.from_holes(holes), _clubs())
+	_check(short.price_of(Items.by_id("skipper")) == 3, "a two-hole course's only shop is at the starting price")
+
+	# What a hole earned, in words that can't be taken for points.
+	_check(RunState.coins_text({ "payout": 0, "pickups": 3, "tricks": 0 }) == "+3 COINS: 3 PICKED UP", "only sources that paid are named (%s)" % RunState.coins_text({ "payout": 0, "pickups": 3, "tricks": 0 }))
+	_check(RunState.coins_text({ "payout": 5, "pickups": 3, "tricks": 4 }) == "+12 COINS: 5 FOR HOLE, 3 PICKED UP, 4 TRICKS", "every source is named")
+	_check(RunState.coins_text({ "payout": 0, "pickups": 0, "tricks": 0 }) == "NO COINS THIS HOLE", "a hole with no coins says so")
+	_check(RunState.coins_text({ "payout": 20, "pickups": 8, "tricks": 15 }).length() <= 49, "the longest line fits the panel")
+
+	# Coins left really do reach the final score, as in a run of 7 on hole 1 and 3 pickups.
+	var run: RunState = _new_run_state()
+	run.begin_hole()
+	for _i in 3:
+		run.collect_coin()
+	run.finish_hole(7)
+	run.ending = RunState.Ending.GAVE_UP
+	_check(_score_row(run, "COINS LEFT") == 6, "3 coins left are worth 6 points")
+	_check(int(run.final_score()["total"]) == 56, "that run scores 56")
+
+
 func _test_buying() -> void:
 	var state: RunState = _new_run_state()
 	var ball: Dictionary = Items.by_id("skipper")
 	_check(not state.buy(ball), "no coins, no sale")
 	state.coins = 100
+	var ball_price: int = state.price_of(ball)
 	_check(state.buy(ball) and state.ball_id == "skipper", "buying a ball equips it")
-	_check(state.coins == 100 - int(ball["price"]), "buying costs its price")
+	_check(state.coins == 100 - ball_price, "buying costs its price")
 	state.buy(Items.by_id("wind_cutter"))
 	_check(state.ball_id == "wind_cutter", "a new ball replaces the old one")
 	var strokes_before: int = state.spare
@@ -2295,7 +2332,10 @@ func _test_perks() -> void:
 	state.coins = 1000
 	var plain_price: int = state.price_of(Items.by_id("skipper"))
 	state.perks.append("coupon")
-	_check(state.price_of(Items.by_id("skipper")) == ceili(plain_price * 0.8), "the coupon cuts prices")
+	_check(state.price_of(Items.by_id("skipper")) < plain_price, "the coupon cuts prices")
+	state.course.hole_index = state.course.hole_count() - 2
+	_check(state.price_of(Items.by_id("skipper")) == roundi(float(Items.by_id("skipper")["price"]) * 0.8), "the coupon takes 20% off")
+	state.course.hole_index = 0
 	state.perks.append("coin_purse")
 	state.begin_hole()
 	_check(state.collect_coin() == 2, "the coin purse doubles pickups")

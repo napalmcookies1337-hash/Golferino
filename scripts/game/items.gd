@@ -4,7 +4,8 @@ extends RefCounted
 ## of a club, balls change a BallSim, and perks change the run's own rules.
 ##
 ## Each entry: "id", "kind", "name", "text" (22 characters at most, to fit a shop card),
-## "price" and "effects". Stickers also list the "clubs" they fit. Items with "unlock"
+## "price" (its full price, reached by the last shop) and "effects". Stickers also list the
+## "clubs" they fit. Items with "unlock"
 ## aren't sold until a finished run earns them, and are meant to add variety, not power.
 
 const KIND_STICKER := "sticker"

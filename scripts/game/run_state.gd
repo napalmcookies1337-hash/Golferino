@@ -6,6 +6,8 @@ extends RefCounted
 const START_SPARE := 8
 const STICKERS_PER_CLUB := 3
 const SHOP_SHELVES := 4
+## What everything costs in the first shop.
+const START_PRICE := 3
 
 ## Coins for a hole's score, by strokes against par. Anything else pays the last number.
 const PAYOUT_UNDER := { -1: 8, -2: 12, -3: 16 }
@@ -106,6 +108,20 @@ func finish_hole(strokes: int) -> Dictionary:
 	return { "payout": payout, "pickups": hole_pickups, "tricks": hole_tricks, "banked": banked }
 
 
+## One line saying what a hole earned, naming only the sources that paid.
+static func coins_text(summary: Dictionary) -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	var total: int = 0
+	for source: Array in [["payout", "FOR HOLE"], ["pickups", "PICKED UP"], ["tricks", "TRICKS"]]:
+		var amount: int = int(summary[source[0]])
+		total += amount
+		if amount > 0:
+			parts.append("%d %s" % [amount, source[1]])
+	if total == 0:
+		return "NO COINS THIS HOLE"
+	return "+%d COINS: %s" % [total, ", ".join(parts)]
+
+
 ## Settles the budget for a hole that was never holed. It doesn't go on the scorecard.
 func leave_hole_unfinished(strokes: int) -> void:
 	spare = live_spare(strokes, course.current_hole().par)
@@ -133,8 +149,12 @@ func use_safety_net() -> int:
 
 # --- The shop ---
 
+## Everything starts at the same low price and climbs to its full price by the last shop.
 func price_of(item: Dictionary) -> int:
-	return ceili(float(item["price"]) * perk_number("prices", 1.0))
+	var last_shop: int = maxi(course.hole_count() - 2, 1)
+	var progress: float = clampf(float(course.hole_index) / float(last_shop), 0.0, 1.0)
+	var price: float = lerpf(float(START_PRICE), float(item["price"]), progress)
+	return maxi(roundi(price * perk_number("prices", 1.0)), 1)
 
 
 func can_afford(item: Dictionary) -> bool:
@@ -220,7 +240,7 @@ func final_score() -> Dictionary:
 		{ "label": "HOLES PLAYED %d" % finished, "points": finished * SCORE_PER_HOLE },
 		{ "label": "PAR %s" % CourseRun.to_par_text(-under_par), "points": under_par * SCORE_PER_UNDER_PAR },
 		{ "label": "SPARE STROKES %d" % left_over, "points": left_over * SCORE_PER_SPARE },
-		{ "label": "COINS %d" % coins, "points": coins * SCORE_PER_COIN },
+		{ "label": "COINS LEFT %d" % coins, "points": coins * SCORE_PER_COIN },
 	]
 	if ending == Ending.BEAT_RIVAL:
 		rows.append({ "label": "BEAT THE RIVAL", "points": SCORE_RIVAL_BEATEN })

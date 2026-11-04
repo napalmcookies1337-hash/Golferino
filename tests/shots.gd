@@ -129,7 +129,7 @@ func _test_shop() -> void:
 	_press_key(KEY_SPACE)
 	await _wait(0.1)
 	_expect((run_state.stickers["iron"] as Array).has("power_stripe"), "Space puts the sticker on that club")
-	_expect(run_state.coins == 200 - 18, "the sticker is paid for")
+	_expect(run_state.coins == 200 - RunState.START_PRICE, "the sticker is paid for at the first shop's price")
 	_expect(shop.sold.has(0) and shop.mode == ShopScreen.Mode.BROWSE, "the sticker sells out")
 	_press_key(KEY_SPACE)
 	await _wait(0.05)

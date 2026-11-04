@@ -279,8 +279,7 @@ func _draw_result() -> void:
 			banked_text = "SPARE STROKES %+d, NOW %d" % [banked, run_state.spare]
 		PixelFont.draw_centered(self, banked_text, center, y, Color("6fe07a") if banked >= 0 else Color("ff8a70"))
 		y += 12.0
-		var coins_text: String = "COINS: SCORE %d  PICKUPS %d  TRICKS %d" % [summary["payout"], summary["pickups"], summary["tricks"]]
-		PixelFont.draw_centered(self, coins_text, center, y, ACCENT)
+		PixelFont.draw_centered(self, RunState.coins_text(summary), center, y, ACCENT)
 	var prompt: String = "SPACE TO CONTINUE"
 	if run_state != null and not run.is_last_hole():
 		prompt = "SPACE FOR THE SHOP"
