@@ -489,9 +489,9 @@ func _test_flip() -> void:
 func _test_aim_line_is_for_full_swings() -> void:
 	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
 	game.select_club(1)
-	_check(game.shows_aim_line(), "swings show an aim line")
+	_check(game.shows_aim_line(), "swings show an aim line and reach")
 	game.select_club(2)
-	_check(not game.shows_aim_line(), "putts show no aim line")
+	_check(not game.shows_aim_line(), "putts show no aim line or reach")
 
 
 func _test_short_shot_return() -> void:
@@ -856,29 +856,6 @@ func _test_putting_is_one_press() -> void:
 	for _i in 20:
 		switched.tick(DT)
 	_check(switched.strokes == 1, "putting off the green is also one press")
-
-	# The reach readout follows the meter, and matches where the putt really finishes.
-	var aiming: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
-	aiming.select_club(2)
-	aiming.meter.cursor = 0.2
-	var short_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
-	aiming.meter.cursor = 0.9
-	var long_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
-	_check(long_reach > short_reach * 3.0, "the reach follows the meter (%.0f, %.0f)" % [short_reach, long_reach])
-	aiming.meter.cursor = 0.6
-	var promised: float = Vector2(aiming.preview()["landing"]).x
-	aiming.press_swing()
-	var rolling: int = 0
-	while aiming.phase != HoleGame.Phase.AIM and rolling < 2000:
-		aiming.tick(DT)
-		rolling += 1
-	_check(absf(aiming.ball.pos.x - promised) < 2.0, "the putt finishes at the reach shown (%.0f, %.0f)" % [aiming.ball.pos.x, promised])
-
-	var unmoved: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
-	unmoved.select_club(1)
-	var iron_reach: float = Vector2(unmoved.preview()["landing"]).x
-	unmoved.meter.cursor = 0.1
-	_check(is_equal_approx(Vector2(unmoved.preview()["landing"]).x, iron_reach), "other clubs still preview at full power")
 
 	# After a putt that doesn't drop, the next one is ready to go.
 	var again: HoleGame = _game()
@@ -1656,7 +1633,73 @@ func _test_windmill() -> void:
 	sim.place(260.0)
 	sim.launch(Vector2(120.0, 0.0), 0.0)
 	_run_to_stop(sim)
-	_check(sim.pos.x < 300.0, "the tower blocks a rolling ball (%.0f)" % sim.pos.x)
+	_check(sim.pos.x > 310.0, "a rolling ball goes through the door (%.0f)" % sim.pos.x)
+
+	# The door is open up to its top edge, and solid above that, from either side.
+	var top: float = mill.ground - WindmillObstacle.DOOR_HEIGHT
+	for side: float in [-1.0, 1.0]:
+		var through: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
+		var through_sim: BallSim = through["sim"]
+		through_sim.ignore_moving = true
+		_start_ball(through_sim, Vector2(300.0 + side * 20.0, top + 3.0), Vector2(-side * 300.0, 0.0))
+		for _i in 16:
+			through_sim.step(DT)
+		_check(signf(through_sim.pos.x - 300.0) == -side, "a ball at the top of the door passes (%.0f)" % through_sim.pos.x)
+
+		var blocked: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
+		var blocked_sim: BallSim = blocked["sim"]
+		blocked_sim.ignore_moving = true
+		_start_ball(blocked_sim, Vector2(300.0 + side * 20.0, top - 3.0), Vector2(-side * 300.0, 0.0))
+		for _i in 16:
+			blocked_sim.step(DT)
+		_check(signf(blocked_sim.pos.x - 300.0) == side, "a ball just above the door is blocked (%.0f)" % blocked_sim.pos.x)
+
+	# Straight down from above lands on the tower's top, not in the door.
+	var above: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
+	var above_sim: BallSim = above["sim"]
+	above_sim.ignore_moving = true
+	_start_ball(above_sim, Vector2(300.0, top - 15.0), Vector2(0.0, 200.0))
+	for _i in 10:
+		above_sim.step(DT)
+	_check(above_sim.pos.y < top - 1.0, "a ball can't drop through the tower into the door (%.0f)" % above_sim.pos.y)
+
+	# The door tilts with the tower.
+	var tilted: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "rotation": 30.0, "turn_speed": 0.0 })
+	var tilted_mill: WindmillObstacle = tilted["obstacle"]
+	var tilted_sim: BallSim = tilted["sim"]
+	tilted_sim.ignore_moving = true
+	var up: Vector2 = Vector2.UP.rotated(deg_to_rad(30.0))
+	var across: Vector2 = up.orthogonal()
+	var door_mid: Vector2 = tilted_mill.base() + up * (WindmillObstacle.DOOR_HEIGHT - 5.0)
+	_start_ball(tilted_sim, door_mid - across * 20.0, across * 300.0)
+	for _i in 8:
+		tilted_sim.step(DT)
+	_check((tilted_sim.pos - door_mid).dot(across) > 0.0, "a ball passes through a tilted door")
+
+	# A real putt rolls through the door from the fairway, with the blades still turning.
+	var course_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	course_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 2.0 }]
+	var putting := HoleGame.new(course_hole, _clubs())
+	putting.ball.place(340.0)
+	putting._begin_aim()
+	putting.select_club(2)
+	putting.strike_with(1.0, 0.0)
+	var rolled: int = 0
+	while putting.phase != HoleGame.Phase.AIM and rolled < 3000:
+		putting.tick(DT)
+		rolled += 1
+	_check(putting.ball.pos.x > 410.0, "a full putt reaches the far side of the windmill (%.0f)" % putting.ball.pos.x)
+
+	# A ball that stops in the doorway can play out either way.
+	putting.ball.place(400.0)
+	putting._begin_aim()
+	putting.select_club(1)
+	putting.strike_with(0.5, 0.0)
+	var escaping: int = 0
+	while putting.phase != HoleGame.Phase.AIM and escaping < 3000:
+		putting.tick(DT)
+		escaping += 1
+	_check(putting.ball.pos.x > 440.0, "a ball resting in the door can play out (%.0f)" % putting.ball.pos.x)
 
 	# Parks a blade pointing straight at an incoming ball, then the reverse.
 	var blade: Dictionary = _hazard_sim({ "kind": "windmill", "x": 300.0, "turn_speed": 0.0 })
@@ -1682,7 +1725,7 @@ func _test_windmill() -> void:
 	preview_sim.launch(Vector2(200.0, -1.0), 0.0)
 	preview_sim.step(DT * 6.0)
 	_check(preview_sim.vel.x > 0.0, "previews skip the blades")
-	preview_sim.pos = Vector2(290.0, preview_mill.ground - 10.0)
+	preview_sim.pos = Vector2(290.0, preview_mill.ground - 30.0)
 	preview_sim.vel = Vector2(200.0, 0.0)
 	preview_sim.state = BallSim.State.AIRBORNE
 	preview_sim.step(DT * 2.0)

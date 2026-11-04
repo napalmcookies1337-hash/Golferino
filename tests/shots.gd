@@ -117,6 +117,8 @@ func _shoot_hazards() -> void:
 	await _shoot_at(3, 1730.0, "hazard_pad_flat")
 	await _shoot_at(4, 560.0, "hazard_cart")
 	await _shoot_at(5, 300.0, "hazard_windmill")
+	var mill_x: float = float(main.run.hole_at(5).obstacles[0]["x"])
+	await _shoot_at(5, mill_x, "hazard_windmill_door")
 	await _shoot_at(6, 570.0, "hazard_sprinkler")
 	await _shoot_at(7, 650.0, "hazard_geese")
 	await _shoot_at(9, 2000.0, "hazard_boss_stage")

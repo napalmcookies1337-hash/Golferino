@@ -1,11 +1,18 @@
 class_name WindmillObstacle
 extends Obstacle
-## A solid tower with four turning blades. Fly over it, or time a shot past the blades.
+## A tower with four turning blades and a square door right through its base. Fly over
+## it, time a shot past the blades, or run the ball through the door.
 ## Rotation tilts the whole tower around its base, in degrees from straight up.
 
 const TOWER_HEIGHT := 46.0
 const TOWER_RADIUS := 7.0
 const TOWER_BOUNCE := 0.35
+## The blades' tips stop just above the door, so they never reach a ball rolling through.
+const DOOR_HEIGHT := 14.0
+const DOOR_HALF_WIDTH := 7.0
+## A flat bar across the top of the door, under the rounded tower.
+const LINTEL_HALF_LENGTH := 6.0
+const LINTEL_RADIUS := 2.0
 const BLADE_LENGTH := 30.0
 const BLADE_RADIUS := 1.5
 const BLADE_BOUNCE := 0.5
@@ -19,6 +26,9 @@ var angle: float = 0.0
 var turn_speed: float
 
 var _hub: Vector2
+var _tower_low: Vector2
+var _lintel_a: Vector2
+var _lintel_b: Vector2
 
 
 func _init(terrain: Terrain, entry: Dictionary) -> void:
@@ -27,7 +37,13 @@ func _init(terrain: Terrain, entry: Dictionary) -> void:
 	ground = terrain.ground_y(x)
 	rotation_deg = float(entry.get("rotation", 0.0))
 	turn_speed = float(entry.get("turn_speed", 1.2))
-	_hub = base() + Vector2.UP.rotated(deg_to_rad(rotation_deg)) * TOWER_HEIGHT
+	var up: Vector2 = Vector2.UP.rotated(deg_to_rad(rotation_deg))
+	_hub = base() + up * TOWER_HEIGHT
+	_tower_low = base() + up * (DOOR_HEIGHT + TOWER_RADIUS)
+	var lintel: Vector2 = base() + up * (DOOR_HEIGHT + LINTEL_RADIUS)
+	var along: Vector2 = up.orthogonal() * LINTEL_HALF_LENGTH
+	_lintel_a = lintel - along
+	_lintel_b = lintel + along
 
 
 func tick(dt: float) -> void:
@@ -50,7 +66,9 @@ func blade_tip(index: int) -> Vector2:
 func interact(ball: BallSim, _dt: float) -> bool:
 	var touched: bool = false
 	if absf(ball.launch_x - x) > Obstacle.LAUNCH_GRACE:
-		touched = Obstacle.hit_capsule(ball, base(), _hub, TOWER_RADIUS, TOWER_BOUNCE)
+		touched = Obstacle.hit_capsule(ball, _tower_low, _hub, TOWER_RADIUS, TOWER_BOUNCE)
+		if Obstacle.hit_capsule(ball, _lintel_a, _lintel_b, LINTEL_RADIUS, TOWER_BOUNCE):
+			touched = true
 	if ball.ignore_moving:
 		return touched
 	for i in BLADES:

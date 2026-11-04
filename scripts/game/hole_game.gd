@@ -25,8 +25,6 @@ const SLOPE_CLEARANCE := 6.0
 const MIN_LAUNCH_ANGLE := 3.0
 const MAX_LAUNCH_ANGLE := 85.0
 const MIN_LIE_POWER := 0.1
-## How far a putt's meter moves before its preview is worked out again.
-const PREVIEW_CURSOR_STEP := 0.015
 
 var hole: HoleData
 var terrain: Terrain
@@ -52,7 +50,6 @@ var _last_spot_x: float = 0.0
 var _phase_time: float = 0.0
 var _preview_dirty: bool = true
 var _preview: Dictionary = {}
-var _preview_cursor: float = -1.0
 
 
 func _init(p_hole: HoleData, p_clubs: Array[ClubData]) -> void:
@@ -161,7 +158,7 @@ func flip_facing() -> void:
 	_preview_dirty = true
 
 
-## Putts are judged by eye, so they show no aim line.
+## Putts are judged purely by eye, so they show no aim line or reach.
 func shows_aim_line() -> bool:
 	var aiming: bool = phase == Phase.AIM or phase == Phase.SWING
 	return aiming and not current_club().is_putter
@@ -228,9 +225,6 @@ func strike_with(power: float, accuracy: float) -> void:
 
 ## Full-power path for the aim display: { "path": points, "landing": Vector2 }.
 func preview() -> Dictionary:
-	# A putt's preview follows the moving meter, so it shows the putt you'd get right now.
-	if _is_sweeping() and absf(meter.cursor - _preview_cursor) >= PREVIEW_CURSOR_STEP:
-		_preview_dirty = true
 	if _preview_dirty:
 		_preview = _build_preview()
 		_preview_dirty = false
@@ -353,25 +347,16 @@ func _full_range_estimate(club_id: String) -> float:
 
 func _build_preview() -> Dictionary:
 	var sim: BallSim = new_preview_sim()
-	var power: float = 1.0
-	if _is_sweeping():
-		_preview_cursor = meter.cursor
-		power = maxf(meter.cursor, SwingMeter.MIN_PRESS_POWER)
-	var shot: Dictionary = shot_for(power, 0.0)
+	var shot: Dictionary = shot_for(1.0, 0.0)
 	sim.launch(shot["velocity"], float(shot["spin"]))
 	var path := PackedVector2Array()
-	var is_putt: bool = current_club().is_putter
 	for i in PREVIEW_MAX_STEPS:
 		sim.step(PREVIEW_STEP)
 		if i % 2 == 0:
 			path.append(sim.pos)
-		if not sim.is_moving() or (not is_putt and sim.bounce_count > 0):
+		if not sim.is_moving() or sim.bounce_count > 0:
 			break
 	return { "path": path, "landing": sim.pos }
-
-
-func _is_sweeping() -> bool:
-	return meter.stage == SwingMeter.Stage.SWEEPING
 
 
 func _set_phase(new_phase: int) -> void:

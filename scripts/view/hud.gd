@@ -91,7 +91,7 @@ func _draw_distance_panel() -> void:
 		PixelFont.draw(self, text, Vector2(520, 37), Color("9fdcf2"))
 	var pin_yards: int = int(round(game.distance_to_cup() / YARD))
 	PixelFont.draw(self, "PIN  %d YD" % pin_yards, Vector2(520, 13), TEXT)
-	if game.phase == HoleGame.Phase.AIM or game.phase == HoleGame.Phase.SWING:
+	if game.shows_aim_line():
 		var landing: Vector2 = game.preview()["landing"]
 		var reach: int = int(round(absf(landing.x - game.ball.pos.x) / YARD))
 		PixelFont.draw(self, "REACH %d YD" % reach, Vector2(520, 25), ACCENT)

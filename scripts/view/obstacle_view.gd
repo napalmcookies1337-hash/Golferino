@@ -121,11 +121,20 @@ func _draw_windmill(mill: WindmillObstacle) -> void:
 	for row in int(WindmillObstacle.TOWER_HEIGHT) + 2:
 		var y: float = 2.0 - float(row)
 		var half: float = round(lerpf(9.0, 5.0, float(row) / WindmillObstacle.TOWER_HEIGHT))
+		if y < 0.0 and y >= -WindmillObstacle.DOOR_HEIGHT:
+			# Only the door's two sides, so you can see through the hole.
+			var door: float = WindmillObstacle.DOOR_HALF_WIDTH
+			draw_rect(Rect2(-half - 1, y, half + 1 - door, 1), OUTLINE)
+			draw_rect(Rect2(-half, y, half - door, 1), Color("e3cfa4"))
+			draw_rect(Rect2(door, y, half + 2 - door, 1), OUTLINE)
+			draw_rect(Rect2(door, y, half + 1 - door, 1), Color("b39a78"))
+			continue
 		draw_rect(Rect2(-half - 1, y, half * 2 + 3, 1), OUTLINE)
 		var brick: bool = row % 6 == 0
 		draw_rect(Rect2(-half, y, half * 2 + 1, 1), Color("c9b08a") if brick else Color("e3cfa4"))
 		draw_rect(Rect2(half - 2, y, 2, 1), Color("b39a78"))
-	draw_rect(Rect2(-3, -10, 7, 11), Color("5d3f2b"))
+	var door_top: float = -WindmillObstacle.DOOR_HEIGHT - 1.0
+	draw_rect(Rect2(-WindmillObstacle.DOOR_HALF_WIDTH, door_top, WindmillObstacle.DOOR_HALF_WIDTH * 2.0, 1), Color("5d3f2b"))
 	var roof := PackedVector2Array([Vector2(-8, top - 1), Vector2(8, top - 1), Vector2(0, top - 11)])
 	draw_colored_polygon(roof, Color("a92b35"))
 	draw_set_transform(Vector2.ZERO)
