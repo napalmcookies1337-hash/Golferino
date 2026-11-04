@@ -1,8 +1,15 @@
 class_name TreeView
 extends Node2D
-## Trees are scenery behind the ground. They have no effect on the ball.
+## Draws tree pieces. They're scenery behind the ground, with no effect on the ball.
 
-const VARIANTS := 3
+const TRUNK_WIDTH := 5
+const TRUNK_HEIGHT := 26
+## How far a trunk with no height sits into the ground.
+const TRUNK_SINK := 3.0
+
+# The images are made once and shared, because the editor rebuilds this view while dragging.
+static var _trunk_texture: ImageTexture
+static var _leaf_textures: Array[ImageTexture] = []
 
 var hole: HoleData
 var terrain: Terrain
@@ -14,38 +21,77 @@ func setup(p_hole: HoleData, p_terrain: Terrain) -> void:
 
 
 func _ready() -> void:
-	var textures: Array[ImageTexture] = []
-	for i in VARIANTS:
-		textures.append(ImageTexture.create_from_image(_make_tree(i)))
-	var index: int = 0
-	for x: float in hole.tree_xs:
-		_add_tree(x, textures[index % VARIANTS])
-		index += 1
+	_make_textures()
+	for piece: Dictionary in hole.scenery:
+		if str(piece["kind"]) == "trunk":
+			_add_trunk(piece)
+	# Leaves go on top, so that a tree's leaves cover the top of its trunk.
+	for piece: Dictionary in hole.scenery:
+		if str(piece["kind"]) == "leaves":
+			_add_leaves(piece)
 
 
-func _add_tree(x: float, texture: ImageTexture) -> void:
+func _add_trunk(piece: Dictionary) -> void:
+	var x: float = float(piece["x"])
+	var base_y: float = terrain.ground_y(x) + TRUNK_SINK - float(piece.get("height", 0.0))
+	_add_sprite(_trunk_texture, Vector2(x - float(TRUNK_WIDTH) / 2.0, base_y - float(TRUNK_HEIGHT)))
+
+
+func _add_leaves(piece: Dictionary) -> void:
+	var x: float = float(piece["x"])
+	var variant: int = int(piece.get("variant", 0))
+	var texture: ImageTexture = _leaf_textures[variant]
+	var center_y: float = terrain.ground_y(x) - float(piece.get("height", 0.0))
+	_add_sprite(texture, Vector2(x - float(texture.get_width()) / 2.0, center_y - float(_canopy_center(variant))))
+
+
+func _add_sprite(texture: ImageTexture, at: Vector2) -> void:
 	var sprite := Sprite2D.new()
 	sprite.texture = texture
 	sprite.centered = false
-	sprite.position = Vector2(
-			round(x - texture.get_width() / 2.0),
-			round(terrain.ground_y(x) + 3.0 - texture.get_height()))
+	sprite.position = at.round()
 	add_child(sprite)
 
 
-func _make_tree(variant: int) -> Image:
-	var width: int = 44 + variant * 6
-	var height: int = 62 + variant * 8
+static func _make_textures() -> void:
+	if _trunk_texture != null:
+		return
+	_trunk_texture = ImageTexture.create_from_image(_make_trunk())
+	for variant in HoleIO.LEAF_VARIANTS:
+		_leaf_textures.append(ImageTexture.create_from_image(_make_leaves(variant)))
+
+
+static func _make_trunk() -> Image:
+	var image := Image.create(TRUNK_WIDTH, TRUNK_HEIGHT, false, Image.FORMAT_RGBA8)
+	var middle: int = TRUNK_WIDTH / 2
+	for y in TRUNK_HEIGHT:
+		for x in TRUNK_WIDTH:
+			image.set_pixel(x, y, Color("4a3322") if x > middle else Color("6a4a30"))
+	return image
+
+
+static func _leaves_width(variant: int) -> int:
+	return 44 + variant * 6
+
+
+static func _leaves_height(variant: int) -> int:
+	return 62 + variant * 8
+
+
+# The row of the image that sits at the piece's height.
+static func _canopy_center(variant: int) -> int:
+	return (_leaves_height(variant) - 18) / 2
+
+
+static func _make_leaves(variant: int) -> Image:
+	var width: int = _leaves_width(variant)
+	var height: int = _leaves_height(variant)
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 900 + variant
 	var center_x: int = width / 2
+	var canopy_y: int = _canopy_center(variant)
 
-	for y in range(height - 26, height):
-		for x in range(center_x - 2, center_x + 3):
-			image.set_pixel(x, y, Color("4a3322") if x > center_x else Color("6a4a30"))
-
-	var canopy_y: int = (height - 18) / 2
 	var blobs: Array[Vector3] = []
 	for _i in 9:
 		blobs.append(Vector3(
@@ -67,7 +113,7 @@ func _make_tree(variant: int) -> Image:
 	return image
 
 
-func _leaf_color(lit: float, x: int, y: int) -> Color:
+static func _leaf_color(lit: float, x: int, y: int) -> Color:
 	var dither: float = 0.06 if (x + y) % 2 == 0 else -0.06
 	var value: float = lit + dither
 	if value > 0.82:

@@ -162,8 +162,11 @@ func _draw_meter() -> void:
 		var seg_x: float = sweet_x + t * METER_POWER_WIDTH
 		draw_rect(Rect2(seg_x, METER_TOP, METER_POWER_WIDTH / float(segments) + 1.0, METER_HEIGHT), color)
 
-	var window: float = game.meter.perfect_window * METER_POWER_WIDTH
-	draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), Color("ffffff"))
+	# Putts have no accuracy check, so they don't show a sweet spot.
+	var is_putt: bool = game.current_club().is_putter
+	if not is_putt:
+		var window: float = game.meter.perfect_window * METER_POWER_WIDTH
+		draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), Color("ffffff"))
 	draw_rect(Rect2(sweet_x, METER_TOP - 2.0, 1, METER_HEIGHT + 4.0), Color("20202e"))
 
 	for mark in [0.25, 0.5, 0.75, 1.0]:
@@ -172,8 +175,10 @@ func _draw_meter() -> void:
 
 	var meter: SwingMeter = game.meter
 	if game.phase == HoleGame.Phase.AIM:
-		PixelFont.draw_centered(self, "SPACE TO SWING", METER_LEFT + total / 2.0, METER_TOP - 14.0, TEXT)
-		return
+		var prompt: String = "SPACE TO PUTT" if is_putt else "SPACE TO SWING"
+		PixelFont.draw_centered(self, prompt, METER_LEFT + total / 2.0, METER_TOP - 14.0, TEXT)
+		if not is_putt:
+			return
 
 	if meter.stage == SwingMeter.Stage.RETURNING or meter.stage == SwingMeter.Stage.DONE:
 		var power_x: float = sweet_x + meter.power * METER_POWER_WIDTH

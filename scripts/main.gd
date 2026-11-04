@@ -177,7 +177,8 @@ func _review_jump(step: int) -> void:
 
 
 func _on_shot_struck(quality: String, _power: float) -> void:
-	hud.show_message(quality, 1.1)
+	if quality != "":
+		hud.show_message(quality, 1.1)
 	fx.dust(game.ball.pos, Color(0.85, 0.95, 0.65), 6, game.facing)
 
 

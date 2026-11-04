@@ -2,7 +2,7 @@ class_name EditorDoc
 extends RefCounted
 ## The map being edited, and every change that can be made to it. No drawing or input
 ## here, so all of it can be tested directly. A selection is a dictionary:
-## { "type": "obstacle", "index": n }, { "type": "tree", "index": n },
+## { "type": "obstacle", "index": n }, { "type": "scenery", "index": n },
 ## { "type": "water", "index": n }, { "type": "tee" } or { "type": "cup" }.
 
 const MIN_POINT_GAP := 12.0
@@ -15,6 +15,10 @@ const UNDO_LIMIT := 60
 const ROTATION_SNAP := 15.0
 ## Only things that stay put can rotate. Carts and geese travel along routes.
 const ROTATING_KINDS := ["pad", "windmill", "sprinkler"]
+## A trunk dropped or dragged this close to the ground stands on it.
+const TRUNK_GROUND_SNAP := 8.0
+## From a trunk's base up to the middle of it.
+const TRUNK_MIDDLE := 10.0
 
 var hole: HoleData
 var terrain: Terrain
@@ -212,11 +216,8 @@ func _merged_spans(spans: Array) -> Array:
 ## Adds an object at a world position and returns a selection for it.
 func add_object(kind: String, at: Vector2) -> Dictionary:
 	var x: float = clampf(at.x, 10.0, length() - 10.0)
-	if kind == "tree":
-		var trees: PackedFloat32Array = hole.tree_xs
-		trees.append(x)
-		hole.tree_xs = trees
-		return { "type": "tree", "index": trees.size() - 1 }
+	if kind == "trunk" or kind == "leaves":
+		return _add_scenery(kind, x, at.y)
 	var entry: Dictionary = { "kind": kind }
 	match kind:
 		"pad":
@@ -236,16 +237,52 @@ func add_object(kind: String, at: Vector2) -> Dictionary:
 	return { "type": "obstacle", "index": obstacles.size() - 1 }
 
 
+func _add_scenery(kind: String, x: float, y: float) -> Dictionary:
+	var ground: float = terrain.ground_y(x)
+	var piece: Dictionary = { "kind": kind, "x": x }
+	if kind == "trunk":
+		piece["height"] = _trunk_height(ground - y)
+	else:
+		piece["height"] = ground - y
+		# Each new set of leaves takes the next shape, for variety. The panel can change it.
+		var count: int = 0
+		for other: Dictionary in hole.scenery:
+			if str(other["kind"]) == "leaves":
+				count += 1
+		piece["variant"] = count % HoleIO.LEAF_VARIANTS
+	var scenery: Array = hole.scenery
+	scenery.append(piece)
+	hole.scenery = scenery
+	return { "type": "scenery", "index": scenery.size() - 1 }
+
+
+func _trunk_height(wanted: float) -> float:
+	return 0.0 if absf(wanted) <= TRUNK_GROUND_SNAP else wanted
+
+
+## The tree piece selected, or an empty dictionary if the selection isn't one.
+func piece_of(selection: Dictionary) -> Dictionary:
+	if str(selection.get("type", "")) != "scenery":
+		return {}
+	return hole.scenery[int(selection["index"])]
+
+
+func rest_trunk_on_ground(selection: Dictionary) -> void:
+	var piece: Dictionary = piece_of(selection)
+	if str(piece.get("kind", "")) == "trunk":
+		piece["height"] = 0.0
+
+
 func delete_selection(selection: Dictionary) -> void:
 	match str(selection.get("type", "")):
 		"obstacle":
 			var obstacles: Array = hole.obstacles
 			obstacles.remove_at(int(selection["index"]))
 			hole.obstacles = obstacles
-		"tree":
-			var trees: PackedFloat32Array = hole.tree_xs
-			trees.remove_at(int(selection["index"]))
-			hole.tree_xs = trees
+		"scenery":
+			var scenery: Array = hole.scenery
+			scenery.remove_at(int(selection["index"]))
+			hole.scenery = scenery
 		"water":
 			var spans: Array = hole.water_spans
 			spans.remove_at(int(selection["index"]))
@@ -254,7 +291,7 @@ func delete_selection(selection: Dictionary) -> void:
 
 
 func can_delete(selection: Dictionary) -> bool:
-	return ["obstacle", "tree", "water"].has(str(selection.get("type", "")))
+	return ["obstacle", "scenery", "water"].has(str(selection.get("type", "")))
 
 
 ## The object's entry in the hole, or an empty dictionary if the selection isn't one.
@@ -270,15 +307,22 @@ func selection_center(selection: Dictionary) -> Vector2:
 			return Vector2(hole.tee_x, terrain.ground_y(hole.tee_x))
 		"cup":
 			return Vector2(hole.cup_x, terrain.rim_y)
-		"tree":
-			var x: float = hole.tree_xs[int(selection["index"])]
-			return Vector2(x, terrain.ground_y(x) - 30.0)
+		"scenery":
+			return _piece_center(piece_of(selection))
 		"water":
 			var span: Dictionary = hole.water_spans[int(selection["index"])]
 			return Vector2((float(span["from"]) + float(span["to"])) / 2.0, float(span["level"]))
 		"obstacle":
 			return _object_center(entry_of(selection))
 	return Vector2.ZERO
+
+
+func _piece_center(piece: Dictionary) -> Vector2:
+	var x: float = float(piece["x"])
+	var y: float = terrain.ground_y(x) - float(piece.get("height", 0.0))
+	if str(piece["kind"]) == "trunk":
+		y -= TRUNK_MIDDLE
+	return Vector2(x, y)
 
 
 func _object_center(entry: Dictionary) -> Vector2:
@@ -340,16 +384,23 @@ func move_selection(selection: Dictionary, at: Vector2) -> void:
 		"cup":
 			hole.cup_x = clampf(x, 20.0, length() - 20.0)
 			rebake()
-		"tree":
-			var trees: PackedFloat32Array = hole.tree_xs
-			trees[int(selection["index"])] = x
-			hole.tree_xs = trees
+		"scenery":
+			_move_piece(piece_of(selection), at, x)
 		"water":
 			var spans: Array = hole.water_spans
 			spans[int(selection["index"])]["level"] = clampf(at.y, MIN_Y, MAX_Y)
 			rebake()
 		"obstacle":
 			_move_object(entry_of(selection), at, x)
+
+
+func _move_piece(piece: Dictionary, at: Vector2, x: float) -> void:
+	var ground: float = terrain.ground_y(x)
+	piece["x"] = x
+	if str(piece["kind"]) == "trunk":
+		piece["height"] = _trunk_height(ground - at.y - TRUNK_MIDDLE)
+	else:
+		piece["height"] = ground - at.y
 
 
 func _move_object(entry: Dictionary, at: Vector2, x: float) -> void:
@@ -409,16 +460,25 @@ func pick(at: Vector2, radius: float) -> Dictionary:
 		return { "type": "tee" }
 	if Vector2(hole.cup_x, terrain.rim_y - 18.0).distance_to(at) < radius + 20.0:
 		return { "type": "cup" }
-	for i in hole.tree_xs.size():
-		var x: float = hole.tree_xs[i]
-		if Vector2(x, terrain.ground_y(x) - 30.0).distance_to(at) < radius + 22.0:
-			return { "type": "tree", "index": i }
+	# Trunks first: they're thin, so a click on one clearly means it. Latest pieces win.
+	for kind: String in ["trunk", "leaves"]:
+		for i in range(hole.scenery.size() - 1, -1, -1):
+			var piece: Dictionary = hole.scenery[i]
+			if str(piece["kind"]) == kind and _hits_piece(piece, at, radius):
+				return { "type": "scenery", "index": i }
 	for i in hole.water_spans.size():
 		var span: Dictionary = hole.water_spans[i]
 		if at.x >= float(span["from"]) and at.x <= float(span["to"]) \
 				and at.y >= float(span["level"]) - radius and at.y <= terrain.basin_y(at.x) + 2.0:
 			return { "type": "water", "index": i }
 	return {}
+
+
+func _hits_piece(piece: Dictionary, at: Vector2, radius: float) -> bool:
+	var center: Vector2 = _piece_center(piece)
+	if str(piece["kind"]) == "trunk":
+		return absf(at.x - center.x) < radius + 4.0 and absf(at.y - center.y) < radius + 14.0
+	return center.distance_to(at) < radius + 20.0
 
 
 func _hits_object(entry: Dictionary, at: Vector2, radius: float) -> bool:
@@ -454,6 +514,11 @@ func properties(selection: Dictionary) -> Array[Dictionary]:
 		"water":
 			var span: Dictionary = hole.water_spans[int(selection["index"])]
 			rows.append(_row("LEVEL", "level", float(span["level"]), 2.0, MIN_Y, MAX_Y))
+		"scenery":
+			var piece: Dictionary = piece_of(selection)
+			rows.append(_row("HEIGHT", "height", float(piece.get("height", 0.0)), 5.0, -60.0, 400.0))
+			if str(piece["kind"]) == "leaves":
+				rows.append(_row("SHAPE", "variant", float(piece.get("variant", 0)), 1.0, 0.0, float(HoleIO.LEAF_VARIANTS - 1)))
 		"obstacle":
 			_object_rows(entry_of(selection), rows)
 	return rows
@@ -495,6 +560,8 @@ func set_property(selection: Dictionary, key: String, value: float) -> void:
 		"water":
 			hole.water_spans[int(selection["index"])]["level"] = value
 			rebake()
+		"scenery":
+			piece_of(selection)[key] = int(value) if key == "variant" else value
 		"obstacle":
 			if key == "rotation":
 				set_rotation(selection, value)

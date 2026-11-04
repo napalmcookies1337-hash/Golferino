@@ -2,9 +2,13 @@ class_name SwingMeter
 extends RefCounted
 ## The 3-click meter. Press 1 starts it, press 2 sets power on the way up, press 3
 ## sets accuracy on the way back. The cursor runs 0 to 1, and below 0 is the miss
-## zone past the sweet spot.
+## zone past the sweet spot. Putts use a sweep instead: the cursor moves by itself, and
+## one press takes the power with no accuracy check.
 
-enum Stage { IDLE, RISING, RETURNING, DONE }
+enum Stage { IDLE, RISING, RETURNING, DONE, SWEEPING }
+
+## Time for a putt's cursor to go from empty to full, or back.
+const SWEEP_TIME := 1.3
 
 const RISE_TIME := 1.05
 const RETURN_TIME := 0.92
@@ -23,17 +27,30 @@ var power: float = 0.0
 ## 0 is perfect. Positive is early (up to 1), negative is late (down to -1).
 var accuracy: float = 0.0
 
+var _sweep_direction: float = 1.0
+
 
 func reset() -> void:
 	stage = Stage.IDLE
 	cursor = 0.0
 	power = 0.0
 	accuracy = 0.0
+	_sweep_direction = 1.0
+
+
+## Starts the moving cursor that a putt's single press stops.
+func start_sweep() -> void:
+	reset()
+	stage = Stage.SWEEPING
 
 
 ## Advances the meter by one player press.
 func press() -> void:
 	match stage:
+		Stage.SWEEPING:
+			power = clampf(cursor, 0.02, 1.0)
+			accuracy = 0.0
+			stage = Stage.DONE
 		Stage.IDLE:
 			reset()
 			stage = Stage.RISING
@@ -46,6 +63,14 @@ func press() -> void:
 
 func tick(dt: float) -> void:
 	match stage:
+		Stage.SWEEPING:
+			cursor += _sweep_direction * dt / SWEEP_TIME
+			if cursor >= 1.0:
+				cursor = 1.0
+				_sweep_direction = -1.0
+			elif cursor <= 0.0:
+				cursor = 0.0
+				_sweep_direction = 1.0
 		Stage.RISING:
 			cursor += dt / RISE_TIME
 			if cursor >= 1.0:

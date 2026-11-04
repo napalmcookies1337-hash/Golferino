@@ -150,6 +150,11 @@ func change_spin(step_by: int) -> void:
 func press_swing() -> void:
 	match phase:
 		Phase.AIM:
+			if current_club().is_putter:
+				# A putt is one press: the moving cursor sets the power.
+				meter.press()
+				_set_phase(Phase.DOWNSWING)
+				return
 			meter.reset()
 			meter.press()
 			_set_phase(Phase.SWING)
@@ -175,6 +180,8 @@ func tick(dt: float) -> void:
 	for obstacle in obstacles:
 		obstacle.tick(dt)
 	match phase:
+		Phase.AIM:
+			meter.tick(dt)
 		Phase.SWING:
 			meter.tick(dt)
 			if meter.is_done():
@@ -250,6 +257,12 @@ func _begin_aim() -> void:
 func _reset_aim() -> void:
 	aim_angle = current_club().loft_deg
 	_preview_dirty = true
+	# With the putter in hand the meter is always moving, ready for its one press.
+	if current_club().is_putter:
+		if meter.stage != SwingMeter.Stage.SWEEPING:
+			meter.start_sweep()
+	else:
+		meter.reset()
 
 
 ## True when the cup is behind the golfer because there's no safe shot toward it.

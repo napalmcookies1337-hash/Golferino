@@ -35,6 +35,7 @@ func _run() -> void:
 	await _settings_panel()
 	await _save_and_reload()
 	await _test_play()
+	await _one_press_putt()
 	await _course_order()
 	await _play_edited_course()
 	for file_name in DirAccess.get_files_at(MAPS_DIR):
@@ -127,6 +128,68 @@ func _rotation() -> void:
 	_expect(str(map_editor.doc.entry_of(map_editor.selection).get("kind", "")) == "cart", "a cart was placed")
 	_expect(not map_editor.doc.can_rotate(map_editor.selection), "a cart has no rotation")
 	await _save("editor_07_cart_route")
+	await _tree_pieces()
+
+
+func _tree_pieces() -> void:
+	var map_editor: MapEditor = editor()
+	var doc: EditorDoc = map_editor.doc
+
+	# Places a trunk and separate leaves with real clicks on the add list.
+	_press_key(KEY_4)
+	await _wait(0.05)
+	await _click(_add_button("trunk"))
+	await _wait(0.05)
+	_expect(map_editor.add_kind == "trunk", "the add list has trunks")
+	var count: int = doc.hole.scenery.size()
+	var ground_x: float = _to_world(Vector2(140, 200)).x
+	await _click(_to_screen(Vector2(ground_x, doc.terrain.ground_y(ground_x) - 2.0)))
+	await _wait(0.1)
+	_expect(doc.hole.scenery.size() == count + 1, "clicking places one trunk")
+	_expect(str(doc.piece_of(map_editor.selection).get("kind", "")) == "trunk", "the new trunk is selected")
+
+	_press_key(KEY_4)
+	await _wait(0.05)
+	await _click(_add_button("leaves"))
+	await _wait(0.05)
+	_expect(map_editor.add_kind == "leaves", "the add list has leaves")
+	await _click(Vector2(90, 110))
+	await _wait(0.1)
+	_expect(doc.hole.scenery.size() == count + 2, "clicking places one set of leaves")
+	_expect(str(doc.piece_of(map_editor.selection).get("kind", "")) == "leaves", "the new leaves are selected")
+	await _save("editor_07b_tree_pieces")
+
+	# Drags an original tree's leaves away from its trunk, then its trunk elsewhere.
+	var trunk_index: int = -1
+	for i in doc.hole.scenery.size():
+		var piece: Dictionary = doc.hole.scenery[i]
+		if str(piece["kind"]) == "trunk" and absf(float(piece["x"]) - 20.0) < 1.0:
+			trunk_index = i
+	var original_leaves: Dictionary = { "type": "scenery", "index": trunk_index + 1 }
+	var original_trunk: Dictionary = { "type": "scenery", "index": trunk_index }
+	var trunk_x: float = float(doc.piece_of(original_trunk)["x"])
+	var at: Vector2 = _to_screen(doc.selection_center(original_leaves))
+	await _mouse_move(at)
+	await _mouse_button(at, true)
+	await _mouse_move(at + Vector2(70, -30))
+	await _mouse_button(at + Vector2(70, -30), false)
+	await _wait(0.1)
+	_expect(map_editor.selection == original_leaves, "clicking an original tree's leaves selects just them")
+	_expect(_to_screen(doc.selection_center(original_leaves)).distance_to(at + Vector2(70, -30)) < 3.0, "dragging moves those leaves")
+	_expect(is_equal_approx(float(doc.piece_of(original_trunk)["x"]), trunk_x), "and its trunk stays put")
+	await _save("editor_07c_leaves_moved")
+	map_editor.selection = {}
+	await _wait(0.05)
+
+
+func _add_button(kind: String) -> Vector2:
+	var x: float = 240.0
+	for entry in MapEditor.OBJECTS:
+		var width: float = float(PixelFont.text_width(str(entry["label"]))) + 8.0
+		if str(entry["kind"]) == kind:
+			return Vector2(x + width / 2.0, MapEditor.BOTTOM_Y + 8.0)
+		x += width + 2.0
+	return Vector2.ZERO
 
 
 func _ground_and_paint() -> void:
@@ -258,6 +321,23 @@ func _test_play() -> void:
 	await _wait(1.0)
 	_expect(main.game.ball.vel.x > 40.0, "a rotated pad fires along its face in real play (%.0f)" % main.game.ball.vel.x)
 	await _save("editor_16_pad_fired")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+
+
+# Putts in the real game with a real key press, from a test started on the green.
+func _one_press_putt() -> void:
+	var map_editor: MapEditor = editor()
+	map_editor.test_requested.emit(HoleIO.blank_hole("PUTT CHECK"), 950.0)
+	await _wait(0.6)
+	var main: Node = _test_main()
+	_expect(main.game.current_club().is_putter, "the putter comes up on the green")
+	_expect(main.game.meter.stage == SwingMeter.Stage.SWEEPING, "the putting meter is moving by itself")
+	await _save("editor_16b_putting_meter")
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(main.game.strokes == 1, "one press of Space putts")
+	await _save("editor_16c_putt_rolling")
 	_press_key(KEY_ESCAPE)
 	await _wait(0.3)
 

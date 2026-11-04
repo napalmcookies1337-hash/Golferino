@@ -49,6 +49,9 @@ func _process(delta: float) -> void:
 			_stand_at_ball()
 			_arm_angle = _address_angle()
 			_hinge = 0.0
+			# Rocks the putter in time with the moving meter.
+			if game.meter.stage == SwingMeter.Stage.SWEEPING:
+				_update_backswing()
 		HoleGame.Phase.SWING:
 			_update_backswing()
 		HoleGame.Phase.DOWNSWING:
@@ -75,7 +78,8 @@ func _on_phase_changed(_phase: int) -> void:
 func _update_backswing() -> void:
 	# The club rises with the meter, and holds at the set power on the way back.
 	var meter: SwingMeter = game.meter
-	var amount: float = meter.cursor if meter.stage == SwingMeter.Stage.RISING else meter.power
+	var following_cursor: bool = meter.stage == SwingMeter.Stage.RISING or meter.stage == SwingMeter.Stage.SWEEPING
+	var amount: float = meter.cursor if following_cursor else meter.power
 	var back: float = PUTT_BACK if game.current_club().is_putter else BACK_ANGLE
 	var hinge: float = 0.0 if game.current_club().is_putter else BACK_HINGE
 	_arm_angle = lerpf(_address_angle(), back, amount)

@@ -47,6 +47,8 @@ func _ready() -> void:
 	_test_imperfect_player_scores()
 	_test_no_spot_is_a_trap()
 	_test_trees_are_scenery()
+	_test_putting_is_one_press()
+	_test_tree_pieces()
 	_test_bounce_pads()
 	_test_pads_never_fire_into_water()
 	_test_rotated_hazards()
@@ -710,7 +712,8 @@ func _test_no_spot_is_a_trap() -> void:
 func _test_trees_are_scenery() -> void:
 	var plain: HoleData = _flat_hole({ "cup_x": 990.0 })
 	var wooded: HoleData = _flat_hole({ "cup_x": 990.0 })
-	wooded.tree_xs = PackedFloat32Array([200.0, 240.0, 300.0, 360.0])
+	for x: float in [200.0, 240.0, 300.0, 360.0]:
+		wooded.scenery.append_array(HoleIO.tree_pieces(x, 0))
 	_check(Obstacle.build_all(wooded, Terrain.new(wooded)).is_empty(), "trees create no obstacles")
 	var plain_game := HoleGame.new(plain, _clubs())
 	var wooded_game := HoleGame.new(wooded, _clubs())
@@ -722,6 +725,162 @@ func _test_trees_are_scenery() -> void:
 			game.tick(DT)
 			guard += 1
 	_check(is_equal_approx(plain_game.ball.pos.x, wooded_game.ball.pos.x), "trees don't change where a shot finishes")
+
+
+func _test_putting_is_one_press() -> void:
+	# The meter itself.
+	var meter := SwingMeter.new()
+	meter.start_sweep()
+	_check(meter.stage == SwingMeter.Stage.SWEEPING, "a sweep starts moving by itself")
+	var peak: float = 0.0
+	for _i in int(SwingMeter.SWEEP_TIME * 60.0) + 10:
+		meter.tick(DT)
+		peak = maxf(peak, meter.cursor)
+	_check(is_equal_approx(peak, 1.0) and meter.cursor < 1.0, "it turns around at the top")
+	for _i in int(SwingMeter.SWEEP_TIME * 120.0):
+		meter.tick(DT)
+		_check(meter.cursor >= 0.0 and meter.cursor <= 1.0, "it stays on the meter")
+	var at_press: float = meter.cursor
+	meter.press()
+	_check(meter.is_done(), "one press finishes it")
+	_check(is_equal_approx(meter.power, maxf(at_press, 0.02)) and meter.accuracy == 0.0, "it takes the power, and no accuracy")
+
+	# In play: on the green, the putter is ready and one press hits the ball.
+	var game: HoleGame = _game()
+	game.ball.place(1380.0)
+	game._begin_aim()
+	_check(game.current_club().is_putter, "the putter comes up on the green")
+	_check(game.meter.stage == SwingMeter.Stage.SWEEPING, "its meter is already moving")
+	var before: float = game.meter.cursor
+	for _i in 30:
+		game.tick(DT)
+	_check(game.meter.cursor != before, "the meter moves while aiming")
+	_check(game.phase == HoleGame.Phase.AIM and game.strokes == 0, "nothing happens until the press")
+	var set_power: float = game.meter.cursor
+	game.press_swing()
+	_check(game.meter.is_done(), "a single press sets the power")
+	_check(is_equal_approx(game.meter.power, set_power), "at the cursor's position")
+	game.press_swing()
+	game.press_swing()
+	var guard: int = 0
+	while game.phase == HoleGame.Phase.DOWNSWING and guard < 60:
+		game.tick(DT)
+		guard += 1
+	_check(game.strokes == 1, "one press is one stroke, even with extra presses (%d)" % game.strokes)
+	_check(game.phase == HoleGame.Phase.BALL_MOVING, "the ball is struck")
+	_check(game.last_quality == "", "putts have no quality message")
+	var putt_speed: float = absf(game.ball.vel.x)
+	var expected: float = game.current_club().max_speed * sqrt(set_power)
+	_check(absf(putt_speed - expected) < expected * 0.15, "the putt uses the power set (%.0f, expected %.0f)" % [putt_speed, expected])
+
+	# Accuracy can't change a putt at all.
+	var clean: Vector2 = ShotCalc.compute(_club("putter"), 0.5, 0.0, 0, 1, 1.0)["velocity"]
+	var early: Vector2 = ShotCalc.compute(_club("putter"), 0.5, 1.0, 0, 1, 1.0)["velocity"]
+	var late: Vector2 = ShotCalc.compute(_club("putter"), 0.5, -1.0, 0, 1, 1.0)["velocity"]
+	_check(clean == early and clean == late, "timing has no effect on a putt")
+
+	# Other clubs keep all three presses, and changing clubs switches the meter over.
+	var mixed: HoleGame = _game()
+	mixed.ball.place(1380.0)
+	mixed._begin_aim()
+	mixed.select_club(1)
+	_check(mixed.meter.stage == SwingMeter.Stage.IDLE, "picking the iron stops the sweep")
+	mixed.press_swing()
+	_check(mixed.phase == HoleGame.Phase.SWING and mixed.strokes == 0, "the iron's first press starts its meter")
+	mixed.press_swing()
+	_check(mixed.meter.stage == SwingMeter.Stage.RETURNING, "its second press sets power")
+	mixed.press_swing()
+	_check(mixed.meter.is_done(), "its third press sets accuracy")
+
+	var switched: HoleGame = _game()
+	switched.select_club(2)
+	_check(switched.meter.stage == SwingMeter.Stage.SWEEPING, "picking the putter off the green starts the sweep")
+	switched.select_club(0)
+	_check(switched.meter.stage == SwingMeter.Stage.IDLE, "and picking the driver stops it")
+	switched.select_club(2)
+	switched.press_swing()
+	for _i in 20:
+		switched.tick(DT)
+	_check(switched.strokes == 1, "putting off the green is also one press")
+
+	# After a putt that doesn't drop, the next one is ready to go.
+	var again: HoleGame = _game()
+	again.ball.place(1380.0)
+	again._begin_aim()
+	again.strike_with(0.05, 0.0)
+	var settle: int = 0
+	while again.phase != HoleGame.Phase.AIM and settle < 3000:
+		again.tick(DT)
+		settle += 1
+	_check(again.meter.stage == SwingMeter.Stage.SWEEPING, "the sweep is ready again for the next putt")
+
+
+func _test_tree_pieces() -> void:
+	# Every original tree has come apart into its two pieces.
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	var trunks: int = 0
+	var leaves: int = 0
+	for i in run.hole_count():
+		for piece: Dictionary in run.hole_at(i).scenery:
+			if str(piece["kind"]) == "trunk":
+				trunks += 1
+			else:
+				leaves += 1
+	_check(trunks > 0 and trunks == leaves, "original trees are a trunk and leaves each (%d, %d)" % [trunks, leaves])
+
+	# They can be placed separately.
+	var doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	var trunk: Dictionary = doc.add_object("trunk", Vector2(500, 298))
+	var leaf: Dictionary = doc.add_object("leaves", Vector2(700, 200))
+	_check(str(doc.piece_of(trunk)["kind"]) == "trunk" and str(doc.piece_of(leaf)["kind"]) == "leaves", "trunks and leaves are placed separately")
+	_check(doc.hole.scenery.size() == 2, "each placement adds exactly one piece")
+	_check(is_zero_approx(float(doc.piece_of(trunk)["height"])), "a trunk placed near the ground stands on it")
+	_check(doc.selection_center(leaf) == Vector2(700, 200), "leaves go exactly where placed")
+
+	# And moved separately: moving one leaves the other where it was.
+	var pieces := EditorDoc.new(HoleIO.blank_hole("T"))
+	pieces.hole.scenery = HoleIO.tree_pieces(500.0, 0)
+	var tree_trunk: Dictionary = { "type": "scenery", "index": 0 }
+	var tree_leaves: Dictionary = { "type": "scenery", "index": 1 }
+	var leaves_at: Vector2 = pieces.selection_center(tree_leaves)
+	pieces.move_selection(tree_trunk, Vector2(300, 290))
+	_check(is_equal_approx(float(pieces.piece_of(tree_trunk)["x"]), 300.0), "a trunk moves on its own")
+	_check(pieces.selection_center(tree_leaves) == leaves_at, "its leaves stay where they were")
+	var trunk_at: Vector2 = pieces.selection_center(tree_trunk)
+	pieces.move_selection(tree_leaves, Vector2(800, 120))
+	_check(pieces.selection_center(tree_leaves) == Vector2(800, 120), "leaves move on their own, anywhere")
+	_check(pieces.selection_center(tree_trunk) == trunk_at, "the trunk stays where it was")
+
+	# Clicking picks the piece under the mouse.
+	var clicking := EditorDoc.new(HoleIO.blank_hole("T"))
+	clicking.hole.scenery = HoleIO.tree_pieces(500.0, 0)
+	var ground: float = clicking.terrain.ground_y(500.0)
+	_check(int(clicking.pick(Vector2(500, ground - 8.0), 4.0).get("index", -1)) == 0, "clicking the trunk selects the trunk")
+	_check(int(clicking.pick(Vector2(500, ground - 40.0), 4.0).get("index", -1)) == 1, "clicking the leaves selects the leaves")
+
+	# A trunk can be lifted off the ground, then put back.
+	pieces.move_selection(tree_trunk, Vector2(300, 150))
+	_check(float(pieces.piece_of(tree_trunk)["height"]) > 100.0, "a trunk can be lifted")
+	pieces.rest_trunk_on_ground(tree_trunk)
+	_check(is_zero_approx(float(pieces.piece_of(tree_trunk)["height"])), "and rested back on the ground")
+	pieces.move_selection(tree_trunk, Vector2(300, 300.0 - EditorDoc.TRUNK_MIDDLE - 3.0))
+	_check(is_zero_approx(float(pieces.piece_of(tree_trunk)["height"])), "dragging near the ground snaps to it")
+
+	# The panel sets each piece, and they delete and undo separately.
+	_check(not pieces.can_rotate(tree_trunk) and not pieces.can_rotate(tree_leaves), "tree pieces don't rotate")
+	pieces.set_property(tree_leaves, "variant", 2.0)
+	_check(int(pieces.piece_of(tree_leaves)["variant"]) == 2, "the leaves' shape can be set")
+	pieces.set_property(tree_trunk, "height", 25.0)
+	_check(is_equal_approx(float(pieces.piece_of(tree_trunk)["height"]), 25.0), "a trunk's height can be set")
+	pieces.checkpoint()
+	pieces.delete_selection(tree_trunk)
+	_check(pieces.hole.scenery.size() == 1 and str(pieces.hole.scenery[0]["kind"]) == "leaves", "deleting a trunk keeps the leaves")
+	pieces.undo()
+	_check(pieces.hole.scenery.size() == 2, "undo brings the piece back")
+
+	# Pieces survive saving, separately placed.
+	var reloaded: HoleData = HoleIO.from_dict(JSON.parse_string(JSON.stringify(HoleIO.to_dict(pieces.hole))))
+	_check(reloaded.scenery == pieces.hole.scenery, "pieces survive being saved and loaded")
 
 
 func _floating_pad(rotation: float, center: Vector2 = Vector2(400, 200)) -> Dictionary:
@@ -969,7 +1128,7 @@ func _test_hole_files() -> void:
 		var copy_terrain := Terrain.new(copy)
 		var same: bool = copy.par == original.par and copy.title == original.title \
 				and is_equal_approx(copy.cup_x, original.cup_x) and is_equal_approx(copy.wind, original.wind) \
-				and copy.obstacles.size() == original.obstacles.size() and copy.tree_xs.size() == original.tree_xs.size()
+				and copy.obstacles.size() == original.obstacles.size() and copy.scenery == original.scenery
 		for x in range(0, original_terrain.length, 25):
 			if absf(copy_terrain.ground_y(float(x)) - original_terrain.ground_y(float(x))) > 0.01 \
 					or copy_terrain.surface_at(float(x)) != original_terrain.surface_at(float(x)):
@@ -994,6 +1153,21 @@ func _test_hole_files() -> void:
 	var messy_game := HoleGame.new(messy, _clubs())
 	messy_game.tick(DT)
 	_check(messy_game.phase == HoleGame.Phase.AIM, "a cleaned-up map can be played")
+
+	# Maps saved when trees were one piece split up on loading.
+	var old_map: HoleData = HoleIO.from_dict({
+		"points": [[0, 300], [1000, 300]],
+		"trees": [200.0, 500.0, 800.0, "junk"],
+	})
+	_check(old_map.scenery.size() == 6, "each old tree becomes two pieces (%d)" % old_map.scenery.size())
+	_check(str(old_map.scenery[0]["kind"]) == "trunk" and str(old_map.scenery[1]["kind"]) == "leaves", "a tree splits into a trunk and leaves")
+	_check(float(old_map.scenery[0]["x"]) == 200.0 and float(old_map.scenery[1]["x"]) == 200.0, "the pieces start together")
+	_check(int(old_map.scenery[3]["variant"]) == 1, "old trees keep their different leaf shapes")
+	var odd_scenery: HoleData = HoleIO.from_dict({
+		"points": [[0, 300], [1000, 300]],
+		"scenery": [{ "kind": "leaves", "x": 50, "variant": 99 }, { "kind": "dragon", "x": 3 }, { "kind": "trunk" }, 5],
+	})
+	_check(odd_scenery.scenery.size() == 1 and int(odd_scenery.scenery[0]["variant"]) == 2, "bad scenery is cleaned up")
 
 
 func _clean_library() -> MapLibrary:
@@ -1136,13 +1310,13 @@ func _test_editor_ground_and_paint() -> void:
 
 func _test_editor_objects() -> void:
 	var doc := EditorDoc.new(HoleIO.blank_hole("T"))
-	for kind: String in ["pad", "cart", "windmill", "sprinkler", "goose", "tree"]:
+	for kind: String in ["pad", "cart", "windmill", "sprinkler", "goose", "trunk", "leaves"]:
 		var selection: Dictionary = doc.add_object(kind, Vector2(500, 250))
 		var center: Vector2 = doc.selection_center(selection)
 		_check(not doc.pick(center, 4.0).is_empty(), "a placed %s can be clicked" % kind)
 		doc.move_selection(selection, center + Vector2(100, 0))
 		_check(absf(doc.selection_center(selection).x - (center.x + 100.0)) < 1.0, "a %s can be moved" % kind)
-	_check(doc.hole.obstacles.size() == 5 and doc.hole.tree_xs.size() == 1, "everything was added")
+	_check(doc.hole.obstacles.size() == 5 and doc.hole.scenery.size() == 2, "everything was added")
 	_check(Obstacle.build_all(doc.hole, doc.terrain).size() == 5, "every placed object builds")
 
 	# Rotation: pads, windmills and sprinklers only.
@@ -1214,8 +1388,9 @@ func _test_editor_objects() -> void:
 	_check(doc.can_delete(by_kind["pad"]) and not doc.can_delete({ "type": "tee" }) and not doc.can_delete({ "type": "cup" }), "the tee and cup can't be deleted")
 	doc.delete_selection({ "type": "obstacle", "index": 0 })
 	_check(doc.hole.obstacles.size() == count - 1, "objects can be deleted")
-	doc.delete_selection({ "type": "tree", "index": 0 })
-	_check(doc.hole.tree_xs.is_empty(), "trees can be deleted")
+	doc.delete_selection({ "type": "scenery", "index": 0 })
+	doc.delete_selection({ "type": "scenery", "index": 0 })
+	_check(doc.hole.scenery.is_empty(), "tree pieces can be deleted")
 
 	# A map made entirely in the editor plays, saves and loads.
 	var made := EditorDoc.new(HoleIO.blank_hole("MADE"))
@@ -1550,9 +1725,10 @@ func _test_every_hole_is_valid() -> void:
 		_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "%s has its cup on a green" % label)
 		_check(terrain.surface_at(hole.cup_x - 30.0) == Surface.Type.GREEN, "%s has green before the cup" % label)
 		_check(absf(terrain.slope(hole.cup_x - 20.0)) < 0.28, "%s has a green that can hold a ball" % label)
-		for x: float in hole.tree_xs:
-			_check(absf(x - hole.tee_x) > 45.0, "%s has no tree on the tee" % label)
-			_check(absf(x - hole.cup_x) > 60.0, "%s has no tree on the pin" % label)
+		_check(not hole.scenery.is_empty(), "%s has trees" % label)
+		for piece: Dictionary in hole.scenery:
+			_check(absf(float(piece["x"]) - hole.tee_x) > 45.0, "%s has no tree on the tee" % label)
+			_check(absf(float(piece["x"]) - hole.cup_x) > 60.0, "%s has no tree on the pin" % label)
 		for obstacle in Obstacle.build_all(hole, terrain):
 			kinds[obstacle.kind] = maxi(int(kinds.get(obstacle.kind, -1)), 0)
 			if not kinds.has("first_%s" % obstacle.kind):

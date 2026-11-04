@@ -34,7 +34,8 @@ const OBJECTS: Array[Dictionary] = [
 	{ "label": "MILL", "kind": "windmill" },
 	{ "label": "SPRINKLER", "kind": "sprinkler" },
 	{ "label": "GOOSE", "kind": "goose" },
-	{ "label": "TREE", "kind": "tree" },
+	{ "label": "TRUNK", "kind": "trunk" },
+	{ "label": "LEAVES", "kind": "leaves" },
 ]
 const HINTS := {
 	Tool.SELECT: "DRAG TO MOVE. Q/E OR THE RING ROTATES, HOLD SHIFT FOR 15 DEG. DEL REMOVES.",
@@ -54,6 +55,7 @@ var camera: Camera2D
 var ui: EditorUI
 var maps_open: bool = true
 
+var _scenery_layer: Node2D
 var _world: Node2D
 var _obstacle_view: ObstacleView
 var _overlay: Node2D
@@ -89,6 +91,10 @@ func _ready() -> void:
 	_background = BackgroundView.new()
 	_background.setup(camera)
 	add_child(_background)
+
+	# Kept apart from the ground, so that tree pieces can redraw live while being dragged.
+	_scenery_layer = Node2D.new()
+	add_child(_scenery_layer)
 
 	_world = Node2D.new()
 	add_child(_world)
@@ -475,6 +481,12 @@ func rest_pad_on_ground() -> void:
 	_refresh_objects()
 
 
+func rest_trunk_on_ground() -> void:
+	doc.checkpoint()
+	doc.rest_trunk_on_ground(selection)
+	_refresh_objects()
+
+
 # --- Building the view ---
 
 func _rebuild_world() -> void:
@@ -482,9 +494,6 @@ func _rebuild_world() -> void:
 		_world.remove_child(child)
 		child.queue_free()
 	doc.rebake()
-	var trees := TreeView.new()
-	trees.setup(doc.hole, doc.terrain)
-	_world.add_child(trees)
 	var terrain_view := TerrainView.new()
 	terrain_view.setup(doc.terrain)
 	_world.add_child(terrain_view)
@@ -498,6 +507,13 @@ func _rebuild_world() -> void:
 
 
 func _refresh_objects() -> void:
+	for child in _scenery_layer.get_children():
+		_scenery_layer.remove_child(child)
+		child.queue_free()
+	var trees := TreeView.new()
+	trees.setup(doc.hole, doc.terrain)
+	_scenery_layer.add_child(trees)
+
 	var obstacles: Array[Obstacle] = Obstacle.build_all(doc.hole, doc.terrain)
 	# Shown in the middle of their routes, where their selection handle is.
 	for obstacle in obstacles:
@@ -798,6 +814,9 @@ func _draw_side_panel(canvas: EditorUI) -> void:
 	if str(doc.entry_of(selection).get("kind", "")) == "pad":
 		canvas.button(Rect2(x - 2.0, y + 2.0, 640.0 - PANEL_X - 8.0, 13), "REST ON GROUND", rest_pad_on_ground)
 		y += 18.0
+	if str(doc.piece_of(selection).get("kind", "")) == "trunk":
+		canvas.button(Rect2(x - 2.0, y + 2.0, 640.0 - PANEL_X - 8.0, 13), "REST ON GROUND", rest_trunk_on_ground)
+		y += 18.0
 	if doc.can_delete(selection):
 		canvas.button(Rect2(x - 2.0, y + 2.0, 640.0 - PANEL_X - 8.0, 13), "DELETE", delete_selected)
 		y += 18.0
@@ -830,7 +849,9 @@ func _selection_name() -> String:
 	if type == "obstacle":
 		var names := { "pad": "BOUNCE PAD", "cart": "GOLF CART", "windmill": "WINDMILL", "sprinkler": "SPRINKLER", "goose": "GOOSE" }
 		return str(names.get(str(doc.entry_of(selection)["kind"]), "OBJECT"))
-	var plain := { "tee": "TEE", "cup": "CUP", "tree": "TREE (SCENERY)", "water": "WATER" }
+	if type == "scenery":
+		return "TRUNK (SCENERY)" if str(doc.piece_of(selection)["kind"]) == "trunk" else "LEAVES (SCENERY)"
+	var plain := { "tee": "TEE", "cup": "CUP", "water": "WATER" }
 	return str(plain.get(type, ""))
 
 

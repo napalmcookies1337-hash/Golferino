@@ -9,12 +9,13 @@ mode comes later: leave room for it, do not build it yet.
 
 | Area | Decision |
 |---|---|
-| Swing | Classic 3-click: start, set power, set accuracy |
+| Swing | Driver and Iron use the classic 3-click: start, set power, set accuracy |
+| Putting | One press. With the Putter in hand the meter sweeps by itself, and pressing takes the power at that moment. No accuracy check, and no sweet spot shown |
 | Missed accuracy | Early = pops up high and short. Late = low and hot |
 | Shot control | Each club sets range and a default angle. Player adjusts the launch angle within the club's limits (Driver 10-45, Iron 15-75, Putter stays on the ground) and adds backspin or topspin. Changed from "clubs + spin" after playtesting Milestone 1 |
 | Clubs | Fixed bag: Driver, Iron, Putter. Short approaches use the Iron at low power |
 | Direction | The golfer hits toward the cup, with no manual flip (removed after playtesting Milestone 1). If no club has a safe shot that way, they turn and play back with the Iron offered, and the HUD says why |
-| Trees | Scenery only, with no effect on the ball. Solid trees were tried and removed after playtesting: in a side view they block everything behind them |
+| Trees | Scenery only, with no effect on the ball. Solid trees were tried and removed after playtesting: in a side view they block everything behind them. A tree is two separate pieces, a trunk and one set of leaves, placed and moved independently. Older maps' trees split into pieces on loading |
 | Bounce pads | Plain rectangles (not ramps), on the ground or floating anywhere, at any rotation. The upper half is a spring that fires the ball straight out. The back and lower ends are ordinary solid bounces. Usually angled away from the hole as a hazard, sometimes toward it as a reward. Green faces the cup, orange faces away, yellow is flat. Weaker on repeat bounces, and stops after 3 per shot. The aim preview includes them. On the ground, an angled pad settles in around its middle. Original holes never have a pad that fires into water |
 | Map editor | In-game, from the title menu, mouse and keyboard. Drag ground points, paint surfaces, place and rotate objects, set every option in a side panel, with undo. Test from the tee or any spot; Esc returns exactly where you were and scores don't count |
 | Rotation | Pads, windmills and sprinklers rotate, with collisions following. Carts and geese stay level, because they travel along routes |

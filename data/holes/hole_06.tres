@@ -12,4 +12,4 @@ cup_x = 650.0
 points = PackedVector2Array(0, 300, 50, 310, 110, 312, 250, 316, 400, 318, 500, 316, 560, 306, 650, 302, 760, 304, 830, 285, 960, 250)
 surface_spans = [{"from": 50, "to": 110, "type": 4}, {"from": 110, "to": 535, "type": 1}, {"from": 535, "to": 790, "type": 2}]
 obstacles = [{"kind": "windmill", "x": 420.0, "turn_speed": 1.2}, {"kind": "pad", "x": 510.0, "rotation": -30.0}]
-tree_xs = PackedFloat32Array(16, 840, 920)
+scenery = [{"kind": "trunk", "x": 16.0, "height": 0.0}, {"kind": "leaves", "x": 16.0, "height": 37.0, "variant": 0}, {"kind": "trunk", "x": 840.0, "height": 0.0}, {"kind": "leaves", "x": 840.0, "height": 41.0, "variant": 1}, {"kind": "trunk", "x": 920.0, "height": 0.0}, {"kind": "leaves", "x": 920.0, "height": 45.0, "variant": 2}]

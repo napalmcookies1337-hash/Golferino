@@ -6,15 +6,21 @@ extends RefCounted
 const MIN_POINT_GAP := 2.0
 const MAX_LENGTH := 8000.0
 const KNOWN_KINDS := ["pad", "cart", "windmill", "sprinkler", "goose"]
+const LEAF_VARIANTS := 3
+
+
+## The two pieces of a whole tree, arranged to look like one tree.
+static func tree_pieces(x: float, variant: int) -> Array:
+	return [
+		{ "kind": "trunk", "x": x, "height": 0.0 },
+		{ "kind": "leaves", "x": x, "height": 37.0 + 4.0 * float(variant), "variant": variant },
+	]
 
 
 static func to_dict(hole: HoleData) -> Dictionary:
 	var points: Array = []
 	for point in hole.points:
 		points.append([point.x, point.y])
-	var trees: Array = []
-	for x: float in hole.tree_xs:
-		trees.append(x)
 	return {
 		"title": hole.title,
 		"par": hole.par,
@@ -25,7 +31,7 @@ static func to_dict(hole: HoleData) -> Dictionary:
 		"surface_spans": hole.surface_spans.duplicate(true),
 		"water_spans": hole.water_spans.duplicate(true),
 		"obstacles": hole.obstacles.duplicate(true),
-		"trees": trees,
+		"scenery": hole.scenery.duplicate(true),
 	}
 
 
@@ -48,14 +54,37 @@ static func from_dict(data: Variant) -> HoleData:
 	hole.surface_spans = _read_spans(data.get("surface_spans", []), "type")
 	hole.water_spans = _read_spans(data.get("water_spans", []), "level")
 	hole.obstacles = _read_obstacles(data.get("obstacles", []))
-	var trees := PackedFloat32Array()
-	var tree_list: Variant = data.get("trees", [])
-	if tree_list is Array:
-		for x: Variant in tree_list:
-			if x is float or x is int:
-				trees.append(clampf(float(x), 0.0, length))
-	hole.tree_xs = trees
+	hole.scenery = _read_scenery(data, length)
 	return hole
+
+
+# Maps saved before trees had separate pieces list whole trees, which split up here.
+static func _read_scenery(data: Dictionary, length: float) -> Array:
+	var pieces: Array = []
+	var raw: Variant = data.get("scenery", [])
+	if raw is Array:
+		for entry: Variant in raw:
+			if not entry is Dictionary or not _is_number(entry.get("x")):
+				continue
+			var kind: String = str(entry.get("kind", ""))
+			if kind != "trunk" and kind != "leaves":
+				continue
+			var piece: Dictionary = {
+				"kind": kind,
+				"x": clampf(float(entry["x"]), 0.0, length),
+				"height": _number(entry, "height", 0.0),
+			}
+			if kind == "leaves":
+				piece["variant"] = clampi(int(_number(entry, "variant", 0.0)), 0, LEAF_VARIANTS - 1)
+			pieces.append(piece)
+	var old_trees: Variant = data.get("trees", [])
+	if old_trees is Array:
+		var index: int = 0
+		for x: Variant in old_trees:
+			if _is_number(x):
+				pieces.append_array(tree_pieces(clampf(float(x), 0.0, length), index % LEAF_VARIANTS))
+				index += 1
+	return pieces
 
 
 ## A plain starting map: flat ground with a tee and a green.

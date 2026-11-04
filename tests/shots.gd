@@ -46,6 +46,7 @@ func _test_real_input() -> void:
 	await _wait(0.05)
 	_expect(game().spin == 0, "S takes it back off")
 
+	# The driver keeps the three-press swing. One-press putting is in editor_check.
 	_press_key(KEY_SPACE)
 	await _wait(0.6)
 	_expect(game().phase == HoleGame.Phase.SWING, "Space starts the swing")
