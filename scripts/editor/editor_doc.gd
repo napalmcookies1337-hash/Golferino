@@ -491,6 +491,10 @@ func _hits_object(entry: Dictionary, at: Vector2, radius: float) -> bool:
 			return Geometry2D.get_closest_point_to_segment(at, mill.base(), mill.hub()).distance_to(at) < radius + 14.0
 		"sprinkler":
 			return center.distance_to(at) < radius + 10.0
+		"cart":
+			return absf(at.x - center.x) < radius + CartObstacle.DRAWN_HALF_WIDTH \
+					and at.y > center.y + CartObstacle.RIDE_HEIGHT - CartObstacle.DRAWN_HEIGHT - radius \
+					and at.y < center.y + CartObstacle.RIDE_HEIGHT + radius
 		_:
 			return center.distance_to(at) < radius + 14.0
 

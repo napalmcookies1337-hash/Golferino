@@ -803,6 +803,29 @@ func _test_putting_is_one_press() -> void:
 		switched.tick(DT)
 	_check(switched.strokes == 1, "putting off the green is also one press")
 
+	# The aim line follows the meter, and shows where the putt will really finish.
+	var aiming: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	aiming.select_club(2)
+	aiming.meter.cursor = 0.2
+	var short_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
+	aiming.meter.cursor = 0.9
+	var long_reach: float = absf(Vector2(aiming.preview()["landing"]).x - aiming.ball.pos.x)
+	_check(long_reach > short_reach * 3.0, "the aim line follows the meter (%.0f, %.0f)" % [short_reach, long_reach])
+	aiming.meter.cursor = 0.6
+	var promised: float = Vector2(aiming.preview()["landing"]).x
+	aiming.press_swing()
+	var rolling: int = 0
+	while aiming.phase != HoleGame.Phase.AIM and rolling < 2000:
+		aiming.tick(DT)
+		rolling += 1
+	_check(absf(aiming.ball.pos.x - promised) < 2.0, "the putt finishes where the aim line showed (%.0f, %.0f)" % [aiming.ball.pos.x, promised])
+
+	var unmoved: HoleGame = HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	unmoved.select_club(1)
+	var iron_reach: float = Vector2(unmoved.preview()["landing"]).x
+	unmoved.meter.cursor = 0.1
+	_check(is_equal_approx(Vector2(unmoved.preview()["landing"]).x, iron_reach), "other clubs still preview at full power")
+
 	# After a putt that doesn't drop, the next one is ready to go.
 	var again: HoleGame = _game()
 	again.ball.place(1380.0)
@@ -1509,6 +1532,45 @@ func _test_cart() -> void:
 	_run_to_stop(sim)
 	_check(hits.size() >= 1 and hits[0] == "cart", "a rolling ball hits the cart")
 	_check(sim.pos.x < 300.0, "the cart stops a rolling ball (%.0f)" % sim.pos.x)
+
+	# The cart is bigger than the golfer, and it's solid where it looks solid.
+	_check(CartObstacle.DRAWN_HEIGHT > 32.0 * 1.3, "the cart is clearly taller than the golfer")
+	_check(CartObstacle.DRAWN_HALF_WIDTH * 2.0 > 32.0 * 1.5, "the cart is clearly longer than the golfer is tall")
+	var body_reach: float = CartObstacle.HALF_LENGTH + CartObstacle.RADIUS
+	_check(absf(body_reach - CartObstacle.DRAWN_HALF_WIDTH) <= 2.0, "its body collision matches its drawn length")
+	var roof_top: float = CartObstacle.RIDE_HEIGHT + CartObstacle.ROOF_RISE + CartObstacle.ROOF_RADIUS
+	_check(absf(roof_top - CartObstacle.DRAWN_HEIGHT) <= 2.0, "its roof collision matches its drawn height")
+
+	var sized: Dictionary = _hazard_sim({ "kind": "cart", "from": 400.0, "to": 400.0, "speed": 0.0 })
+	var roof_sim: BallSim = sized["sim"]
+	var parked: CartObstacle = sized["obstacle"]
+	var roof_y: float = parked.center().y - CartObstacle.ROOF_RISE
+	_start_ball(roof_sim, Vector2(400, roof_y - 30.0), Vector2(0, 100))
+	for _i in 30:
+		roof_sim.step(DT)
+		if roof_sim.vel.y < 0.0:
+			break
+	_check(roof_sim.vel.y < 0.0 and roof_sim.pos.y < roof_y, "a ball dropping onto the roof bounces off it")
+	var over_sim: BallSim = _hazard_sim({ "kind": "cart", "from": 400.0, "to": 400.0, "speed": 0.0 })["sim"]
+	_start_ball(over_sim, Vector2(340, roof_y - 20.0), Vector2(200, -40))
+	for _i in 30:
+		over_sim.step(DT)
+	_check(over_sim.vel.x > 190.0 and over_sim.pos.x > 440.0, "a ball flying over the roof is untouched")
+	var side_sim: BallSim = _hazard_sim({ "kind": "cart", "from": 400.0, "to": 400.0, "speed": 0.0 })["sim"]
+	_start_ball(side_sim, Vector2(340, 290), Vector2(200, -1))
+	for _i in 30:
+		side_sim.step(DT)
+	_check(side_sim.pos.x < 372.0, "the wider body stops a low shot at its end (%.0f)" % side_sim.pos.x)
+
+	# Clicking anywhere on the bigger cart selects it in the editor.
+	var pick_doc := EditorDoc.new(HoleIO.blank_hole("T"))
+	var picked_cart: Dictionary = pick_doc.add_object("cart", Vector2(500, 290))
+	var pick_center: Vector2 = pick_doc.selection_center(picked_cart)
+	var ground_y: float = pick_center.y + CartObstacle.RIDE_HEIGHT
+	_check(pick_doc.pick(Vector2(pick_center.x, ground_y - 42.0), 2.0) == picked_cart, "clicking its roof selects it")
+	_check(pick_doc.pick(Vector2(pick_center.x + 28.0, ground_y - 12.0), 2.0) == picked_cart, "clicking its nose selects it")
+	_check(pick_doc.pick(Vector2(pick_center.x - 28.0, ground_y - 12.0), 2.0) == picked_cart, "clicking its back selects it")
+	_check(pick_doc.pick(Vector2(pick_center.x, ground_y - 80.0), 2.0).is_empty(), "clicking above it doesn't")
 
 	# A cart catching up with a slow ball must not shove it along the whole path.
 	var chase: Dictionary = _hazard_sim({ "kind": "cart", "from": 200.0, "to": 900.0, "speed": 60.0 })

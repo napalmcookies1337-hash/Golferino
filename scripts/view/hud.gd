@@ -149,7 +149,10 @@ func _draw_meter() -> void:
 	var total: float = miss_width + METER_POWER_WIDTH
 
 	_panel(Rect2(METER_LEFT - 3.0, METER_TOP - 3.0, total + 6.0, METER_HEIGHT + 6.0))
-	draw_rect(Rect2(METER_LEFT, METER_TOP, miss_width, METER_HEIGHT), Color("5c2030"))
+	# Putts have no accuracy check, so they have no miss zone or sweet spot.
+	var is_putt: bool = game.current_club().is_putter
+	if not is_putt:
+		draw_rect(Rect2(METER_LEFT, METER_TOP, miss_width, METER_HEIGHT), Color("5c2030"))
 
 	var segments: int = 27
 	for i in segments:
@@ -162,8 +165,6 @@ func _draw_meter() -> void:
 		var seg_x: float = sweet_x + t * METER_POWER_WIDTH
 		draw_rect(Rect2(seg_x, METER_TOP, METER_POWER_WIDTH / float(segments) + 1.0, METER_HEIGHT), color)
 
-	# Putts have no accuracy check, so they don't show a sweet spot.
-	var is_putt: bool = game.current_club().is_putter
 	if not is_putt:
 		var window: float = game.meter.perfect_window * METER_POWER_WIDTH
 		draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), Color("ffffff"))
@@ -193,9 +194,11 @@ func _draw_meter() -> void:
 
 func _draw_hint() -> void:
 	if game.phase == HoleGame.Phase.AIM:
-		PixelFont.draw_centered(
-				self, "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  R RESTART",
-				SCREEN_WIDTH / 2.0, 346.0, TEXT)
+		var hint: String = "UP/DOWN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  R RESTART"
+		# Putts stay on the ground, so angle and spin do nothing.
+		if game.current_club().is_putter:
+			hint = "A/D LOOK  Q/E CLUB  R RESTART"
+		PixelFont.draw_centered(self, hint, SCREEN_WIDTH / 2.0, 346.0, TEXT)
 
 
 func _draw_result() -> void:

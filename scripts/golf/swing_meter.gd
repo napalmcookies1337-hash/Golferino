@@ -9,6 +9,8 @@ enum Stage { IDLE, RISING, RETURNING, DONE, SWEEPING }
 
 ## Time for a putt's cursor to go from empty to full, or back.
 const SWEEP_TIME := 1.3
+## A press can't set less power than this.
+const MIN_PRESS_POWER := 0.02
 
 const RISE_TIME := 1.05
 const RETURN_TIME := 0.92
@@ -48,14 +50,14 @@ func start_sweep() -> void:
 func press() -> void:
 	match stage:
 		Stage.SWEEPING:
-			power = clampf(cursor, 0.02, 1.0)
+			power = clampf(cursor, MIN_PRESS_POWER, 1.0)
 			accuracy = 0.0
 			stage = Stage.DONE
 		Stage.IDLE:
 			reset()
 			stage = Stage.RISING
 		Stage.RISING:
-			power = clampf(cursor, 0.02, 1.0)
+			power = clampf(cursor, MIN_PRESS_POWER, 1.0)
 			stage = Stage.RETURNING
 		Stage.RETURNING:
 			_lock_accuracy()

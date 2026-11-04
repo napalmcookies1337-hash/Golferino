@@ -69,20 +69,48 @@ func _draw_chevron(at: Vector2, direction: Vector2, color: Color) -> void:
 
 
 func _draw_cart(cart: CartObstacle) -> void:
-	var at: Vector2 = (cart.center() + Vector2(0, -2.5)).round()
-	var d: float = cart.direction
-	draw_rect(Rect2(at.x - 15, at.y - 2, 30, 9), OUTLINE)
-	draw_rect(Rect2(at.x - 14, at.y - 1, 28, 7), Color("f7f4e6"))
-	draw_rect(Rect2(at.x - 14, at.y + 3, 28, 2), Color("2b8c8c"))
-	draw_rect(Rect2(at.x - 12, at.y - 13, 24, 2), Color("2b8c8c"))
-	draw_rect(Rect2(at.x - 11 * d - 1, at.y - 11, 2, 10), OUTLINE)
-	draw_rect(Rect2(at.x + 10 * d - 1, at.y - 11, 2, 10), OUTLINE)
-	# The driver, facing the way the cart is going.
-	draw_rect(Rect2(at.x - 3, at.y - 6, 5, 5), Color("e8c34a"))
-	draw_circle(at + Vector2(0, -8), 2.5, Color("f0b98a"))
-	for side: float in [-9.0, 9.0]:
-		draw_circle(at + Vector2(side, 7), 3.5, OUTLINE)
-		draw_rect(Rect2(at.x + side - 1, at.y + 6, 2, 2), Color("8d97a8"))
+	# Drawn facing +x from a point on the ground, then mirrored for the way it's going.
+	var ground: Vector2 = (cart.center() + Vector2(0, CartObstacle.RIDE_HEIGHT)).round()
+	draw_set_transform(ground, 0.0, Vector2(cart.direction, 1.0))
+
+	# The golf bag on the back.
+	draw_rect(Rect2(-30, -34, 8, 22), OUTLINE)
+	draw_rect(Rect2(-29, -33, 6, 20), Color("a92b35"))
+	draw_rect(Rect2(-28, -38, 1, 5), Color("c7ccd6"))
+	draw_rect(Rect2(-25, -40, 1, 7), Color("c7ccd6"))
+
+	# Roof posts, behind the driver.
+	draw_rect(Rect2(-21, -44, 3, 26), OUTLINE)
+	draw_rect(Rect2(18, -44, 3, 22), OUTLINE)
+
+	# The driver, sitting at about the golfer's own scale.
+	draw_rect(Rect2(-9, -31, 11, 16), OUTLINE)
+	draw_rect(Rect2(-8, -30, 9, 14), Color("e8c34a"))
+	draw_circle(Vector2(-3, -35), 5.5, OUTLINE)
+	draw_circle(Vector2(-3, -35), 4.5, Color("f0b98a"))
+	draw_rect(Rect2(-8, -40, 10, 4), Color("f7f4e6"))
+	draw_rect(Rect2(2, -37, 4, 1), Color("f7f4e6"))
+	# Arm reaching to the steering wheel.
+	draw_line(Vector2(-1, -25), Vector2(9, -23), OUTLINE, 3.0)
+	draw_line(Vector2(9, -27), Vector2(13, -20), OUTLINE, 2.0)
+
+	# The body: a long low tub with a raised nose.
+	draw_rect(Rect2(-31, -21, 62, 15), OUTLINE)
+	draw_rect(Rect2(-30, -20, 60, 13), Color("f7f4e6"))
+	draw_rect(Rect2(-30, -11, 60, 4), Color("2b8c8c"))
+	draw_rect(Rect2(12, -25, 19, 6), OUTLINE)
+	draw_rect(Rect2(13, -24, 17, 6), Color("f7f4e6"))
+	draw_rect(Rect2(28, -19, 2, 3), Color("ffe25a"))
+
+	# The roof.
+	draw_rect(Rect2(-29, -47, 58, 5), OUTLINE)
+	draw_rect(Rect2(-28, -46, 56, 3), Color("2b8c8c"))
+
+	# Wheels.
+	for side: float in [-19.0, 19.0]:
+		draw_circle(Vector2(side, -6), 7.0, OUTLINE)
+		draw_circle(Vector2(side, -6), 3.0, Color("8d97a8"))
+	draw_set_transform(Vector2.ZERO)
 
 
 func _draw_windmill(mill: WindmillObstacle) -> void:
