@@ -31,6 +31,8 @@ var _hinge: float = 0.0
 var _phase_timer: float = 0.0
 var _top_angle: float = 0.0
 var _top_hinge: float = 0.0
+var _last_phase: int = -1
+var _back_from_rival: bool = false
 
 
 func setup(p_game: HoleGame) -> void:
@@ -50,6 +52,8 @@ func _process(delta: float) -> void:
 
 
 func _update_pose() -> void:
+	# Steps aside while the rival plays its turn.
+	visible = game.phase != HoleGame.Phase.RIVAL_TURN
 	match game.phase:
 		HoleGame.Phase.AIM:
 			_stand_at_ball()
@@ -62,8 +66,16 @@ func _update_pose() -> void:
 			var eased: float = t * t
 			_arm_angle = lerpf(_top_angle, _address_angle(), eased)
 			_hinge = lerpf(_top_hinge, 0.0, eased)
-		HoleGame.Phase.BALL_MOVING, HoleGame.Phase.PENALTY, HoleGame.Phase.COMPLETE:
+		HoleGame.Phase.BALL_MOVING, HoleGame.Phase.PENALTY:
 			_follow_through(_phase_timer)
+		HoleGame.Phase.COMPLETE:
+			# Coming back after the rival's winning or losing shot isn't a swing of our own.
+			if _back_from_rival:
+				_stand_at_ball()
+				_arm_angle = _address_angle()
+				_hinge = 0.0
+			else:
+				_follow_through(_phase_timer)
 		HoleGame.Phase.RIVAL_TURN, HoleGame.Phase.OUT_OF_STROKES:
 			_stand_at_ball()
 			_arm_angle = _address_angle()
@@ -91,6 +103,8 @@ func _club() -> ClubData:
 
 func _on_phase_changed(_phase: int) -> void:
 	_phase_timer = 0.0
+	_back_from_rival = _last_phase == HoleGame.Phase.RIVAL_TURN
+	_last_phase = game.phase
 	if game.phase == HoleGame.Phase.DOWNSWING:
 		_top_angle = _arm_angle
 		_top_hinge = _hinge

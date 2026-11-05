@@ -382,6 +382,13 @@ func _test_out_of_strokes() -> void:
 	_expect(main.run_state.spare == RunState.START_SPARE and main.run_state.coins == 0, "a new run starts fresh")
 
 
+func _find_player_view() -> GolferView:
+	for child in main._world.get_children():
+		if child is GolferView and not child is RivalView:
+			return child
+	return null
+
+
 func _find_rival_view() -> RivalView:
 	for child in main._world.get_children():
 		if child is RivalView:
@@ -403,7 +410,9 @@ func _test_duel() -> void:
 	var rival: Rival = game().rival
 	_expect(rival != null, "the last hole brings out the rival")
 	var rival_view: RivalView = _find_rival_view()
+	var player_view: GolferView = _find_player_view()
 	_expect(not rival_view.visible, "the rival stays off screen during the player's turn")
+	_expect(player_view.visible, "the player is on screen for their own turn")
 	await _save("duel_01_tee")
 	game().select_club(0)
 	game().strike_with(0.85, 0.0)
@@ -412,6 +421,7 @@ func _test_duel() -> void:
 	_expect(game().phase == HoleGame.Phase.RIVAL_TURN, "the rival takes its turn")
 	await _wait(0.5)
 	_expect(rival_view.visible, "the rival appears for its own turn")
+	_expect(not player_view.visible, "the player steps off screen during the rival's turn")
 	await _save("duel_02_rival_thinking")
 	while rival.stage == Rival.Stage.THINKING:
 		await get_tree().physics_frame
@@ -424,6 +434,7 @@ func _test_duel() -> void:
 	_expect(game().phase == HoleGame.Phase.AIM, "then it's the player's turn")
 	await _wait(0.6)
 	_expect(not rival_view.visible, "and leaves again after it")
+	_expect(player_view.visible, "and the player comes back")
 	await _save("duel_05_your_turn")
 	_expect(rival.strokes >= 1, "the rival has played")
 
