@@ -37,6 +37,7 @@ func _run() -> void:
 	await _test_coin_and_card()
 	await _test_rubber_ball()
 	await _test_full_power()
+	await _test_reactions()
 	await _save_cup_closeup()
 	await _test_pause()
 	await _test_out_of_strokes()
@@ -342,11 +343,70 @@ func _first_coin() -> CoinObstacle:
 	return null
 
 
+# The golfer's moods, the music for each place, and what a clean strike sets off.
+func _test_reactions() -> void:
+	main.run.hole_index = 1
+	main.load_current_hole()
+	await _wait(0.6)
+	_expect(Sound.current_music == "course", "the course has its own music")
+	var golfer: GolferView = _find_player_view()
+	game().ball.state = BallSim.State.IN_WATER
+	game()._on_ball_hazard(game().ball.pos, "water")
+	await _wait(0.6)
+	_expect(golfer._head_drop > 0.0, "the golfer hangs their head at a penalty")
+	await _save("reaction_01_penalty")
+	await _wait(HoleGame.PENALTY_TIME)
+	_expect(golfer._head_drop == 0.0, "and looks up again for the next shot")
+
+	game().select_club(0)
+	game().strike_with(1.0, 0.0)
+	await _wait(0.02)
+	_expect(main._hit_stop > 0.0, "a full power strike holds the picture for a moment")
+	await _wait(0.2)
+	await _save("reaction_02_full_power_streak")
+	_expect(game().phase == HoleGame.Phase.BALL_MOVING, "and the shot still carries on")
+
+	# Holed from far away: the golfer jogs over and celebrates beside the cup.
+	game().ball.state = BallSim.State.HOLED
+	game().ball.pos = Vector2(game().hole.cup_x, game().terrain.rim_y)
+	game()._on_ball_holed()
+	await _wait(0.5)
+	_expect(golfer.position.distance_to(Vector2(game().hole.cup_x, golfer.position.y)) <= GolferView.RUN_IN_DISTANCE, "the golfer is on the way to the cup")
+	await _save("reaction_03_jogging_in")
+	await _wait(1.8)
+	_expect(absf(absf(golfer.position.x - game().hole.cup_x) - GolferView.CELEBRATE_GAP) <= 1.0, "and arrives beside it")
+	_expect(golfer._cheering, "and celebrates")
+	await _save("reaction_04_cheer")
+	_press_key(KEY_SPACE)
+	await _wait(0.6)
+	_expect(main.shop != null, "the shop opens after the hole")
+	_expect(Sound.current_music == "shop", "with its own tune")
+	main._close_shop()
+	main.load_current_hole()
+	await _wait(0.6)
+
+
 func _test_pause() -> void:
 	_press_key(KEY_ESCAPE)
 	await _wait(0.2)
 	_expect(main.pause_menu != null, "Esc pauses a run")
 	await _save("run_pause")
+	_press_key(KEY_DOWN)
+	_press_key(KEY_DOWN)
+	await _wait(0.05)
+	_expect(main.pause_menu.selected == PauseView.Item.MUSIC, "the pause menu reaches the music level")
+	var music_before: int = Sound.music_level
+	var settings_before: String = Sound.settings_path
+	Sound.settings_path = "user://shots_settings.json"
+	_press_key(KEY_RIGHT if music_before < Sound.LEVELS else KEY_LEFT)
+	await _wait(0.05)
+	_expect(Sound.music_level != music_before, "left and right change it")
+	Sound.set_music_level(music_before)
+	Sound.settings_path = settings_before
+	DirAccess.remove_absolute("user://shots_settings.json")
+	_press_key(KEY_UP)
+	_press_key(KEY_UP)
+	await _wait(0.05)
 	var time_before: float = game()._phase_time
 	await _wait(0.2)
 	_expect(game()._phase_time == time_before, "the game stops while paused")
@@ -374,8 +434,9 @@ func _test_out_of_strokes() -> void:
 	await _save("run_out_of_strokes")
 	await _wait(2.2)
 	_expect(main.run_over != null, "running out ends the run")
+	_expect(Sound.current_music == "", "the music stops for the final score")
+	await _wait(main.run_over.reveal_time() + 0.2)
 	await _save("run_over_out_of_strokes")
-	await _wait(0.5)
 	_press_key(KEY_SPACE)
 	await _wait(0.8)
 	_expect(main.run_over == null and main.run_state != run_state, "the final screen leads to a new run")
@@ -409,6 +470,7 @@ func _test_duel() -> void:
 	await _wait(0.5)
 	var rival: Rival = game().rival
 	_expect(rival != null, "the last hole brings out the rival")
+	_expect(Sound.current_music == "boss", "the boss hole has its own tense music")
 	var rival_view: RivalView = _find_rival_view()
 	var player_view: GolferView = _find_player_view()
 	_expect(not rival_view.visible, "the rival stays off screen during the player's turn")
@@ -467,6 +529,8 @@ func _test_duel() -> void:
 	_press_key(KEY_SPACE)
 	await _wait(0.5)
 	_expect(main.run_over != null, "the duel leads to the final score")
+	await _wait(main.run_over.reveal_time() + 0.2)
+	_expect(main.run_over.is_revealed(), "the final score finishes reading itself out")
 	await _save("run_over_duel")
 
 

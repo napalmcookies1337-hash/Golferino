@@ -7,6 +7,8 @@ const TRAIL_LENGTH := 16
 const SQUASH_TIME := 0.06
 const STRETCH_TIME := 0.08
 const MIN_SQUASH_SPEED := 40.0
+const SHADOW_MIN_HEIGHT := 6.0
+const SHADOW_MAX_HEIGHT := 140.0
 
 var game: HoleGame
 var ball: BallSim
@@ -56,15 +58,17 @@ func _on_bounced(_at: Vector2, _surface: int, impact_speed: float) -> void:
 
 
 func _draw() -> void:
+	var trail_color: Color = _trail_color()
 	for i in _trail.size():
-		var alpha: float = float(i + 1) / float(TRAIL_LENGTH) * 0.55
+		trail_color.a = float(i + 1) / float(TRAIL_LENGTH) * 0.55
 		var point: Vector2 = _trail[i].round()
-		draw_rect(Rect2(point.x, point.y, 2, 2), Color(1.0, 1.0, 1.0, alpha))
+		draw_rect(Rect2(point.x, point.y, 2, 2), trail_color)
 
 	var state: int = ball.state
 	if state == BallSim.State.HOLED or state == BallSim.State.IN_WATER:
 		return
 	var at: Vector2 = ball.pos.round()
+	_draw_shadow(at)
 	if _since_landing < SQUASH_TIME:
 		_draw_squished(at + Vector2(0, 2), 9, 5)
 		return
@@ -76,6 +80,26 @@ func _draw() -> void:
 	draw_rect(Rect2(at.x - 2, at.y - 2, 5, 5), fill)
 	draw_rect(Rect2(at.x, at.y + 1, 2, 1), shade)
 	draw_rect(Rect2(at.x + 1, at.y, 1, 1), shade)
+
+
+# A full power shot leaves a golden streak.
+func _trail_color() -> Color:
+	if ball == game.ball and game.last_quality == "FULL POWER!!":
+		return Color("ffd23c")
+	return fill
+
+
+# A dot on the ground under the ball in flight, so its height is easy to read.
+func _draw_shadow(at: Vector2) -> void:
+	if ball.state != BallSim.State.AIRBORNE:
+		return
+	var ground: float = game.terrain.ground_y(ball.pos.x)
+	var height: float = ground - ball.pos.y
+	if height < SHADOW_MIN_HEIGHT or height > SHADOW_MAX_HEIGHT:
+		return
+	var fade: float = 1.0 - height / SHADOW_MAX_HEIGHT
+	var half: float = 1.0 + round(2.0 * fade)
+	draw_rect(Rect2(at.x - half, round(ground), half * 2.0 + 1.0, 1), Color(0.05, 0.08, 0.1, 0.5 * fade))
 
 
 # The ball at another shape, centered on a point, with its corners cut off.

@@ -36,6 +36,10 @@ const BALLS_TOP := 262.0
 const BALLS_HEIGHT := 26.0
 const CHARS_PER_LINE := 96
 const IN_PLAY := Color("6fe07a")
+const AWNING_STRIPE := 32.0
+const AWNING_RED := Color("c84a44")
+const AWNING_CREAM := Color("f2ead0")
+const BUY_FLASH_TIME := 0.3
 
 var run: RunState
 var stock: Array[Dictionary] = []
@@ -50,6 +54,9 @@ var show_card: bool = false
 
 var _menu_input := MenuInput.new()
 var _next_hole_text: String = ""
+var _fx: FxView
+var _time: float = 0.0
+var _flashes: Dictionary = {}
 
 
 func setup(p_run: RunState) -> void:
@@ -61,13 +68,26 @@ func setup(p_run: RunState) -> void:
 		_next_hole_text = "NEXT: %s  PAR %d" % [next.display_name, next.par]
 
 
-func _process(_delta: float) -> void:
+func _ready() -> void:
+	_fx = FxView.new()
+	add_child(_fx)
+
+
+func _process(delta: float) -> void:
+	_time += delta
+	for index: int in _flashes.keys():
+		_flashes[index] = float(_flashes[index]) - delta
+		if float(_flashes[index]) <= 0.0:
+			_flashes.erase(index)
 	queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
+		var before: Array = _selection()
 		_hover(event.position)
+		if _selection() != before:
+			Sound.sfx("menu_move")
 		return
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -77,6 +97,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("scorecard", false):
 		show_card = not show_card
+		Sound.sfx("menu_move")
 		get_viewport().set_input_as_handled()
 		return
 	if Controls.swing_pressed(event):
@@ -89,8 +110,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var step: Vector2i = _menu_input.step(event)
 	if step != Vector2i.ZERO:
+		var before: Array = _selection()
 		_move(step)
+		if _selection() != before:
+			Sound.sfx("menu_move")
 		get_viewport().set_input_as_handled()
+
+
+# Everything that says what's selected, to tell when it has changed.
+func _selection() -> Array:
+	return [mode, cursor, club_cursor, slot_cursor, ball_cursor]
 
 
 func _move(step: Vector2i) -> void:
@@ -134,6 +163,7 @@ func _confirm() -> void:
 	match mode:
 		Mode.BROWSE:
 			if cursor >= stock.size():
+				Sound.sfx("menu_ok")
 				done.emit()
 			else:
 				_try_buy()
@@ -142,40 +172,57 @@ func _confirm() -> void:
 			if run.club_is_full(club_id):
 				slot_cursor = 0
 				mode = Mode.PICK_SLOT
+				Sound.sfx("menu_ok")
 			else:
 				_finish_sticker(club_id, -1)
 		Mode.PICK_SLOT:
 			_finish_sticker(Items.ALL_CLUBS[club_cursor], slot_cursor)
 		Mode.BALLS:
+			if ball_cursor < run.balls.size() and run.balls[ball_cursor] != run.ball_id:
+				Sound.sfx("equip")
 			run.equip_ball(ball_cursor)
 		Mode.REPLACE_BALL:
 			if run.buy(_selected_item(), ball_cursor):
-				sold[cursor] = true
+				_mark_sold()
 			mode = Mode.BROWSE
 
 
 func _cancel() -> void:
 	mode = Mode.PICK_CLUB if mode == Mode.PICK_SLOT else Mode.BROWSE
+	Sound.sfx("menu_back")
 
 
 func _try_buy() -> void:
 	var item: Dictionary = stock[cursor]
 	if sold.has(cursor) or not run.can_afford(item):
+		Sound.sfx("denied")
 		return
 	if item["kind"] == Items.KIND_STICKER:
 		club_cursor = Items.ALL_CLUBS.find((item["clubs"] as Array)[0])
 		mode = Mode.PICK_CLUB
+		Sound.sfx("menu_ok")
 	elif item["kind"] == Items.KIND_BALL and run.balls_full():
 		ball_cursor = 0
 		mode = Mode.REPLACE_BALL
+		Sound.sfx("menu_ok")
 	elif run.buy(item):
-		sold[cursor] = true
+		_mark_sold()
 
 
 func _finish_sticker(club_id: String, slot: int) -> void:
 	if run.buy_sticker(_selected_item(), club_id, slot):
-		sold[cursor] = true
+		_mark_sold()
 	mode = Mode.BROWSE
+
+
+func _mark_sold() -> void:
+	sold[cursor] = true
+	_flashes[cursor] = BUY_FLASH_TIME
+	Sound.sfx("buy")
+	if _fx != null:
+		var rect: Rect2 = _card_rect(cursor)
+		_fx.burst(rect.get_center(), ACCENT, 20, 90.0)
+		_fx.float_text(rect.get_center(), "SOLD!", ACCENT)
 
 
 func _selected_item() -> Dictionary:
@@ -248,7 +295,7 @@ func _is_over_choice(at: Vector2) -> bool:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(0, 0, 640, 360), BACKGROUND)
+	_draw_backdrop()
 	PixelFont.draw_shadowed(self, "PRO SHOP", Vector2(22, 10), ACCENT, 2)
 	PixelFont.draw(self, "COINS %d" % run.coins, Vector2(150, 15), ACCENT)
 	var spare_color: Color = BAD if run.spare <= 1 else TEXT
@@ -267,13 +314,39 @@ func _draw() -> void:
 		ScorecardView.draw_table(self, run.course, Vector2(18, 150))
 
 
+# A paneled wall under a striped awning.
+func _draw_backdrop() -> void:
+	draw_rect(Rect2(0, 0, 640, 360), BACKGROUND)
+	var plank_x: float = 0.0
+	while plank_x < 640.0:
+		draw_rect(Rect2(plank_x, 0, 1, 360), BACKGROUND.darkened(0.14))
+		draw_rect(Rect2(plank_x + 1.0, 0, 1, 360), BACKGROUND.lightened(0.05))
+		plank_x += AWNING_STRIPE * 2.0
+	var stripe: int = 0
+	var x: float = 0.0
+	while x < 640.0:
+		var color: Color = AWNING_RED if stripe % 2 == 0 else AWNING_CREAM
+		draw_rect(Rect2(x, 0, AWNING_STRIPE, 5), color)
+		draw_rect(Rect2(x + 2.0, 5, AWNING_STRIPE - 4.0, 2), color)
+		x += AWNING_STRIPE
+		stripe += 1
+
+
 func _draw_card(index: int) -> void:
 	var item: Dictionary = stock[index]
 	var rect: Rect2 = _card_rect(index)
 	var is_selected: bool = mode == Mode.BROWSE and cursor == index
 	var is_sold: bool = sold.has(index)
+	# The selected card lifts off the shelf a little and bobs.
+	if is_selected and not is_sold:
+		rect.position.y -= 2.0 + round(sin(_time * 5.0))
+	draw_rect(Rect2(rect.position + Vector2(2, 2), rect.size), Color(0, 0, 0, 0.3))
 	draw_rect(rect, PANEL)
 	draw_rect(rect, ACCENT if is_selected else DIM, false, 1.0)
+	if _flashes.has(index):
+		var flash: Color = Color.WHITE
+		flash.a = float(_flashes[index]) / BUY_FLASH_TIME * 0.7
+		draw_rect(rect, flash)
 	var center: float = rect.get_center().x
 	var color: Color = KIND_COLORS[item["kind"]]
 	if is_sold:

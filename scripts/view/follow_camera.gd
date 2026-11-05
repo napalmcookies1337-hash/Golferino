@@ -14,9 +14,11 @@ const CHASE_SMOOTH := 4.0
 const CHASE_LEAD_X := 0.35
 const CHASE_LEAD_Y := 0.2
 const HEADROOM := 55.0
+const SHAKE_FADE := 14.0
 
 var game: HoleGame
 var look_offset: float = 0.0
+var _shake: float = 0.0
 var _placed: bool = false
 var _look_held: float = 0.0
 
@@ -49,6 +51,20 @@ func _process(delta: float) -> void:
 	if is_free_looking():
 		rate = 12.0
 	position = position.lerp(target, 1.0 - exp(-rate * delta))
+	_update_shake(delta)
+
+
+## A short jolt of the view. Only the picture moves, never the camera's real position.
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+func _update_shake(delta: float) -> void:
+	if _shake <= 0.0:
+		offset = Vector2.ZERO
+		return
+	_shake = maxf(_shake - SHAKE_FADE * delta, 0.0)
+	offset = Vector2(randf_range(-_shake, _shake), randf_range(-_shake, _shake)).round()
 
 
 func _target_position(delta: float) -> Vector2:

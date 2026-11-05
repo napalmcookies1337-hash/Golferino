@@ -14,6 +14,11 @@ const PANEL_EDGE := Color("f2ead0")
 const TEXT := Color("f7f4e6")
 const ACCENT := Color("ffe25a")
 const DIM := Color("8f97a8")
+const FLASH_TIME := 0.45
+const MESSAGE_POP_TIME := 0.14
+const MESSAGE_POP_HEIGHT := 10.0
+const RESULT_DROP_TIME := 0.32
+const RESULT_DROP_HEIGHT := 230.0
 
 var game: HoleGame
 var camera: FollowCamera
@@ -28,6 +33,13 @@ var banner: String = ""
 var _message: String = ""
 var _message_time: float = 0.0
 var _result_name: String = ""
+var _message_age: float = 0.0
+var _result_age: float = 0.0
+var _time: float = 0.0
+var _coin_flash: float = 0.0
+var _spare_flash: float = 0.0
+var _shown_coins: int = -1
+var _shown_spare: int = -1
 
 
 func setup(p_game: HoleGame, p_camera: FollowCamera, p_run: CourseRun) -> void:
@@ -43,15 +55,45 @@ func _ready() -> void:
 func show_message(text: String, duration: float) -> void:
 	_message = text
 	_message_time = duration
+	_message_age = 0.0
 
 
 func _process(delta: float) -> void:
 	_message_time = maxf(_message_time - delta, 0.0)
+	_message_age += delta
+	if game.phase == HoleGame.Phase.COMPLETE:
+		_result_age += delta
+	_time += delta
+	_update_flashes(delta)
 	queue_redraw()
+
+
+# The coin and stroke counts light up for a moment when they change.
+func _update_flashes(delta: float) -> void:
+	_coin_flash = maxf(_coin_flash - delta, 0.0)
+	_spare_flash = maxf(_spare_flash - delta, 0.0)
+	if run_state == null:
+		return
+	if run_state.coins != _shown_coins:
+		if _shown_coins >= 0:
+			_coin_flash = FLASH_TIME
+		_shown_coins = run_state.coins
+	var spare: int = _current_spare()
+	if spare != _shown_spare:
+		if _shown_spare >= 0:
+			_spare_flash = FLASH_TIME
+		_shown_spare = spare
+
+
+func _current_spare() -> int:
+	if game.phase == HoleGame.Phase.COMPLETE:
+		return run_state.spare
+	return run_state.live_spare(game.strokes, game.hole.par)
 
 
 func _on_hole_finished(_strokes: int, score_name: String) -> void:
 	_result_name = score_name
+	_result_age = 0.0
 
 
 func _draw() -> void:
@@ -69,12 +111,20 @@ func _draw() -> void:
 	if game.rival != null:
 		_draw_duel()
 	if _message_time > 0.0 and game.phase != HoleGame.Phase.COMPLETE:
-		PixelFont.draw_centered(self, _message, SCREEN_WIDTH / 2.0, 72.0, ACCENT, 2)
+		_draw_message()
 	if game.phase == HoleGame.Phase.COMPLETE:
 		_draw_result()
 	if show_card:
 		draw_rect(Rect2(0, 0, SCREEN_WIDTH, 360), Color(0, 0, 0, 0.5))
 		ScorecardView.draw_table(self, run, Vector2(18, 130))
+
+
+# Messages hop up into place and start out bright.
+func _draw_message() -> void:
+	var t: float = clampf(_message_age / MESSAGE_POP_TIME, 0.0, 1.0)
+	var rise: float = round((1.0 - t) * (1.0 - t) * MESSAGE_POP_HEIGHT)
+	var color: Color = Color.WHITE.lerp(ACCENT, t)
+	PixelFont.draw_centered(self, _message, SCREEN_WIDTH / 2.0, 72.0 + rise, color, 2)
 
 
 # The stroke that uses up the budget: the ball plays out, and only sinking it saves the run.
@@ -114,11 +164,15 @@ func _draw_score_panel() -> void:
 	PixelFont.draw(self, "STROKES %d" % game.strokes, Vector2(14, 25), ACCENT)
 	PixelFont.draw(self, "TOTAL %s" % CourseRun.to_par_text(run.total_to_par()), Vector2(90, 25), TEXT)
 	if run_state != null:
-		var spare: int = run_state.live_spare(game.strokes, game.hole.par)
-		if game.phase == HoleGame.Phase.COMPLETE:
-			spare = run_state.spare
-		PixelFont.draw(self, "SPARE %d" % spare, Vector2(14, 37), Color("ff8a70") if spare <= 1 else TEXT)
-		PixelFont.draw(self, "COINS %d" % run_state.coins, Vector2(90, 37), ACCENT)
+		var spare: int = _current_spare()
+		var spare_color: Color = Color("ff8a70") if spare <= 1 else TEXT
+		var coin_color: Color = ACCENT
+		if _spare_flash > 0.0:
+			spare_color = spare_color.lerp(Color.WHITE, _spare_flash / FLASH_TIME)
+		if _coin_flash > 0.0:
+			coin_color = coin_color.lerp(Color.WHITE, _coin_flash / FLASH_TIME)
+		PixelFont.draw(self, "SPARE %d" % spare, Vector2(14, 37), spare_color)
+		PixelFont.draw(self, "COINS %d" % run_state.coins, Vector2(90, 37), coin_color)
 
 
 func _draw_distance_panel() -> void:
@@ -216,9 +270,19 @@ func _draw_meter() -> void:
 		var seg_x: float = sweet_x + t * METER_POWER_WIDTH
 		draw_rect(Rect2(seg_x, METER_TOP, METER_POWER_WIDTH / float(segments) + 1.0, METER_HEIGHT), color)
 
+	# What the rising cursor hasn't reached yet stays dim.
+	var rising: bool = game.meter.stage == SwingMeter.Stage.RISING
+	if rising:
+		var filled: float = game.meter.cursor * METER_POWER_WIDTH
+		draw_rect(Rect2(sweet_x + filled, METER_TOP, METER_POWER_WIDTH - filled + 1.0, METER_HEIGHT), Color(0.05, 0.06, 0.12, 0.55))
+
 	if not is_putt:
 		var window: float = game.meter.perfect_window * METER_POWER_WIDTH
-		draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), Color("ffffff"))
+		# The sweet spot glows on the way back, when it matters.
+		var sweet: Color = Color.WHITE
+		if game.meter.stage == SwingMeter.Stage.RETURNING:
+			sweet = Color.WHITE.lerp(ACCENT, 0.5 + 0.5 * sin(_time * 18.0))
+		draw_rect(Rect2(sweet_x - window, METER_TOP, window * 2.0, METER_HEIGHT), sweet)
 	draw_rect(Rect2(sweet_x, METER_TOP - 2.0, 1, METER_HEIGHT + 4.0), Color("20202e"))
 
 	for mark in [0.25, 0.5, 0.75, 1.0]:
@@ -231,7 +295,8 @@ func _draw_meter() -> void:
 		PixelFont.draw_centered(self, prompt, METER_LEFT + total / 2.0, METER_TOP - 14.0, TEXT)
 		return
 	if meter.full_power and game.phase != HoleGame.Phase.BALL_MOVING:
-		PixelFont.draw_centered(self, "FULL POWER!!", METER_LEFT + total / 2.0, METER_TOP - 16.0, ACCENT)
+		var flicker: Color = ACCENT if fmod(_time, 0.14) < 0.07 else Color.WHITE
+		PixelFont.draw_centered(self, "FULL POWER!!", METER_LEFT + total / 2.0, METER_TOP - 16.0, flicker)
 
 	if meter.stage == SwingMeter.Stage.RETURNING or meter.stage == SwingMeter.Stage.DONE:
 		var power_x: float = sweet_x + meter.power * METER_POWER_WIDTH
@@ -256,11 +321,17 @@ func _draw_hint() -> void:
 
 
 func _draw_result() -> void:
-	var rect := Rect2(150, 84, 340, 124)
+	# Drops in from above and settles with a small bounce.
+	var t: float = clampf(_result_age / RESULT_DROP_TIME, 0.0, 1.0)
+	var drop: float = -round((1.0 - t) * (1.0 - t) * RESULT_DROP_HEIGHT)
+	if t >= 1.0:
+		var after: float = _result_age - RESULT_DROP_TIME
+		drop = round(sin(minf(after * 16.0, PI)) * 3.0)
+	var rect := Rect2(150, 84.0 + drop, 340, 124)
 	_panel(rect)
 	var center: float = SCREEN_WIDTH / 2.0
-	PixelFont.draw_centered(self, _result_name, center, 94.0, ACCENT, 3 if _result_name.length() <= 13 else 2)
-	var y: float = 126.0
+	PixelFont.draw_centered(self, _result_name, center, 94.0 + drop, ACCENT, 3 if _result_name.length() <= 13 else 2)
+	var y: float = 126.0 + drop
 	if game.rival != null:
 		var yours: String = str(game.strokes) if game.player_holed else "DIDN'T FINISH"
 		var theirs: String = str(game.rival.strokes) if game.rival.holed else "DIDN'T FINISH"
@@ -285,4 +356,4 @@ func _draw_result() -> void:
 		prompt = "SPACE FOR THE SHOP"
 	elif run_state != null:
 		prompt = "SPACE FOR THE FINAL SCORE"
-	PixelFont.draw_centered(self, prompt, center, 192.0, DIM)
+	PixelFont.draw_centered(self, prompt, center, 192.0 + drop, DIM)

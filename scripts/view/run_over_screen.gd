@@ -12,6 +12,11 @@ const ACCENT := Color("ffe25a")
 const GOOD := Color("6fe07a")
 const BAD := Color("ff8a70")
 const INPUT_DELAY := 0.5
+## The score is read out a row at a time, then the total counts up.
+const FIRST_ROW_AT := 0.45
+const ROW_GAP := 0.22
+const COUNT_TIME := 0.7
+const CONFETTI_GAP := 0.55
 
 var run: RunState
 var result: Dictionary = {}
@@ -20,6 +25,10 @@ var score: Dictionary = {}
 var rival_strokes: int = -1
 
 var _age: float = 0.0
+var _rows_shown: int = 0
+var _finished_reveal: bool = false
+var _next_confetti: float = 0.3
+var _fx: FxView
 
 
 func setup(p_run: RunState, p_result: Dictionary, p_rival_strokes: int) -> void:
@@ -29,20 +38,76 @@ func setup(p_run: RunState, p_result: Dictionary, p_rival_strokes: int) -> void:
 	score = run.final_score()
 
 
+func _ready() -> void:
+	_fx = FxView.new()
+	add_child(_fx)
+
+
+## How long the whole score takes to appear.
+func reveal_time() -> float:
+	return FIRST_ROW_AT + ROW_GAP * float((score["rows"] as Array).size()) + COUNT_TIME
+
+
+func is_revealed() -> bool:
+	return _age >= reveal_time()
+
+
 func _process(delta: float) -> void:
 	_age += delta
+	_update_reveal()
+	_update_confetti()
 	queue_redraw()
+
+
+func _update_reveal() -> void:
+	var rows: int = mini(_rows_at(_age), (score["rows"] as Array).size())
+	if rows > _rows_shown:
+		_rows_shown = rows
+		Sound.sfx("score_tick", 1.0 + float(rows) * 0.08)
+	if not is_revealed() and _age > _count_start():
+		Sound.sfx("score_tick", 1.0 + _count_progress() * 1.2, -8.0)
+	if is_revealed() and not _finished_reveal:
+		_finished_reveal = true
+		Sound.sfx("trick" if int(result.get("place", 0)) == 1 else "menu_ok")
+
+
+func _rows_at(age: float) -> int:
+	if age < FIRST_ROW_AT:
+		return 0
+	return 1 + int((age - FIRST_ROW_AT) / ROW_GAP)
+
+
+func _count_start() -> float:
+	return reveal_time() - COUNT_TIME
+
+
+func _count_progress() -> float:
+	return clampf((_age - _count_start()) / COUNT_TIME, 0.0, 1.0)
+
+
+func _update_confetti() -> void:
+	if run.ending != RunState.Ending.BEAT_RIVAL or _age < _next_confetti:
+		return
+	_next_confetti = _age + CONFETTI_GAP
+	_fx.confetti(Vector2(randf_range(60.0, 580.0), randf_range(60.0, 180.0)))
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	# A short wait, so a button mashed at the last moment doesn't skip the score.
 	if _age < INPUT_DELAY:
 		return
-	if event.is_action_pressed("swing", false) or event.is_action_pressed("quit", false):
+	var pressed: bool = event.is_action_pressed("swing", false) or event.is_action_pressed("quit", false)
+	var clicked: bool = event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+	if not pressed and not clicked:
+		return
+	if pressed:
 		get_viewport().set_input_as_handled()
-		done.emit()
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		done.emit()
+	# The first press only shows the rest of the score, and the next one moves on.
+	if not is_revealed():
+		_age = reveal_time()
+		return
+	Sound.sfx("menu_ok")
+	done.emit()
 
 
 func _headline() -> Array:
@@ -70,14 +135,20 @@ func _draw() -> void:
 	draw_rect(panel, PANEL)
 	draw_rect(panel, DIM, false, 1.0)
 	var y: float = panel.position.y + 10.0
-	for row: Dictionary in score["rows"]:
+	var rows: Array = score["rows"]
+	for i in mini(_rows_at(_age), rows.size()):
+		var row: Dictionary = rows[i]
 		PixelFont.draw(self, str(row["label"]), Vector2(panel.position.x + 12.0, y), TEXT)
 		_draw_right(_points_text(int(row["points"])), y, TEXT, panel)
 		y += 14.0
 	draw_rect(Rect2(panel.position.x + 10.0, panel.end.y - 34.0, panel.size.x - 20.0, 1.0), DIM)
 	PixelFont.draw(self, "FINAL SCORE", Vector2(panel.position.x + 12.0, panel.end.y - 24.0), ACCENT, 2)
-	_draw_right(str(int(score["total"])), panel.end.y - 24.0, ACCENT, panel, 2)
+	var shown_total: int = int(round(float(int(score["total"])) * _count_progress()))
+	_draw_right(str(shown_total), panel.end.y - 24.0, ACCENT, panel, 2)
 
+	if not is_revealed():
+		PixelFont.draw_centered(self, "SPACE TO SKIP", 320.0, 340.0, DIM)
+		return
 	var place: int = int(result.get("place", 0))
 	if place == 1:
 		PixelFont.draw_centered(self, "NEW BEST SCORE!", 320.0, 276.0, GOOD, 2)

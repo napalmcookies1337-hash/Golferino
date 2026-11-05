@@ -3,7 +3,7 @@
 An arcade side-view golf roguelite, built in Godot 4.6 with GDScript. Windows only.
 The approved design and architecture are in [DESIGN.md](DESIGN.md).
 
-**Status:** Milestone 3, the full course: 9 holes and the boss hole, with hazards and wind.
+**Status:** Milestone 5 delivered for review: the full run, with art, music, sound and polish.
 
 ## Run it
 
@@ -51,8 +51,19 @@ Maps are saved in `%APPDATA%\Godot\app_userdata\Golferino\maps`.
 | Scorecard (or restart, when testing a map) | Tab (or R) | Back |
 | Pause, or end the run | Esc | Start |
 | Menus and the shop | Arrow keys or W / A / S / D, then Space | D-pad or left stick, then A |
+| Music and sound levels (title and pause menus) | Left / Right on the row, or click it | D-pad left / right |
 | Skip to next / previous hole (for reviewing) | Page Down / Page Up | |
 | Fullscreen on or off | F11 | |
+
+## Sound
+
+Every sound is composed and synthesized by `tools/make_audio.gd`, so nothing comes from
+outside. The melodies are written as note lists at the top of each song, and the finished
+files are saved in `audio/`. After changing the script, make the files again from this folder:
+
+```powershell
+& E:\GoDOT\Godot_v4.6.2-stable_win64_console.exe --headless --path . -s tools/make_audio.gd --quit-after 100000
+```
 
 ## Tests
 

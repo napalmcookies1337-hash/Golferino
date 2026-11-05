@@ -8,6 +8,10 @@ config/description="An arcade side-view golf roguelite."
 run/main_scene="res://scenes/app.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 
+[autoload]
+
+Sound="*res://scripts/audio/sound.gd"
+
 [display]
 
 window/size/viewport_width=640

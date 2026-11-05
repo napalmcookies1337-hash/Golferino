@@ -11,6 +11,10 @@ const CLUB_PATHS := [
 	"res://data/clubs/putter.tres",
 ]
 const OUT_OF_STROKES_PAUSE := 2.0
+const HIT_STOP_FULL := 0.09
+const HIT_STOP_PERFECT := 0.05
+const FULL_POWER_SHAKE := 3.0
+const HAZARD_SHAKE := 1.5
 
 var run: CourseRun
 var game: HoleGame
@@ -37,6 +41,8 @@ var _test_start_x: float = -1.0
 ## Holds the screens that sit over the course.
 var _overlay: CanvasLayer
 var _rival_strokes_at_end: int = -1
+var _flag: FlagView
+var _hit_stop: float = 0.0
 
 
 ## Plays one map instead of the course. A negative start means from the tee.
@@ -108,6 +114,10 @@ func load_current_hole() -> void:
 		game.start_from(_test_start_x)
 	_build_views()
 	_connect_signals()
+	Sound.stop_jingle()
+	Sound.music("boss" if game.rival != null else "course")
+	Sound.set_outdoors(true)
+	ScreenWipe.open(_overlay)
 	hud.show_message("%s: %s" % [game.hole.display_name, game.hole.title], 2.2)
 	if game.rival != null:
 		hud.show_message("THE RIVAL CHALLENGES YOU!", 2.6)
@@ -119,9 +129,13 @@ func _build_views() -> void:
 	camera = FollowCamera.new()
 	camera.setup(game)
 
+	var mood: int = _time_of_day()
 	var background := BackgroundView.new()
-	background.setup(camera)
+	background.setup(camera, mood)
 	_world.add_child(background)
+	var tint := CanvasModulate.new()
+	tint.color = BackgroundView.tint_of(mood)
+	_world.add_child(tint)
 
 	var trees := TreeView.new()
 	trees.setup(game.hole, game.terrain)
@@ -138,9 +152,9 @@ func _build_views() -> void:
 	obstacle_view.setup(game.obstacles)
 	_world.add_child(obstacle_view)
 
-	var flag := FlagView.new()
-	flag.setup(game.terrain)
-	_world.add_child(flag)
+	_flag = FlagView.new()
+	_flag.setup(game.terrain)
+	_world.add_child(_flag)
 
 	var golfer := GolferView.new()
 	golfer.setup(game)
@@ -175,6 +189,17 @@ func _build_views() -> void:
 	hud.run_state = run_state
 	hud_layer.add_child(hud)
 
+	var audio := GameAudio.new()
+	audio.setup(game)
+	_world.add_child(audio)
+
+
+# Testing one map stays at midday, since it has no place in a course.
+func _time_of_day() -> int:
+	if is_testing():
+		return BackgroundView.Mood.MIDDAY
+	return BackgroundView.mood_for(run.hole_index, run.hole_count(), _is_duel_hole())
+
 
 func _connect_signals() -> void:
 	game.shot_struck.connect(_on_shot_struck)
@@ -204,6 +229,10 @@ func _physics_process(delta: float) -> void:
 	var aim_input: float = Input.get_axis("aim_down", "aim_up")
 	if aim_input != 0.0:
 		game.adjust_aim(aim_input, delta)
+	# A big strike holds the picture for a moment. The whole hole waits, so nothing plays differently.
+	if _hit_stop > 0.0:
+		_hit_stop -= delta
+		return
 	game.tick(delta)
 
 
@@ -218,6 +247,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run_state != null and event.is_action_pressed("scorecard", false):
 		hud.show_card = not hud.show_card
+		Sound.sfx("menu_move")
 	elif run_state != null and event.is_action_pressed("quit", false):
 		if game.phase != HoleGame.Phase.OUT_OF_STROKES:
 			_open_pause()
@@ -265,6 +295,7 @@ func _open_pause() -> void:
 	if shop != null:
 		shop.set_process_unhandled_input(false)
 	_overlay.add_child(pause_menu)
+	Sound.sfx("menu_ok")
 
 
 func _close_pause() -> void:
@@ -291,6 +322,10 @@ func _open_shop() -> void:
 	shop.setup(run_state)
 	shop.done.connect(_leave_shop, CONNECT_DEFERRED)
 	_overlay.add_child(shop)
+	Sound.stop_jingle()
+	Sound.music("shop")
+	Sound.set_outdoors(false)
+	ScreenWipe.open(_overlay)
 
 
 func _close_shop() -> void:
@@ -313,6 +348,9 @@ func _end_run() -> void:
 	run_over.setup(run_state, result, _rival_strokes_at_end)
 	run_over.done.connect(_after_run_over, CONNECT_DEFERRED)
 	_overlay.add_child(run_over)
+	Sound.music("")
+	Sound.set_outdoors(false)
+	ScreenWipe.open(_overlay)
 
 
 func _after_run_over() -> void:
@@ -333,6 +371,14 @@ func _on_shot_struck(quality: String, _power: float) -> void:
 	if quality != "":
 		hud.show_message(quality, 1.1)
 	fx.dust(game.ball.pos, Color(0.85, 0.95, 0.65), 6, game.facing)
+	if quality == "FULL POWER!!":
+		_hit_stop = HIT_STOP_FULL
+		camera.shake(FULL_POWER_SHAKE)
+		fx.burst(game.ball.pos, Color("ffd23c"), 18, 110.0)
+		fx.ring(game.ball.pos, Color("ffe25a"), 30.0)
+	elif quality == "PERFECT!":
+		_hit_stop = HIT_STOP_PERFECT
+		fx.burst(game.ball.pos, Color("ffffff"), 12, 80.0)
 
 
 func _on_penalty_taken(kind: String) -> void:
@@ -346,7 +392,9 @@ func _on_penalty_forgiven() -> void:
 
 func _on_coin_collected(at: Vector2) -> void:
 	if run_state != null:
+		var before: int = run_state.coins
 		run_state.collect_coin()
+		fx.float_text(at, "+%d" % (run_state.coins - before), Color("ffe25a"))
 	fx.dust(at, Color("ffd23c"), 6, 0)
 
 
@@ -363,6 +411,8 @@ func _on_out_of_strokes() -> void:
 	var saved: int = run_state.use_safety_net()
 	if saved > 0:
 		hud.show_message("SAFETY NET! +%d STROKES" % saved, 1.8)
+		Sound.stop_jingle()
+		Sound.sfx("mulligan")
 		game.grant_strokes(saved)
 		return
 	run_state.leave_hole_unfinished(game.strokes)
@@ -407,11 +457,13 @@ func _on_ball_bounced(at: Vector2, surface: int, impact_speed: float) -> void:
 func _on_ball_hazard(at: Vector2, kind: String) -> void:
 	if kind == "water":
 		fx.splash(at)
+		camera.shake(HAZARD_SHAKE)
 
 
 func _on_pin_hit(at: Vector2) -> void:
 	hud.show_message("OFF THE PIN!", 1.1)
 	fx.dust(at, Color("f4f4ea"), 6, 0)
+	_flag.wobble()
 
 
 func _on_obstacle_hit(at: Vector2, kind: String) -> void:
@@ -419,14 +471,18 @@ func _on_obstacle_hit(at: Vector2, kind: String) -> void:
 		"pad":
 			hud.show_message("BOING!", 0.9)
 			fx.dust(at, Color("ffe25a"), 10, 0)
+			camera.shake(HAZARD_SHAKE)
 		"goose":
 			hud.show_message("HONK!", 1.1)
 			fx.dust(at, Color("f7f4e6"), 12, 0)
+			camera.shake(HAZARD_SHAKE)
 		"cart":
 			hud.show_message("FORE!", 1.1)
 			fx.dust(at, Color("e8c34a"), 8, 0)
+			camera.shake(HAZARD_SHAKE * 1.5)
 		"windmill":
 			fx.dust(at, Color("f7f4e6"), 8, 0)
+			camera.shake(HAZARD_SHAKE)
 		"sprinkler":
 			fx.splash(at)
 
@@ -439,4 +495,10 @@ func _on_rival_touched(at: Vector2, kind: String) -> void:
 
 
 func _on_ball_holed() -> void:
-	fx.confetti(Vector2(game.hole.cup_x, game.terrain.rim_y - 6.0))
+	var at := Vector2(game.hole.cup_x, game.terrain.rim_y - 6.0)
+	fx.confetti(at)
+	# A hole in one gets the lot.
+	if game.strokes == 1:
+		fx.confetti(at)
+		fx.burst(at, Color("ffe25a"), 24, 130.0)
+		camera.shake(FULL_POWER_SHAKE)

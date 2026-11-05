@@ -7,6 +7,7 @@ const CHUNK_WIDTH := 512
 const SOIL := [
 	Color("6b4a32"), Color("5d3f2b"), Color("503524"), Color("432c1f"), Color("37241a"),
 ]
+const FLOWERS := [Color("ffffff"), Color("ffe25a"), Color("f79ac0")]
 const STONE := Color("8a7460")
 const CUP_DARK := Color("14100d")
 const CUP_SHADE_TOP := Color("4a4036")
@@ -56,6 +57,11 @@ func _paint_column(image: Image, col: int, world_x: int, height: int) -> void:
 		var tuft: int = 1 + _hash(world_x, 11) % 3
 		for y in range(maxi(top - tuft, 0), top):
 			image.set_pixel(col, y, Color("3f7a2f"))
+		# Now and then one of them has a flower on it.
+		if _hash(world_x, 29) % 7 == 0 and top - tuft - 1 >= 0:
+			image.set_pixel(col, top - tuft - 1, FLOWERS[_hash(world_x, 31) % FLOWERS.size()])
+	elif surface == Surface.Type.FAIRWAY and _hash(world_x, 13) % 9 == 0 and top >= 1:
+		image.set_pixel(col, top - 1, Color("8fd05a"))
 
 	var turf_edge: int = _turf_depth(surface) + _hash(world_x, 3) % 3
 	for y in range(top, height):

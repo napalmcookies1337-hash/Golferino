@@ -52,6 +52,7 @@ func _show_scores() -> void:
 	var scores := HighScoresScreen.new()
 	scores.setup(profile)
 	scores.done.connect(_show_title, CONNECT_DEFERRED)
+	scores.done.connect(func() -> void: Sound.sfx("menu_back"))
 	_swap_screen(scores)
 
 
@@ -70,6 +71,14 @@ func _open_editor() -> void:
 	_editor.exit_requested.connect(_show_title, CONNECT_DEFERRED)
 	_editor.test_requested.connect(_start_test, CONNECT_DEFERRED)
 	_swap_screen(_editor)
+	_play_editor_sound()
+
+
+# The editor is a place to think, so it gets the shop's easy tune and no birdsong.
+func _play_editor_sound() -> void:
+	Sound.stop_jingle()
+	Sound.music("shop")
+	Sound.set_outdoors(false)
 
 
 # The editor stays alive but dormant during a test, so nothing about it is lost.
@@ -86,3 +95,4 @@ func _end_test(main: Node) -> void:
 	remove_child(main)
 	main.queue_free()
 	_editor.set_active(true)
+	_play_editor_sound()

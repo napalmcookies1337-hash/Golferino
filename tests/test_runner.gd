@@ -11,6 +11,9 @@ var _round_events: Dictionary = {}
 
 
 func _ready() -> void:
+	_test_sound_files()
+	_test_sound_settings()
+	_test_time_of_day()
 	_test_meter_flow()
 	_test_meter_accuracy()
 	_test_meter_auto_limits()
@@ -100,6 +103,69 @@ func _check(condition: bool, label: String) -> void:
 	else:
 		_failed += 1
 		print("FAIL: ", label)
+
+
+# Every sound the game asks for is there, in the right shape, and not distorted or silent.
+func _test_sound_files() -> void:
+	for sound_name: String in Sound.SFX_NAMES:
+		_check_sound("res://audio/sfx_%s.res" % sound_name, false)
+	for jingle_name: String in Sound.JINGLE_NAMES:
+		_check_sound("res://audio/jingle_%s.res" % jingle_name, false)
+	for track: String in Sound.MUSIC_NAMES:
+		_check_sound("res://audio/music_%s.res" % track, true)
+	_check_sound("res://audio/ambience.res", true)
+
+
+func _check_sound(path: String, should_loop: bool) -> void:
+	var stream: AudioStreamWAV = load(path)
+	_check(stream != null, "%s exists" % path)
+	if stream == null:
+		return
+	_check(stream.format == AudioStreamWAV.FORMAT_16_BITS and not stream.stereo, "%s is 16-bit mono" % path)
+	var loops: bool = stream.loop_mode == AudioStreamWAV.LOOP_FORWARD
+	_check(loops == should_loop, "%s %s" % [path, "loops" if should_loop else "plays once"])
+	# Reading stream.data copies the whole sound, so it's only read once.
+	var data: PackedByteArray = stream.data
+	var frames: int = data.size() / 2
+	if loops:
+		_check(stream.loop_end == frames, "%s loops over its whole length" % path)
+	var peak: int = 0
+	for i in frames:
+		peak = maxi(peak, absi(data.decode_s16(i * 2)))
+	_check(peak > 1000, "%s isn't silent" % path)
+	_check(peak < 32767, "%s doesn't clip" % path)
+
+
+func _test_sound_settings() -> void:
+	var path := "user://test_settings.json"
+	var real_path: String = Sound.settings_path
+	var real_music: int = Sound.music_level
+	var real_sfx: int = Sound.sfx_level
+	Sound.settings_path = path
+	Sound.set_music_level(99)
+	_check(Sound.music_level == Sound.LEVELS, "the music level stops at the top")
+	Sound.set_sfx_level(-5)
+	_check(Sound.sfx_level == 0, "the sound level stops at the bottom")
+	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(Sound.SFX_BUS)), "level zero is really silent")
+	Sound.set_music_level(3)
+	Sound.set_sfx_level(7)
+	Sound.music_level = 0
+	Sound.sfx_level = 0
+	Sound._load_settings()
+	_check(Sound.music_level == 3 and Sound.sfx_level == 7, "the levels are remembered")
+	DirAccess.remove_absolute(path)
+	Sound.settings_path = real_path
+	Sound.music_level = real_music
+	Sound.sfx_level = real_sfx
+	Sound._apply_levels()
+
+
+func _test_time_of_day() -> void:
+	_check(BackgroundView.mood_for(0, 10, false) == BackgroundView.Mood.MORNING, "the first hole is morning")
+	_check(BackgroundView.mood_for(4, 10, false) == BackgroundView.Mood.MIDDAY, "the middle of the course is midday")
+	_check(BackgroundView.mood_for(8, 10, false) == BackgroundView.Mood.AFTERNOON, "the back nine is afternoon")
+	_check(BackgroundView.mood_for(9, 10, true) == BackgroundView.Mood.DUSK, "the boss hole is dusk")
+	_check(BackgroundView.mood_for(0, 1, false) == BackgroundView.Mood.MORNING, "a one-hole course still has a time of day")
 
 
 func _clubs() -> Array[ClubData]:
