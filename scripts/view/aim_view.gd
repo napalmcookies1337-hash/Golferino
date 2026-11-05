@@ -1,15 +1,19 @@
 class_name AimView
 extends Node2D
-## Dotted start of the shot's path, and an arrow showing the full-power landing.
+## Dotted start of the shot's path. Where the ball lands is left for the player to judge,
+## unless they've bought the Landing Arrow perk.
 
 const ARC_SHARE := 0.45
 
 var game: HoleGame
+## True with the Landing Arrow perk: an arrow marks where a full-power shot would land.
+var show_landing: bool = false
 var _time: float = 0.0
 
 
-func setup(p_game: HoleGame) -> void:
+func setup(p_game: HoleGame, p_show_landing: bool = false) -> void:
 	game = p_game
+	show_landing = p_show_landing
 
 
 func _process(delta: float) -> void:
@@ -32,9 +36,10 @@ func _draw() -> void:
 		draw_rect(Rect2(point.x - 1, point.y - 1, 4, 4), Color(0.1, 0.13, 0.25, 0.75))
 		draw_rect(Rect2(point.x, point.y, 2, 2), Color("ffe25a"))
 
-	var landing: Vector2 = Vector2(preview["landing"]).round()
-	var bob: float = round(sin(_time * 5.0) * 1.5)
-	_draw_marker(landing + Vector2(0, -7.0 + bob))
+	if show_landing:
+		var landing: Vector2 = Vector2(preview["landing"]).round()
+		var bob: float = round(sin(_time * 5.0) * 1.5)
+		_draw_marker(landing + Vector2(0, -7.0 + bob))
 
 
 func _draw_marker(at: Vector2) -> void:

@@ -7,6 +7,9 @@ var course: CourseData
 var hole_index: int = 0
 ## Strokes for each finished hole, by hole index.
 var scores: Dictionary = {}
+## What earlier sets add to the totals, in infinite mode.
+var carried_to_par: int = 0
+var carried_holes: int = 0
 
 var _holes: Array[HoleData] = []
 
@@ -57,11 +60,6 @@ func start_over() -> void:
 	scores.clear()
 
 
-## Jumps to a hole without scoring anything, for reviewing the course.
-func jump_by(step: int) -> void:
-	hole_index = posmod(hole_index + step, _holes.size())
-
-
 func total_strokes() -> int:
 	var total: int = 0
 	for strokes: int in scores.values():
@@ -74,7 +72,20 @@ func total_to_par() -> int:
 	var par_total: int = 0
 	for index: int in scores.keys():
 		par_total += _holes[index].par
-	return total_strokes() - par_total
+	return total_strokes() - par_total + carried_to_par
+
+
+## How many holes have been finished, over every set.
+func finished_holes() -> int:
+	return scores.size() + carried_holes
+
+
+## The next set's course, with this one's totals carried over.
+func next_set(holes: Array[HoleData]) -> CourseRun:
+	var next: CourseRun = CourseRun.from_holes(holes)
+	next.carried_to_par = total_to_par()
+	next.carried_holes = finished_holes()
+	return next
 
 
 static func to_par_text(value: int) -> String:

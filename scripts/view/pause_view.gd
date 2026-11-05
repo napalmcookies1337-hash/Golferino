@@ -16,6 +16,9 @@ const DIM := Color("8f97a8")
 const CENTER_X := 320.0
 
 var selected: int = 0
+## What leaving says, since not every mode has a run to end.
+var end_label: String = "END THIS RUN"
+var end_note: String = "ENDING A RUN STILL SAVES ITS SCORE"
 var _menu_input := MenuInput.new()
 
 
@@ -97,5 +100,6 @@ func _draw() -> void:
 		elif i == Item.SOUND:
 			VolumeRow.draw(self, str(ITEMS[i]), Sound.sfx_level, CENTER_X, y, i == selected)
 		else:
-			PixelFont.draw_centered(self, str(ITEMS[i]), CENTER_X, y, ACCENT if i == selected else TEXT, 2)
-	PixelFont.draw_centered(self, "ENDING A RUN STILL SAVES ITS SCORE", CENTER_X, 236.0, DIM)
+			var label: String = end_label if i == Item.END_RUN else str(ITEMS[i])
+			PixelFont.draw_centered(self, label, CENTER_X, y, ACCENT if i == selected else TEXT, 2)
+	PixelFont.draw_centered(self, end_note, CENTER_X, 236.0, DIM)

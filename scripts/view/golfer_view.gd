@@ -154,7 +154,9 @@ func _celebrate() -> void:
 	if _celebrate_side == 0:
 		var from_x: float = position.x
 		_celebrate_side = -1 if from_x < cup_x else 1
-		position.x = cup_x + float(_celebrate_side) * minf(absf(from_x - cup_x), RUN_IN_DISTANCE)
+		# On a floating hole, the golfer can't run in across the sky.
+		var run_in: float = IslesGenerator.CUP_ISLAND_RUN_IN if game.terrain.is_floating() else RUN_IN_DISTANCE
+		position.x = cup_x + float(_celebrate_side) * minf(absf(from_x - cup_x), run_in)
 	var target_x: float = cup_x + float(_celebrate_side) * CELEBRATE_GAP
 	_face_override = -_celebrate_side
 	_lean_scale = 0.0

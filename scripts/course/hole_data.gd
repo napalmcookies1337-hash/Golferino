@@ -12,6 +12,12 @@ extends Resource
 @export var surface_spans: Array = []
 ## Each entry: { "from": x, "to": x, "level": y }. Ground below level in range floods.
 @export var water_spans: Array = []
+## Each entry: { "from": x, "to": x }. Nothing there but sky: a floating hole's gaps. Any
+## ground left between them is an island, with an underside of its own.
+@export var void_spans: Array = []
+## Where a checkpoint's flag stands, and where its island starts. Below zero means no checkpoint.
+@export var checkpoint_x: float = -1.0
+@export var checkpoint_from: float = -1.0
 ## Tree pieces, which are scenery and have no effect on the ball. Each entry has a "kind"
 ## ("trunk" or "leaves"), an "x", and a "height" above the ground there: the base of a
 ## trunk, or the middle of the leaves. Leaves also have a "variant" for their shape.

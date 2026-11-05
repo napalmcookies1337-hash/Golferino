@@ -40,12 +40,23 @@ func _swap_screen(next: Node) -> void:
 
 func _show_title() -> void:
 	var title := TitleScreen.new()
-	title.setup(library)
+	title.setup(library, profile)
 	title.play_chosen.connect(_start_course, CONNECT_DEFERRED)
+	title.infinite_chosen.connect(_start_infinite, CONNECT_DEFERRED)
+	title.isles_chosen.connect(_show_isles_menu, CONNECT_DEFERRED)
 	title.editor_chosen.connect(_open_editor, CONNECT_DEFERRED)
 	title.scores_chosen.connect(_show_scores, CONNECT_DEFERRED)
+	title.collection_chosen.connect(_show_collection, CONNECT_DEFERRED)
 	title.quit_chosen.connect(func() -> void: get_tree().quit())
 	_swap_screen(title)
+
+
+func _show_collection() -> void:
+	var collection := CollectionScreen.new()
+	collection.setup(profile)
+	collection.done.connect(_show_title, CONNECT_DEFERRED)
+	collection.done.connect(func() -> void: Sound.sfx("menu_back"))
+	_swap_screen(collection)
 
 
 func _show_scores() -> void:
@@ -56,11 +67,36 @@ func _show_scores() -> void:
 	_swap_screen(scores)
 
 
-func _start_course() -> void:
+func _start_course(infinite: bool = false) -> void:
 	var main: Node = MAIN_SCENE.instantiate()
 	main.embedded = true
 	main.library = library
 	main.profile = profile
+	main.infinite = infinite
+	main.exit_requested.connect(_show_title, CONNECT_DEFERRED)
+	_swap_screen(main)
+
+
+func _start_infinite() -> void:
+	_start_course(true)
+
+
+func _show_isles_menu() -> void:
+	var menu := IslesMenuScreen.new()
+	menu.setup(profile)
+	menu.course_chosen.connect(_start_isles, CONNECT_DEFERRED)
+	menu.back_chosen.connect(_show_title, CONNECT_DEFERRED)
+	menu.back_chosen.connect(func() -> void: Sound.sfx("menu_back"))
+	_swap_screen(menu)
+
+
+func _start_isles(yards: int) -> void:
+	var main: Node = MAIN_SCENE.instantiate()
+	main.embedded = true
+	main.library = library
+	main.profile = profile
+	main.floating_isles = true
+	main.isles_yards = yards
 	main.exit_requested.connect(_show_title, CONNECT_DEFERRED)
 	_swap_screen(main)
 

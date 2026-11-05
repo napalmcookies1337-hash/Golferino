@@ -160,15 +160,6 @@ func set_sfx_level(level: int) -> void:
 	_save_settings()
 
 
-## How many sounds are playing right now, for tests.
-func playing_voices() -> int:
-	var count: int = 0
-	for voice in _voices:
-		if voice.playing:
-			count += 1
-	return count
-
-
 func _track(track: String) -> AudioStream:
 	if not _tracks.has(track):
 		_tracks[track] = load("res://audio/music_%s.res" % track)

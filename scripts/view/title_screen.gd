@@ -3,15 +3,18 @@ extends Node2D
 ## The title menu. Works with keyboard, controller and mouse.
 
 signal play_chosen
+signal infinite_chosen
+signal isles_chosen
 signal editor_chosen
 signal scores_chosen
+signal collection_chosen
 signal quit_chosen
 
-enum Item { PLAY, EDITOR, SCORES, MUSIC, SOUND, QUIT }
+enum Item { PLAY, INFINITE, ISLES, EDITOR, SCORES, COLLECTION, MUSIC, SOUND, QUIT }
 
-const ITEMS := ["PLAY", "MAP EDITOR", "HIGH SCORES", "MUSIC", "SOUND", "QUIT"]
-const ITEM_TOP := 192.0
-const ITEM_GAP := 22.0
+const ITEMS := ["PLAY", "INFINITE MODE", "FLOATING ISLES", "MAP EDITOR", "HIGH SCORES", "COLLECTION", "MUSIC", "SOUND", "QUIT"]
+const ITEM_TOP := 170.0
+const ITEM_GAP := 18.0
 const CENTER_X := 320.0
 const ACCENT := Color("ffe25a")
 const TEXT := Color("f7f4e6")
@@ -24,9 +27,11 @@ const LOGO_BALL_RADIUS := 20.0
 const BALL_FLIGHT_TIME := 1.7
 const TEE_X := 112.0
 const CUP_X := 560.0
-const MENU_PANEL := Rect2(196, 182, 248, 142)
+const MENU_PANEL := Rect2(196, 162, 248, 172)
+const HINT_Y := 150.0
 
 var library: MapLibrary
+var profile: Profile
 var _selected: int = 0
 var _course_size: int = 0
 var _time: float = 0.0
@@ -36,8 +41,9 @@ var _scene: Node2D
 var _flight: float = -1.0
 
 
-func setup(p_library: MapLibrary) -> void:
+func setup(p_library: MapLibrary, p_profile: Profile) -> void:
 	library = p_library
+	profile = p_profile
 
 
 func _ready() -> void:
@@ -128,7 +134,7 @@ func _click_level(item: int, x: float) -> void:
 func _item_at(at: Vector2) -> int:
 	for i in ITEMS.size():
 		var y: float = ITEM_TOP + float(i) * ITEM_GAP
-		if absf(at.x - CENTER_X) < 110.0 and at.y >= y - 4.0 and at.y < y + 16.0:
+		if absf(at.x - CENTER_X) < 110.0 and at.y >= y - 2.0 and at.y < y + 16.0:
 			return i
 	return -1
 
@@ -141,12 +147,24 @@ func _choose(index: int) -> void:
 				play_chosen.emit()
 			else:
 				Sound.sfx("denied")
+		Item.INFINITE:
+			if profile.rival_beaten:
+				Sound.sfx("menu_ok")
+				infinite_chosen.emit()
+			else:
+				Sound.sfx("denied")
+		Item.ISLES:
+			Sound.sfx("menu_ok")
+			isles_chosen.emit()
 		Item.EDITOR:
 			Sound.sfx("menu_ok")
 			editor_chosen.emit()
 		Item.SCORES:
 			Sound.sfx("menu_ok")
 			scores_chosen.emit()
+		Item.COLLECTION:
+			Sound.sfx("menu_ok")
+			collection_chosen.emit()
 		Item.MUSIC, Item.SOUND:
 			# Space steps the level round, for anyone without left and right to hand.
 			var level: int = Sound.music_level if index == Item.MUSIC else Sound.sfx_level
@@ -156,8 +174,10 @@ func _choose(index: int) -> void:
 			quit_chosen.emit()
 
 
+# The ground is level either side of the cup, as it is on the course.
 func _ground_y(x: float) -> float:
-	return 334.0 + sin(x * 0.011) * 5.0 + sin(x * 0.023 + 1.0) * 2.0
+	var at: float = CUP_X if absf(x - CUP_X) <= Terrain.CUP_HALF + 2.0 else x
+	return 334.0 + sin(at * 0.011) * 5.0 + sin(at * 0.023 + 1.0) * 2.0
 
 
 # A strip of fairway along the bottom, with a pin at one end and a tee at the other.
@@ -171,14 +191,17 @@ func _draw_scene() -> void:
 		if (x * 37) % 11 == 0:
 			_scene.draw_rect(Rect2(x, top - 1.0, 1, 1), Color("8fd05a"))
 	var rim: float = round(_ground_y(CUP_X))
-	_scene.draw_rect(Rect2(CUP_X - 4.0, rim, 8, 5), Color("14100d"))
-	_scene.draw_rect(Rect2(CUP_X, rim - Terrain.PIN_HEIGHT, 1, Terrain.PIN_HEIGHT + 4.0), Color("f4f4ea"))
-	_scene.draw_rect(Rect2(CUP_X + 1.0, rim - Terrain.PIN_HEIGHT, 1, Terrain.PIN_HEIGHT + 4.0), Color("a9a99c"))
+	TerrainView.draw_cup(_scene, int(CUP_X), int(rim))
+	# As on the course, the pole stands on the bottom of the cup.
+	var pole: float = Terrain.PIN_HEIGHT + Terrain.CUP_DEPTH - 1.0
+	_scene.draw_rect(Rect2(CUP_X, rim - Terrain.PIN_HEIGHT, 1, pole), Color("f4f4ea"))
+	_scene.draw_rect(Rect2(CUP_X + 1.0, rim - Terrain.PIN_HEIGHT, 1, pole), Color("a9a99c"))
 	for col in 15:
 		var wave: float = round(sin(float(col) * 0.7 - _time * 5.0) * float(col) / 7.0)
 		var half: int = 5 - col / 3
 		var top_y: float = rim - Terrain.PIN_HEIGHT + 5.0 - float(half) + wave
 		_scene.draw_rect(Rect2(CUP_X + 2.0 + float(col), top_y, 1, half * 2 + 1), Color("e8483f"))
+		_scene.draw_rect(Rect2(CUP_X + 2.0 + float(col), top_y + float(half * 2), 1, 1), Color("a92b35"))
 	_draw_title_ball()
 
 
@@ -206,14 +229,16 @@ func _draw_menu() -> void:
 			VolumeRow.draw(_menu, str(ITEMS[i]), Sound.sfx_level, CENTER_X, y, i == _selected)
 			continue
 		var color: Color = ACCENT if i == _selected else TEXT
-		if i == Item.PLAY and _course_size == 0:
+		if (i == Item.PLAY and _course_size == 0) or (i == Item.INFINITE and not profile.rival_beaten):
 			color = DIM
 		PixelFont.draw_centered(_menu, str(ITEMS[i]), CENTER_X, y, color, 2)
 		if i == _selected:
 			var half: float = float(PixelFont.text_width(str(ITEMS[i]), 2)) / 2.0
 			PixelFont.draw_shadowed(_menu, ">", Vector2(CENTER_X - half - 22.0, y), ACCENT, 2)
-	if _course_size == 0:
-		PixelFont.draw_centered(_menu, "THE COURSE HAS NO HOLES: ADD SOME IN THE MAP EDITOR", CENTER_X, 170.0, ACCENT)
+	if _selected == Item.INFINITE and not profile.rival_beaten:
+		PixelFont.draw_centered(_menu, "BEAT THE RIVAL ONCE TO OPEN INFINITE MODE", CENTER_X, HINT_Y, ACCENT)
+	elif _course_size == 0:
+		PixelFont.draw_centered(_menu, "THE COURSE HAS NO HOLES: ADD SOME IN THE MAP EDITOR", CENTER_X, HINT_Y, ACCENT)
 
 
 # The name in big rolling letters, with a golf ball for its last letter.

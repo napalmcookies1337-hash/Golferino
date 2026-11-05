@@ -35,9 +35,6 @@ static func register() -> void:
 	# Restarting is only for testing a map. In a run, the same button shows the scorecard.
 	_add("restart", [KEY_R], [JOY_BUTTON_BACK])
 	_add("scorecard", [KEY_TAB], [JOY_BUTTON_BACK])
-	# For reviewing the course. These skip holes without scoring, and won't ship in a real run.
-	_add("review_next_hole", [KEY_PAGEDOWN], [])
-	_add("review_prev_hole", [KEY_PAGEUP], [])
 	_add("fullscreen", [KEY_F11], [])
 	_add("quit", [KEY_ESCAPE], [JOY_BUTTON_START])
 

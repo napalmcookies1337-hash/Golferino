@@ -4,7 +4,11 @@ extends RefCounted
 ## shop's stock and the final score. Knows nothing about nodes or drawing.
 
 const START_SPARE := 8
+## Infinite mode: spare strokes banked after a boss, divided by this, is the coins paid.
+const COINS_PER_BANKED_STROKE_DIVISOR := 2
 const STICKERS_PER_CLUB := 3
+## How many of the same sticker can share one slot on a club.
+const MAX_STACK := 3
 const SHOP_SHELVES := 4
 ## What everything costs in the first shop.
 const START_PRICE := 3
@@ -37,6 +41,13 @@ var ball_id: String = ""
 var balls: Array[String] = [""]
 var perks: Array[String] = []
 var ending: int = Ending.NONE
+## True in infinite mode, where beating a boss leads to another set of holes.
+var infinite: bool = false
+## Which set this is. The main game is one set.
+var set_number: int = 1
+## How hard the run is now, from 0 up to Difficulty.MAX_LEVEL. The main game stays at 0.
+var level: int = 0
+var bosses_beaten: int = 0
 ## This hole's coins so far, for its summary.
 var hole_pickups: int = 0
 var hole_tricks: int = 0
@@ -134,12 +145,27 @@ func leave_hole_unfinished(strokes: int) -> void:
 ## What completing a hole pays, from its place in the course (0 is the first hole). The
 ## score only matters to the perks that pay for it.
 func hole_payout(hole_index: int, strokes: int, par: int) -> int:
-	var payout: int = PAYOUT_EARLY if hole_index + 1 < PAYOUT_LATE_FROM_HOLE else PAYOUT_LATE
+	var early: bool = set_number == 1 and hole_index + 1 < PAYOUT_LATE_FROM_HOLE
+	var payout: int = PAYOUT_EARLY if early else PAYOUT_LATE
 	if strokes == par:
 		payout += int(perk_number("par_bonus", 0.0))
 	elif strokes < par:
 		payout += int(perk_number("under_par_bonus", 0.0))
 	return payout
+
+
+## Infinite mode: beating a boss adds its reward to the spare strokes, cashes all of them in
+## for coins, puts the budget back to the start, and raises the difficulty for the next set.
+## Returns what was banked and what it paid.
+func beat_boss() -> Dictionary:
+	var banked: int = maxi(spare, 0) + Difficulty.boss_reward(level)
+	var paid: int = banked / COINS_PER_BANKED_STROKE_DIVISOR
+	coins += paid
+	spare = START_SPARE
+	bosses_beaten += 1
+	set_number += 1
+	level = mini(level + 1, Difficulty.MAX_LEVEL)
+	return { "banked": banked, "coins": paid }
 
 
 ## Uses the Safety Net if there's one left, returning the strokes it gives back.
@@ -155,11 +181,14 @@ func use_safety_net() -> int:
 # --- The shop ---
 
 ## Everything starts at the same low price and climbs to its full price by the last shop.
+## From the second set of infinite mode on it's full price, and difficulty adds to that.
 func price_of(item: Dictionary) -> int:
 	var last_shop: int = maxi(course.hole_count() - 2, 1)
 	var progress: float = clampf(float(course.hole_index) / float(last_shop), 0.0, 1.0)
+	if set_number > 1 or item.get("fixed_price", false):
+		progress = 1.0
 	var price: float = lerpf(float(START_PRICE), float(item["price"]), progress)
-	return maxi(roundi(price * perk_number("prices", 1.0)), 1)
+	return maxi(roundi(price * perk_number("prices", 1.0) * Difficulty.price_scale(level)), 1)
 
 
 func can_afford(item: Dictionary) -> bool:
@@ -235,21 +264,61 @@ func buy(item: Dictionary, replace_slot: int = -1) -> bool:
 	return true
 
 
+## What's on a club, slot by slot: each { "id", "count" }. Stickers that match share a slot.
+func sticker_slots(club_id: String) -> Array[Dictionary]:
+	var slots: Array[Dictionary] = []
+	for id: Variant in stickers[club_id]:
+		var found: bool = false
+		for slot in slots:
+			if slot["id"] == str(id):
+				slot["count"] = int(slot["count"]) + 1
+				found = true
+		if not found:
+			slots.append({ "id": str(id), "count": 1 })
+	return slots
+
+
 func club_is_full(club_id: String) -> bool:
-	return (stickers[club_id] as Array).size() >= STICKERS_PER_CLUB
+	return sticker_slots(club_id).size() >= STICKERS_PER_CLUB
 
 
-## Buys a sticker onto a club. On a full club it replaces the one at replace_slot, which is lost.
+## How many of this sticker a club already has.
+func sticker_count(club_id: String, item: Dictionary) -> int:
+	return (stickers[club_id] as Array).count(str(item["id"]))
+
+
+## True when this sticker can't go on the club at all, since its stack is complete.
+func stack_is_complete(club_id: String, item: Dictionary) -> bool:
+	return sticker_count(club_id, item) >= MAX_STACK
+
+
+## True when putting this sticker on the club means losing another one first.
+func must_replace_for(club_id: String, item: Dictionary) -> bool:
+	return club_is_full(club_id) and sticker_count(club_id, item) == 0
+
+
+## Buys a sticker onto a club, stacking it on a match. A new sticker on a full club replaces
+## the whole stack in replace_slot, which is lost.
 func buy_sticker(item: Dictionary, club_id: String, replace_slot: int = -1) -> bool:
 	if not can_afford(item) or not (item.get("clubs", []) as Array).has(club_id):
 		return false
+	if stack_is_complete(club_id, item):
+		return false
+	var id: String = str(item["id"])
 	var on_club: Array = stickers[club_id]
-	if club_is_full(club_id):
-		if replace_slot < 0 or replace_slot >= on_club.size():
+	if must_replace_for(club_id, item):
+		var slots: Array[Dictionary] = sticker_slots(club_id)
+		if replace_slot < 0 or replace_slot >= slots.size():
 			return false
-		on_club[replace_slot] = str(item["id"])
+		var lost: String = slots[replace_slot]["id"]
+		var at: int = on_club.find(lost)
+		while on_club.has(lost):
+			on_club.erase(lost)
+		on_club.insert(at, id)
+	elif on_club.has(id):
+		on_club.insert(on_club.rfind(id) + 1, id)
 	else:
-		on_club.append(str(item["id"]))
+		on_club.append(id)
 	coins -= price_of(item)
 	return true
 
@@ -258,7 +327,7 @@ func buy_sticker(item: Dictionary, club_id: String, replace_slot: int = -1) -> b
 
 ## The scorecard's rows and total. Unfinished holes don't count for or against par.
 func final_score() -> Dictionary:
-	var finished: int = course.scores.size()
+	var finished: int = course.finished_holes()
 	var under_par: int = -course.total_to_par()
 	var left_over: int = maxi(spare, 0)
 	var rows: Array[Dictionary] = [
@@ -269,6 +338,8 @@ func final_score() -> Dictionary:
 	]
 	if ending == Ending.BEAT_RIVAL:
 		rows.append({ "label": "BEAT THE RIVAL", "points": SCORE_RIVAL_BEATEN })
+	if bosses_beaten > 0:
+		rows.append({ "label": "BOSSES BEATEN %d" % bosses_beaten, "points": bosses_beaten * SCORE_RIVAL_BEATEN })
 	var total: int = 0
 	for row in rows:
 		total += int(row["points"])

@@ -14,6 +14,9 @@ const HILLS := [
 	[0.3, 238.0, 20.0, 7.7],
 ]
 const CLUBHOUSE_X := 410
+## Where the two banks of cloud start, down the picture.
+const CLOUD_SEA_FAR := 292
+const CLOUD_SEA_NEAR := 322
 const MOODS := {
 	Mood.MORNING: {
 		"sky_top": "5aa7e6", "sky_bottom": "ffe8cf", "cloud": "ffffff", "cloud_shade": "ffe4d6",
@@ -41,6 +44,8 @@ const BIRD_GAP := 16.0
 
 var camera: Camera2D
 var mood: int = Mood.MIDDAY
+## Floating Isles: a sea of cloud below instead of hills, since there's no ground down there.
+var above_the_clouds: bool = false
 var _sprites: Array[Sprite2D] = []
 var _speeds: Array[float] = []
 var _cloud_sprite: Sprite2D
@@ -83,15 +88,19 @@ func _ready() -> void:
 
 	_cloud_sprite = _add_layer(_make_clouds(style), 0.05)
 
-	var colours: Array = style["hills"]
-	for i in HILLS.size():
-		var hill: Array = HILLS[i]
-		var image: Image = _make_hills(hill[1], hill[2], Color(colours[i]), hill[3])
-		if i == 1:
-			_paint_clubhouse(image, hill, Color(colours[i]))
-		elif i == 2:
-			_paint_tree_line(image, hill, Color(colours[i]))
-		_add_layer(image, hill[0])
+	if above_the_clouds:
+		_add_layer(_make_cloud_sea(style, CLOUD_SEA_FAR, 301), 0.1)
+		_add_layer(_make_cloud_sea(style, CLOUD_SEA_NEAR, 302), 0.25)
+	else:
+		var colours: Array = style["hills"]
+		for i in HILLS.size():
+			var hill: Array = HILLS[i]
+			var image: Image = _make_hills(hill[1], hill[2], Color(colours[i]), hill[3])
+			if i == 1:
+				_paint_clubhouse(image, hill, Color(colours[i]))
+			elif i == 2:
+				_paint_tree_line(image, hill, Color(colours[i]))
+			_add_layer(image, hill[0])
 
 	_birds = Node2D.new()
 	_birds.draw.connect(_draw_birds)
@@ -214,6 +223,23 @@ func _make_clouds(style: Dictionary) -> Image:
 			var px: int = cx + (p - puffs / 2) * rng.randi_range(9, 13)
 			var py: int = cy + rng.randi_range(-3, 3)
 			_paint_puff(image, px, py, rng.randi_range(7, 13), Color(style["cloud"]), Color(style["cloud_shade"]))
+	return image
+
+
+# A bank of cloud along the bottom of the picture, in place of the ground and hills.
+func _make_cloud_sea(style: Dictionary, top: int, seed_value: int) -> Image:
+	var image := Image.create(WIDTH, HEIGHT, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var fill := Color(style["cloud"])
+	var shade := Color(style["cloud_shade"])
+	var x: int = 0
+	while x < WIDTH:
+		_paint_puff(image, x, top + rng.randi_range(0, 10), rng.randi_range(12, 22), fill, shade)
+		x += rng.randi_range(12, 22)
+	for py in range(top + 8, HEIGHT):
+		for px in WIDTH:
+			image.set_pixel(px, py, shade if (px + py) % 2 == 0 and py < top + 12 else fill)
 	return image
 
 

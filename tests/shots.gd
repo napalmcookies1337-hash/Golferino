@@ -1,6 +1,6 @@
 extends Node
 ## Plays the real scene and saves screenshots to tests/shots.
-## Run with: Godot --path . --windowed --resolution 1280x720 res://tests/shots.tscn
+## Run with: Godot --path . --windowed --resolution 1280x720 --quit-after 40000 res://tests/shots.tscn
 
 const OUT_DIR := "res://tests/shots"
 const PROFILE_PATH := "user://shots_profile.json"
@@ -39,9 +39,12 @@ func _run() -> void:
 	await _test_full_power()
 	await _test_reactions()
 	await _save_cup_closeup()
+	await _test_landing_arrow()
 	await _test_pause()
 	await _test_out_of_strokes()
 	await _test_duel()
+	await _test_infinite()
+	await _test_floating_isles()
 	if FileAccess.file_exists(PROFILE_PATH):
 		DirAccess.remove_absolute(PROFILE_PATH)
 	print("shots finished")
@@ -105,9 +108,16 @@ func _test_progression() -> void:
 	_expect(main.run.hole_index == 1, "leaving the shop moves on to the next hole")
 	_expect(game().hole.display_name == "HOLE 2", "the new hole is loaded")
 	await _save("00_next_hole_title")
+	# The hole skips are gone from the game: these keys must do nothing in a run.
 	_press_key(KEY_PAGEUP)
+	_press_key(KEY_PAGEDOWN)
 	await _wait(0.2)
-	_expect(main.run.hole_index == 0, "Page Up reviews the previous hole")
+	_expect(main.run.hole_index == 1, "Page Up and Page Down no longer skip holes")
+	_expect(not InputMap.has_action("review_next_hole"), "the skip keys aren't bound to anything")
+	# The tests that follow are set on the first hole.
+	main.run.hole_index = 0
+	main.load_current_hole()
+	await _wait(0.2)
 
 
 # Buys things with real key presses, through to a full club.
@@ -175,6 +185,7 @@ func _test_shop() -> void:
 	await _wait(0.1)
 	_expect(run_state.stickers["driver"] == ["sweet_tape", "power_stripe", "wide_angle"], "the chosen sticker is replaced")
 	await _save("shop_04_after_buying")
+	await _test_sticker_stacking(shop, run_state)
 	await _test_shop_balls(shop, run_state)
 
 	_press_key(KEY_TAB)
@@ -193,6 +204,68 @@ func _test_shop() -> void:
 	# A clean bag for the rest of the checks.
 	run_state.stickers = { "driver": [], "iron": [], "putter": [] }
 	run_state.ball_id = ""
+
+
+# The arrow only appears with the perk, and goes with it.
+func _test_landing_arrow() -> void:
+	var run_state: RunState = main.run_state
+	var was_on: Array[String] = run_state.perks.duplicate()
+	main.load_current_hole()
+	await _wait(0.3)
+	_expect(not _find_aim_view().show_landing, "no landing arrow without the perk")
+	run_state.perks.append("landing_arrow")
+	main.load_current_hole()
+	await _wait(1.0)
+	_expect(_find_aim_view().show_landing, "the perk shows the landing arrow")
+	# The iron, so that the landing is on screen for the picture.
+	game().select_club(1)
+	await _wait(0.2)
+	await _save("perk_landing_arrow")
+	run_state.perks = was_on
+	main.load_current_hole()
+	await _wait(0.3)
+
+
+func _find_aim_view() -> AimView:
+	for child in main._world.get_children():
+		if child is AimView:
+			return child
+	return null
+
+
+# Buys more of a sticker already on a full club, with real key presses.
+func _test_sticker_stacking(shop: ShopScreen, run_state: RunState) -> void:
+	var stripe: Dictionary = Items.by_id("power_stripe")
+	for expected: int in [2, 3]:
+		shop.sold.clear()
+		shop.cursor = 0
+		_press_key(KEY_SPACE)
+		await _wait(0.05)
+		shop.club_cursor = 0
+		await _wait(0.05)
+		if expected == 2:
+			await _save("shop_08_stack_prompt")
+		_press_key(KEY_SPACE)
+		await _wait(0.1)
+		_expect(shop.mode == ShopScreen.Mode.BROWSE, "a match stacks without asking what to replace")
+		_expect(run_state.sticker_count("driver", stripe) == expected, "making %d on the club" % expected)
+	_expect(run_state.sticker_slots("driver").size() == RunState.STICKERS_PER_CLUB, "and they share one slot")
+	await _save("shop_09_stacked")
+	shop.sold.clear()
+	shop.cursor = 0
+	var coins_before: int = run_state.coins
+	_press_key(KEY_SPACE)
+	await _wait(0.05)
+	shop.club_cursor = 0
+	await _wait(0.05)
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_expect(shop.mode == ShopScreen.Mode.PICK_CLUB, "a complete stack refuses a fourth")
+	_expect(run_state.coins == coins_before, "and charges nothing")
+	await _save("shop_10_stack_complete")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.1)
+	_expect(shop.mode == ShopScreen.Mode.BROWSE, "Esc backs out of it")
 
 
 # Swaps balls and replaces one, with real key presses.
@@ -387,9 +460,12 @@ func _test_reactions() -> void:
 
 
 func _test_pause() -> void:
+	# A hole's title on screen mustn't show through the pause menu.
+	main.hud.show_message("A LONG MESSAGE ON SCREEN", 5.0)
 	_press_key(KEY_ESCAPE)
 	await _wait(0.2)
 	_expect(main.pause_menu != null, "Esc pauses a run")
+	_expect(main.hud.message_hidden, "the pause menu hides any message")
 	await _save("run_pause")
 	_press_key(KEY_DOWN)
 	_press_key(KEY_DOWN)
@@ -412,6 +488,7 @@ func _test_pause() -> void:
 	_expect(game()._phase_time == time_before, "the game stops while paused")
 	_press_key(KEY_ESCAPE)
 	await _wait(0.2)
+	_expect(not main.hud.message_hidden, "and the message comes back after resuming")
 	_expect(main.pause_menu == null, "Esc resumes")
 
 
@@ -534,12 +611,235 @@ func _test_duel() -> void:
 	await _save("run_over_duel")
 
 
+# Looks along a map, falls off it for real, finishes it, then tries again on a new one.
+func _test_floating_isles() -> void:
+	var profile: Profile = main.profile
+	remove_child(main)
+	main.queue_free()
+	main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	main.profile = profile
+	main.floating_isles = true
+	add_child(main)
+	await _wait(0.8)
+	await _save("isles_01_tee")
+	_expect(main.run_state == null, "Floating Isles has no shop, coins or budget")
+	_expect(game().distance_to_cup() == 12000.0, "the pin starts 4000 yards away")
+	var hole: HoleData = game().hole
+
+	game().select_club(1)
+	game().strike_with(1.0, 0.0)
+	await _wait(1.5)
+	await _save("isles_02_flight")
+	var steps: int = 0
+	while game().phase == HoleGame.Phase.BALL_MOVING and steps < 400:
+		await _wait(0.05)
+		steps += 1
+
+	for spot: float in [0.25, 0.5]:
+		game().start_from(hole.tee_x + 12000.0 * spot)
+		await _wait(0.9)
+		await _save("isles_03_middle_%d" % int(spot * 100.0))
+
+	# Off the far side of whichever island this is, for a fall that's certainly a fall.
+	game().start_from(hole.cup_x + IslesGenerator.CUP_ISLAND_HALF - 8.0)
+	game().facing = 1
+	var strokes_before: int = game().strokes
+	game().select_club(1)
+	game().strike_with(0.5, 0.0)
+	await _wait(1.2)
+	await _save("isles_04_falling")
+	steps = 0
+	while game().phase != HoleGame.Phase.PENALTY and steps < 200:
+		await _wait(0.05)
+		steps += 1
+	await _wait(0.1)
+	await _save("isles_05_fell")
+	_expect(game().falls >= 1, "going off the end counts as a fall")
+	steps = 0
+	while game().phase != HoleGame.Phase.AIM and steps < 200:
+		await _wait(0.05)
+		steps += 1
+	_expect(game().strokes == strokes_before + 1, "the fall adds nothing but the stroke that caused it")
+	_expect(is_equal_approx(game().ball.pos.x, hole.tee_x), "the fall returns the ball to the tee")
+	await _wait(1.0)
+	await _save("isles_06_back_at_tee")
+
+	# Reach the checkpoint with a real shot, then fall and come back to it.
+	_expect(not game().checkpoint_reached, "the checkpoint starts out unreached")
+	var checkpoint_spot: float = hole.checkpoint_x - HoleGame.CHECKPOINT_STAND_OFF
+	game().start_from(checkpoint_spot)
+	await _wait(0.9)
+	await _save("isles_06a_checkpoint_ahead")
+	game().select_club(2)
+	game().strike_with(0.02, 0.0)
+	steps = 0
+	while game().phase != HoleGame.Phase.AIM and steps < 200:
+		await _wait(0.05)
+		steps += 1
+	await _wait(0.2)
+	_expect(game().checkpoint_reached, "coming to rest on its island reaches the checkpoint")
+	await _save("isles_06b_checkpoint_reached")
+	game().start_from(hole.cup_x + IslesGenerator.CUP_ISLAND_HALF - 8.0)
+	game().facing = 1
+	game().select_club(1)
+	game().strike_with(0.5, 0.0)
+	steps = 0
+	while game().phase != HoleGame.Phase.PENALTY and steps < 200:
+		await _wait(0.05)
+		steps += 1
+	await _wait(0.1)
+	await _save("isles_06c_fell_to_checkpoint")
+	steps = 0
+	while game().phase != HoleGame.Phase.AIM and steps < 200:
+		await _wait(0.05)
+		steps += 1
+	_expect(is_equal_approx(game().ball.pos.x, checkpoint_spot), "after that a fall returns to the checkpoint")
+	await _wait(1.0)
+	await _save("isles_06d_back_at_checkpoint")
+
+	game().start_from(hole.cup_x - 90.0)
+	await _wait(0.8)
+	await _save("isles_07_green")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_expect(main.pause_menu != null, "Esc pauses Floating Isles")
+	await _save("isles_08_pause")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+
+	var scores_before: int = profile.isles_table(4000).size()
+	var finished_strokes: int = game().strokes
+	game().ball.holed.emit()
+	await _wait(0.6)
+	await _save("isles_09_holed")
+	await _wait(1.3)
+	_expect(main.isles_finish != null, "reaching the hole brings up the finish screen")
+	_expect(profile.isles_table(4000).size() == scores_before + 1, "and the crossing goes on the leaderboard")
+	_expect(int(profile.isles_table(4000)[0]["strokes"]) == finished_strokes, "with its strokes")
+	await _wait(0.3)
+	await _save("isles_10_finish")
+
+	_press_key(KEY_SPACE)
+	await _wait(0.8)
+	_expect(main.isles_finish == null, "Try Again closes the finish screen")
+	_expect(game().strokes == 0 and game().falls == 0, "and starts afresh")
+	_expect(game().hole.points != hole.points, "on a new map")
+	await _save("isles_11_try_again")
+
+	main.isles_yards = 1000
+	main._begin_isles()
+	await _wait(0.8)
+	_expect(is_equal_approx(game().distance_to_cup(), 3000.0), "a 1000 yard course is 1000 yards")
+	await _save("isles_12_short_course")
+
+
+# Beats a boss for real, goes through the shop into a harder set, then loses the next duel.
+func _test_infinite() -> void:
+	var profile: Profile = main.profile
+	var scores_before: int = profile.high_scores.size()
+	remove_child(main)
+	main.queue_free()
+	main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	main.profile = profile
+	main.infinite = true
+	main.infinite_seed = 7
+	add_child(main)
+	await _wait(0.5)
+	var run_state: RunState = main.run_state
+	_expect(run_state.infinite and run_state.level == 0, "an infinite run starts at the lowest difficulty")
+	_expect(main.run.hole_count() == HoleGenerator.HOLES_PER_SET + 1, "with nine holes and a boss")
+	await _shoot_generated(0)
+
+	# A hole played on the way, so totals have something to carry.
+	main.run.hole_index = 0
+	run_state.finish_hole(main.run.current_hole().par - 1)
+	main.run.hole_index = main.run.hole_count() - 1
+	main.load_current_hole()
+	await _wait(0.5)
+	_expect(game().rival != null, "the set ends on a duel")
+	var spare_before: int = run_state.spare
+	var coins_before: int = run_state.coins
+	await _save("infinite_01_boss")
+	# Sinks the player's ball where it lies, so the duel is won.
+	game().ball.state = BallSim.State.HOLED
+	game().player_holed = true
+	game().rival.strokes = 99
+	game().strokes = 3
+	game()._settle_duel()
+	await _wait(0.5)
+	_expect(game().duel_won, "the duel is won")
+	_expect(run_state.ending == RunState.Ending.NONE, "beating the boss doesn't end the run")
+	_expect(run_state.level == 1 and run_state.set_number == 2, "the difficulty goes up")
+	var par: int = main.run.current_hole().par
+	var banked: int = spare_before + (par - 3) + Difficulty.boss_reward(0)
+	_expect(run_state.spare == RunState.START_SPARE, "spare strokes go back to the start")
+	_expect(run_state.coins == coins_before + run_state.hole_payout(run_state.course.hole_index, 3, par) + banked / 2, "and the banked strokes pay coins")
+	_expect(profile.rival_beaten, "the win counts on the profile")
+	await _save("infinite_02_boss_beaten")
+
+	_press_key(KEY_SPACE)
+	await _wait(0.5)
+	_expect(main.shop != null, "a shop follows the boss")
+	_expect(main.run_over == null, "and not the final score")
+	await _save("infinite_03_shop_after_boss")
+	var to_par: int = main.run.total_to_par()
+	var finished: int = main.run.finished_holes()
+	var old_run: CourseRun = main.run
+	main.shop.done.emit()
+	await _wait(0.5)
+	_expect(main.run != old_run, "leaving the shop starts a new set")
+	_expect(main.run.hole_index == 0 and main.run.scores.is_empty(), "from its first hole")
+	_expect(run_state.course == main.run, "and the run moves on to it")
+	_expect(main.run.total_to_par() == to_par and main.run.finished_holes() == finished, "with the totals carried over")
+	_expect(game().stroke_limit == run_state.stroke_limit(game().hole.par), "and the budget still applies")
+	await _save("infinite_04_second_set")
+	await _shoot_generated(10)
+
+	# Losing the second duel ends the run, at the new difficulty.
+	main.run = main.run.next_set(HoleGenerator.generate_set(main._hole_rng, run_state.level))
+	run_state.course = main.run
+	main.run.hole_index = main.run.hole_count() - 1
+	main.load_current_hole()
+	await _wait(0.5)
+	var rival: Rival = game().rival
+	_expect(is_equal_approx(rival._miss_chance, Difficulty.rival_miss_chance(1)), "the rival plays at the run's difficulty")
+	_expect(rival._power_steps == Difficulty.rival_power_steps(1), "and plans at it too")
+	game()._finish_duel(false)
+	await _wait(0.5)
+	_expect(run_state.ending == RunState.Ending.LOST_TO_RIVAL, "losing a duel ends the run")
+	_press_key(KEY_SPACE)
+	await _wait(0.5)
+	_expect(main.run_over != null, "and shows the final score")
+	await _wait(main.run_over.reveal_time() + 0.2)
+	await _save("infinite_05_final_score")
+	_expect(profile.infinite_scores.size() == 1, "the run goes in its own table")
+	_expect(profile.high_scores.size() == scores_before, "and not the main game's")
+
+
+# Overviews of generated holes, to judge how they look. Each is from a fresh set at this level.
+func _shoot_generated(level: int) -> void:
+	var run_state: RunState = main.run_state
+	var before: CourseRun = main.run
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 100 + level
+	main.run = CourseRun.from_holes(HoleGenerator.generate_set(rng, level))
+	run_state.course = main.run
+	for index: int in [0, 1, 4, 8, 9]:
+		await _shoot_hole(index, "gen_level%02d_hole%02d" % [level, index + 1])
+	main.run = before
+	run_state.course = before
+	main.run.hole_index = 0
+	main.load_current_hole()
+	await _wait(0.3)
+
+
 # Saves a zoomed-out view of the whole hole, then the view from the tee.
-func _shoot_hole(index: int) -> void:
+func _shoot_hole(index: int, label: String = "") -> void:
 	main.run.hole_index = index
 	main.load_current_hole()
 	await _wait(0.5)
-	var label: String = "hole_%02d" % (index + 1)
+	if label == "":
+		label = "hole_%02d" % (index + 1)
 	await _save("%s_tee" % label)
 
 	var camera: FollowCamera = main.camera

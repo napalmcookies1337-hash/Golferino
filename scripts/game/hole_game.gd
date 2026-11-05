@@ -15,6 +15,8 @@ signal trick_shot(trick_name: String, coins: int)
 signal penalty_forgiven
 ## The stroke budget has run out, with the ball not in the hole.
 signal out_of_strokes
+## The ball has come to rest at or past the hole's checkpoint for the first time.
+signal checkpoint_touched
 
 enum Phase { AIM, SWING, DOWNSWING, BALL_MOVING, PENALTY, COMPLETE, RIVAL_TURN, OUT_OF_STROKES }
 
@@ -42,6 +44,8 @@ const SLOPE_CLEARANCE := 6.0
 const MIN_LAUNCH_ANGLE := 3.0
 const MAX_LAUNCH_ANGLE := 85.0
 const MIN_LIE_POWER := 0.1
+## A ball returned to the checkpoint sits this far on the tee side of its flag.
+const CHECKPOINT_STAND_OFF := 22.0
 
 var hole: HoleData
 var terrain: Terrain
@@ -64,6 +68,12 @@ var last_quality: String = ""
 var stroke_limit: int = 0
 ## Penalties this hole that cost no stroke.
 var free_penalties: int = 0
+## Floating Isles: losing the ball sends it back to the tee. That costs no extra stroke, and
+## the strokes taken so far still count.
+var falls_return_to_tee: bool = false
+var falls: int = 0
+## Once true, a fall returns the ball to the checkpoint instead of the tee.
+var checkpoint_reached: bool = false
 ## The opponent on a duel hole, or null when playing alone.
 var rival: Rival = null
 var player_holed: bool = false
@@ -106,6 +116,8 @@ func _init(p_hole: HoleData, p_clubs: Array[ClubData], ball_id: String = "") -> 
 
 func restart() -> void:
 	strokes = 0
+	falls = 0
+	checkpoint_reached = false
 	last_quality = ""
 	for obstacle in obstacles:
 		obstacle.reset()
@@ -454,7 +466,18 @@ func _set_phase(new_phase: int) -> void:
 
 
 func _on_ball_stopped() -> void:
+	_check_checkpoint()
 	_after_player_shot()
+
+
+# Coming to rest on the checkpoint's island or any island beyond it counts, so a long shot over
+# the flag doesn't leave the player worse off than a short one onto it.
+func _check_checkpoint() -> void:
+	if not falls_return_to_tee or checkpoint_reached or hole.checkpoint_x < 0.0:
+		return
+	if ball.pos.x >= hole.checkpoint_from:
+		checkpoint_reached = true
+		checkpoint_touched.emit()
 
 
 # After a shot that didn't drop. The rival's tricks only last for the shot they targeted.
@@ -523,6 +546,12 @@ func _on_ball_holed() -> void:
 
 
 func _on_ball_hazard(_at: Vector2, kind: String) -> void:
+	if falls_return_to_tee:
+		falls += 1
+		_last_spot_x = hole.checkpoint_x - CHECKPOINT_STAND_OFF if checkpoint_reached else hole.tee_x
+		penalty_taken.emit("fall")
+		_set_phase(Phase.PENALTY)
+		return
 	if free_penalties > 0:
 		free_penalties -= 1
 		penalty_taken.emit(kind)

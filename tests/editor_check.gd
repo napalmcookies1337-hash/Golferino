@@ -1,7 +1,7 @@
 extends Node
 ## Drives the real game through the title menu and map editor with real mouse and keyboard
 ## events, and saves screenshots to tests/shots. Uses its own map folder.
-## Run with: Godot --path . --windowed --resolution 1280x720 --quit-after 6000 res://tests/editor_check.tscn
+## Run with: Godot --path . --windowed --resolution 1280x720 --quit-after 20000 res://tests/editor_check.tscn
 
 const OUT_DIR := "res://tests/shots"
 const MAPS_DIR := "user://check_maps"
@@ -53,7 +53,7 @@ func _title_menu() -> void:
 	await _wait(0.4)
 	_expect(app._screen is TitleScreen, "the game opens on the title menu")
 	await _save("editor_01_title")
-	await _click(Vector2(320, 214))
+	await _click(Vector2(320, _title_row(TitleScreen.Item.EDITOR)))
 	await _wait(0.3)
 	_expect(app._screen is MapEditor, "clicking MAP EDITOR opens the editor")
 
@@ -420,7 +420,7 @@ func _play_edited_course() -> void:
 	await _wait(0.1)
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "TITLE MENU goes back to the menu")
-	await _click(Vector2(320, 192))
+	await _click(Vector2(320, _title_row(TitleScreen.Item.PLAY)))
 	await _wait(0.5)
 	_expect(app._screen.get("game") != null, "PLAY starts the course")
 	_expect(app._screen.game.hole.title == "RENAMED", "a run plays the edited maps")
@@ -441,7 +441,7 @@ func _play_edited_course() -> void:
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "the final score goes back to the menu")
 	_expect(app.profile.high_scores.size() == 1, "an ended run is saved to the high scores")
-	await _click(Vector2(320, 236))
+	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
 	await _wait(0.3)
 	_expect(app._screen is HighScoresScreen, "HIGH SCORES opens from the menu")
 	await _save("editor_22_high_scores")
@@ -449,7 +449,161 @@ func _play_edited_course() -> void:
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "the high scores go back to the menu")
 	await _save("editor_23_title_again")
+	await _collection()
 	DirAccess.remove_absolute(PROFILE_PATH)
+
+
+func _collection() -> void:
+	await _click(Vector2(320, _title_row(TitleScreen.Item.COLLECTION)))
+	await _wait(0.3)
+	_expect(app._screen is CollectionScreen, "COLLECTION opens from the menu")
+	_expect(not app.profile.rival_beaten, "the check's new profile hasn't beaten the rival")
+	var screen: CollectionScreen = app._screen
+	_expect(screen.selected_item()["id"] == "power_stripe", "the collection starts on the first item")
+	await _save("editor_24_collection_new")
+	# The first row's last cell, a locked sticker, picked by the mouse.
+	var cell: Vector2 = screen._cell_rect(0, 9).get_center()
+	await _click(cell)
+	await _wait(0.1)
+	_expect(screen.selected_item()["id"] == "two_way_tape", "clicking an item selects it")
+	await _save("editor_25_collection_locked")
+	# Earn some items, so unlocked and locked show side by side.
+	app.profile.unlocked.assign(["forgiver", "heavy_ball", "two_way_tape"])
+	await _wait(0.1)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_expect(screen.row == 1, "down moves to the next row")
+	await _save("editor_26_collection_some")
+	_expect(screen.describe(Items.by_id("heavy_ball"))["name"] == "HEAVY BALL", "an earned item shows its name")
+	app.profile.unlocked.assign(Items.unlock_order())
+	await _wait(0.1)
+	_expect(screen.count_owned() == screen.count_all(), "with everything earned, nothing is locked")
+	await _save("editor_27_collection_all")
+	await _click(CollectionScreen.BACK_BUTTON.get_center())
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "BACK goes back to the menu")
+	_press_key(KEY_DOWN)
+	_press_key(KEY_DOWN)
+	_press_key(KEY_DOWN)
+	_press_key(KEY_DOWN)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(app._screen is CollectionScreen, "the keyboard reaches COLLECTION")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "Esc leaves the collection")
+	await _infinite_menu()
+
+
+# Starts locked, opens once the rival's been beaten, and has its own page of scores.
+func _infinite_menu() -> void:
+	(app._screen as TitleScreen)._selected = TitleScreen.Item.INFINITE
+	await _wait(0.1)
+	await _save("editor_28_infinite_locked")
+	await _click(Vector2(320, _title_row(TitleScreen.Item.INFINITE)))
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "infinite mode stays locked until the rival's beaten")
+
+	app.profile.rival_beaten = true
+	await _wait(0.1)
+	await _save("editor_29_infinite_open")
+	await _click(Vector2(320, _title_row(TitleScreen.Item.INFINITE)))
+	await _wait(0.6)
+	_expect(app._screen.get("infinite") == true, "the button starts an infinite run")
+	_expect(app._screen.run_state.infinite, "the run knows it's infinite")
+	_expect(app._screen.run.hole_count() == HoleGenerator.HOLES_PER_SET + 1, "it's nine holes and a boss")
+	await _save("editor_30_infinite_first_hole")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.8)
+	_expect(app._screen.run_over != null, "ending the run shows the final score")
+	await _save("editor_31_infinite_final_score")
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "and goes back to the menu")
+	_expect(app.profile.infinite_scores.size() == 1, "the run goes in infinite mode's own table")
+	_expect(app.profile.high_scores.size() == 1, "and not the main game's")
+
+	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
+	await _wait(0.3)
+	var scores: HighScoresScreen = app._screen
+	_expect(scores.page == HighScoresScreen.Page.MAIN, "high scores open on the main game")
+	_press_key(KEY_RIGHT)
+	await _wait(0.1)
+	_expect(scores.page == HighScoresScreen.Page.INFINITE, "right shows infinite mode's scores")
+	await _save("editor_32_infinite_scores")
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "and Space goes back")
+	await _floating_isles_menu()
+
+
+func _floating_isles_menu() -> void:
+	await _save("editor_33_title_with_isles")
+	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _wait(0.5)
+	_expect(app._screen is IslesMenuScreen, "FLOATING ISLES asks how far, with nothing to unlock first")
+	await _save("editor_33_isles_menu")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(app._screen is TitleScreen, "Esc goes back from the choice of course")
+
+	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _wait(0.3)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.8)
+	_expect(app._screen.floating_isles and app._screen.isles_yards == 2000, "the keyboard chooses a length")
+	_expect(is_equal_approx(app._screen.game.distance_to_cup(), 6000.0), "and loads a course that long")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(app._screen is TitleScreen, "MAIN MENU in its pause menu goes back")
+
+	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _wait(0.3)
+	await _click(Vector2(320, IslesMenuScreen.ITEM_TOP + 6.0))
+	await _wait(0.8)
+	_expect(app._screen.isles_yards == 1000, "and so does the mouse")
+	_expect(is_equal_approx(app._screen.game.distance_to_cup(), 3000.0), "for a course of that length")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(app._screen is TitleScreen, "and MAIN MENU in its pause menu goes back")
+	_expect(app.profile.isles_table(1000).is_empty(), "leaving early doesn't go on the leaderboard")
+
+	app.profile.record_isles(4000, 38, 0)
+	app.profile.record_isles(4000, 52, 2)
+	app.profile.record_isles(4000, 44, 1)
+	app.profile.record_isles(1000, 9, 0)
+	app.profile.record_isles(1000, 11, 1)
+	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
+	await _wait(0.3)
+	var scores: HighScoresScreen = app._screen
+	_press_key(KEY_LEFT)
+	await _wait(0.1)
+	_expect(scores.page == HighScoresScreen.Page.ISLES, "left wraps round to the Floating Isles leaderboard")
+	await _save("editor_34_isles_scores")
+	_press_key(KEY_SPACE)
+	await _wait(0.3)
+
+
+func _title_row(item: int) -> float:
+	return TitleScreen.ITEM_TOP + float(item) * TitleScreen.ITEM_GAP + 6.0
 
 
 func _test_main() -> Node:

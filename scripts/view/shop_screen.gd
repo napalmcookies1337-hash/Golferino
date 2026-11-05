@@ -66,6 +66,8 @@ func setup(p_run: RunState) -> void:
 	if next_index < run.course.hole_count():
 		var next: HoleData = run.course.hole_at(next_index)
 		_next_hole_text = "NEXT: %s  PAR %d" % [next.display_name, next.par]
+	else:
+		_next_hole_text = "NEXT: SET %d" % run.set_number
 
 
 func _ready() -> void:
@@ -169,7 +171,9 @@ func _confirm() -> void:
 				_try_buy()
 		Mode.PICK_CLUB:
 			var club_id: String = Items.ALL_CLUBS[club_cursor]
-			if run.club_is_full(club_id):
+			if run.stack_is_complete(club_id, _selected_item()):
+				Sound.sfx("denied")
+			elif run.must_replace_for(club_id, _selected_item()):
 				slot_cursor = 0
 				mode = Mode.PICK_SLOT
 				Sound.sfx("menu_ok")
@@ -351,13 +355,13 @@ func _draw_card(index: int) -> void:
 	var color: Color = KIND_COLORS[item["kind"]]
 	if is_sold:
 		color = DIM
-	_draw_icon(str(item["kind"]), Vector2(center, rect.position.y + 13.0), color)
+	ItemArt.draw(self, str(item["id"]), Vector2(center, rect.position.y + 20.0), 2, is_sold, DIM.darkened(0.45))
 	var label: String = str(item["kind"]).to_upper()
-	PixelFont.draw_centered(self, label, center, rect.position.y + 24.0, color)
-	PixelFont.draw_centered(self, str(item["name"]), center, rect.position.y + 37.0, DIM if is_sold else TEXT)
+	PixelFont.draw_centered(self, label, center, rect.position.y + 38.0, color)
+	PixelFont.draw_centered(self, str(item["name"]), center, rect.position.y + 49.0, DIM if is_sold else TEXT)
 	var lines: Array[String] = _wrap(str(item["text"]), int((rect.size.x - 6.0) / float(PixelFont.WIDTH)))
 	for i in lines.size():
-		PixelFont.draw_centered(self, lines[i], center, rect.position.y + 50.0 + float(i) * 10.0, DIM)
+		PixelFont.draw_centered(self, lines[i], center, rect.position.y + 61.0 + float(i) * 10.0, DIM)
 	if is_sold:
 		PixelFont.draw_centered(self, "SOLD", center, rect.position.y + 85.0, DIM)
 	else:
@@ -365,27 +369,15 @@ func _draw_card(index: int) -> void:
 		PixelFont.draw_centered(self, "%d COINS" % price, center, rect.position.y + 85.0, ACCENT if run.coins >= price else BAD)
 
 
-func _draw_icon(kind: String, at: Vector2, color: Color) -> void:
-	match kind:
-		Items.KIND_STICKER:
-			draw_rect(Rect2(at.x - 5.0, at.y - 5.0, 10, 10), color)
-			draw_rect(Rect2(at.x + 2.0, at.y - 5.0, 3, 3), PANEL)
-		Items.KIND_BALL:
-			draw_circle(at, 5.0, color)
-			draw_rect(Rect2(at.x + 1.0, at.y + 1.0, 2, 1), Color("9aa4b4"))
-		Items.KIND_PERK:
-			draw_colored_polygon(PackedVector2Array([
-				at + Vector2(0, -6), at + Vector2(6, 0), at + Vector2(0, 6), at + Vector2(-6, 0)]), color)
-		_:
-			draw_rect(Rect2(at.x - 1.0, at.y - 5.0, 2, 10), color)
-			draw_rect(Rect2(at.x - 5.0, at.y - 1.0, 10, 2), color)
-
-
 func _draw_leave_button() -> void:
 	var is_selected: bool = mode == Mode.BROWSE and cursor >= stock.size()
 	draw_rect(LEAVE_BUTTON, PANEL)
 	draw_rect(LEAVE_BUTTON, ACCENT if is_selected else DIM, false, 1.0)
-	var label: String = "TO THE DUEL >" if run.course.hole_index + 2 >= run.course.hole_count() else "NEXT HOLE >"
+	var label: String = "NEXT HOLE >"
+	if run.course.hole_index + 2 == run.course.hole_count():
+		label = "TO THE DUEL >"
+	elif run.course.is_last_hole():
+		label = "NEXT SET >"
 	PixelFont.draw_centered(self, label, LEAVE_BUTTON.get_center().x, LEAVE_BUTTON.position.y + 6.0, ACCENT if is_selected else TEXT)
 
 
@@ -401,7 +393,7 @@ func _draw_bag() -> void:
 		var row_selected: bool = picking and club_cursor == row
 		var label_color: Color = ACCENT if row_selected else (TEXT if fits else DIM)
 		PixelFont.draw(self, clubs[row], Vector2(BAG_LEFT + 6.0, BAG_TOP + 10.0 + float(row) * BAG_ROW_HEIGHT), label_color)
-		var on_club: Array = run.stickers[club_id]
+		var on_club: Array[Dictionary] = run.sticker_slots(club_id)
 		for slot in RunState.STICKERS_PER_CLUB:
 			var rect: Rect2 = _slot_rect(row, slot)
 			var slot_selected: bool = mode == Mode.PICK_SLOT and row_selected and slot_cursor == slot
@@ -409,7 +401,9 @@ func _draw_bag() -> void:
 			draw_rect(rect, edge, false, 1.0)
 			var name_text: String = "-"
 			if slot < on_club.size():
-				name_text = str(Items.by_id(str(on_club[slot]))["name"])
+				name_text = str(Items.by_id(str(on_club[slot]["id"]))["name"])
+				if int(on_club[slot]["count"]) > 1:
+					name_text += " X%d" % int(on_club[slot]["count"])
 			var text_color: Color = KIND_COLORS[Items.KIND_STICKER] if slot < on_club.size() else DIM
 			PixelFont.draw(self, name_text, rect.position + Vector2(5, 6), text_color)
 
@@ -475,7 +469,15 @@ func _draw_prompt() -> void:
 			PixelFont.draw_centered(self, "YOUR BALLS ARE FULL: THE ONE YOU REPLACE IS LOST", 320.0, 330.0, BAD)
 		Mode.PICK_CLUB:
 			text = "UP/DOWN TO PICK   SPACE TO PUT IT ON   ESC TO CANCEL"
-			PixelFont.draw_centered(self, "WHICH CLUB GETS %s?" % str(_selected_item()["name"]), 320.0, 330.0, ACCENT)
+			var club_id: String = Items.ALL_CLUBS[club_cursor]
+			var on_club: int = run.sticker_count(club_id, _selected_item())
+			var question: String = "WHICH CLUB GETS %s?" % str(_selected_item()["name"])
+			if on_club >= RunState.MAX_STACK:
+				PixelFont.draw_centered(self, "THAT CLUB ALREADY HAS %d OF THESE" % RunState.MAX_STACK, 320.0, 330.0, BAD)
+			elif on_club > 0:
+				PixelFont.draw_centered(self, "THAT MAKES %d, AND THEY STACK" % (on_club + 1), 320.0, 330.0, ACCENT)
+			else:
+				PixelFont.draw_centered(self, question, 320.0, 330.0, ACCENT)
 		Mode.PICK_SLOT:
 			text = "LEFT/RIGHT TO PICK   SPACE TO REPLACE   ESC TO GO BACK"
 			PixelFont.draw_centered(self, "THAT CLUB IS FULL: THE ONE YOU REPLACE IS LOST", 320.0, 330.0, BAD)

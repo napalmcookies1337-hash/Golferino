@@ -91,7 +91,7 @@ func _trail_color() -> Color:
 
 # A dot on the ground under the ball in flight, so its height is easy to read.
 func _draw_shadow(at: Vector2) -> void:
-	if ball.state != BallSim.State.AIRBORNE:
+	if ball.state != BallSim.State.AIRBORNE or game.terrain.is_void(ball.pos.x):
 		return
 	var ground: float = game.terrain.ground_y(ball.pos.x)
 	var height: float = ground - ball.pos.y

@@ -6,6 +6,13 @@ const CUP_HALF := 5.0
 const CUP_DEPTH := 11.0
 const PIN_HEIGHT := 38.0
 const WORLD_HEIGHT := 540
+## An island's rock: its thickness at the edge, and how much deeper the middle goes.
+const ISLAND_EDGE_DEPTH := 8.0
+const ISLAND_DEPTH_SHARE := 0.55
+const ISLAND_DEPTH_MIN := 22.0
+const ISLAND_DEPTH_MAX := 70.0
+const ISLAND_JAG_WIDTH := 5
+const ISLAND_JAG_SIZE := 7
 
 var length: int = 0
 var cup_x: float = 0.0
@@ -16,6 +23,10 @@ var rim_y: float = 0.0
 var _heights := PackedFloat32Array()
 var _basin := PackedFloat32Array()
 var _surfaces := PackedByteArray()
+## True where a floating hole has nothing but sky. Empty on an ordinary hole.
+var _void := PackedByteArray()
+## How far down each column of an island's rock reaches.
+var _under := PackedFloat32Array()
 
 
 func _init(hole: HoleData) -> void:
@@ -24,6 +35,26 @@ func _init(hole: HoleData) -> void:
 	_bake_heights(hole.points)
 	_bake_surfaces(hole)
 	_flatten_cup_rim()
+	if not hole.void_spans.is_empty():
+		_bake_islands(hole)
+
+
+## True for a hole of islands, where the ball can fall right off the map.
+func is_floating() -> bool:
+	return not _void.is_empty()
+
+
+## True where there's only sky. ground_y still gives a smooth height there, which is what the
+## camera and the views want, but the ball passes straight through it.
+func is_void(x: float) -> bool:
+	return not _void.is_empty() and _void[clampi(int(x), 0, length)] == 1
+
+
+## The bottom of an island's rock at this x. On an ordinary hole the ground goes on forever.
+func underside_y(x: float) -> float:
+	if _under.is_empty():
+		return float(WORLD_HEIGHT)
+	return _under[clampi(int(x), 0, length)]
 
 
 func ground_y(x: float) -> float:
@@ -106,6 +137,37 @@ func _span_start(span: Dictionary) -> int:
 
 func _span_end(span: Dictionary) -> int:
 	return clampi(int(span["to"]), 0, length + 1)
+
+
+func _bake_islands(hole: HoleData) -> void:
+	_void.resize(length + 1)
+	_void.fill(0)
+	for span: Dictionary in hole.void_spans:
+		for x in range(_span_start(span), _span_end(span)):
+			_void[x] = 1
+	_under.resize(length + 1)
+	_under.fill(0.0)
+	var x: int = 0
+	while x <= length:
+		if _void[x] == 1:
+			x += 1
+			continue
+		var island_end: int = x
+		while island_end < length and _void[island_end + 1] == 0:
+			island_end += 1
+		_bake_underside(x, island_end)
+		x = island_end + 1
+
+
+# Deepest in the middle and tapering to the edges, with a jagged line of rock along the bottom.
+func _bake_underside(from_x: int, to_x: int) -> void:
+	var half: float = maxf(float(to_x - from_x) / 2.0, 1.0)
+	var middle: float = float(from_x + to_x) / 2.0
+	var deepest: float = clampf(half * ISLAND_DEPTH_SHARE, ISLAND_DEPTH_MIN, ISLAND_DEPTH_MAX)
+	for x in range(from_x, to_x + 1):
+		var t: float = absf(float(x) - middle) / half
+		var jag: int = (((x / ISLAND_JAG_WIDTH) * 73856093) & 0x7fffffff) % ISLAND_JAG_SIZE
+		_under[x] = _heights[x] + ISLAND_EDGE_DEPTH + deepest * sqrt(maxf(1.0 - t * t, 0.0)) + float(jag)
 
 
 func _flatten_cup_rim() -> void:

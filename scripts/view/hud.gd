@@ -30,6 +30,14 @@ var summary: Dictionary = {}
 var show_card: bool = false
 ## A line that stays on screen, such as the test-play reminder.
 var banner: String = ""
+## Extra lines on the result panel, such as what beating a boss paid.
+var result_notes: Array[String] = []
+## True while the pause menu is up, so nothing shows through behind its title. A message
+## waits and finishes after resuming, and a hole's result comes back.
+var message_hidden: bool = false
+## Floating Isles: strokes against the best so far, with no par, coins or result panel.
+var isles_mode: bool = false
+var isles_best: int = 0
 var _message: String = ""
 var _message_time: float = 0.0
 var _result_name: String = ""
@@ -59,8 +67,9 @@ func show_message(text: String, duration: float) -> void:
 
 
 func _process(delta: float) -> void:
-	_message_time = maxf(_message_time - delta, 0.0)
-	_message_age += delta
+	if not message_hidden:
+		_message_time = maxf(_message_time - delta, 0.0)
+		_message_age += delta
 	if game.phase == HoleGame.Phase.COMPLETE:
 		_result_age += delta
 	_time += delta
@@ -110,9 +119,9 @@ func _draw() -> void:
 	_draw_budget_warning()
 	if game.rival != null:
 		_draw_duel()
-	if _message_time > 0.0 and game.phase != HoleGame.Phase.COMPLETE:
+	if _message_time > 0.0 and not message_hidden and game.phase != HoleGame.Phase.COMPLETE:
 		_draw_message()
-	if game.phase == HoleGame.Phase.COMPLETE:
+	if game.phase == HoleGame.Phase.COMPLETE and not message_hidden and not isles_mode:
 		_draw_result()
 	if show_card:
 		draw_rect(Rect2(0, 0, SCREEN_WIDTH, 360), Color(0, 0, 0, 0.5))
@@ -142,10 +151,11 @@ func _draw_budget_warning() -> void:
 
 func _draw_duel() -> void:
 	var rival: Rival = game.rival
-	_panel(Rect2(8, 56, 142, 18))
-	PixelFont.draw(self, "RIVAL", Vector2(14, 61), Color("c48cff"))
+	var top: float = _score_panel_height() + 14.0
+	_panel(Rect2(8, top, 142, 18))
+	PixelFont.draw(self, "RIVAL", Vector2(14, top + 5.0), Color("c48cff"))
 	var status: String = "HOLED IN %d" % rival.strokes if rival.holed else "STROKES %d" % rival.strokes
-	PixelFont.draw(self, status, Vector2(54, 61), TEXT)
+	PixelFont.draw(self, status, Vector2(54, top + 5.0), TEXT)
 	if game.phase == HoleGame.Phase.RIVAL_TURN:
 		PixelFont.draw_centered(self, "THE RIVAL'S TURN", SCREEN_WIDTH / 2.0, 12.0, Color("c48cff"))
 	elif game.phase == HoleGame.Phase.AIM and rival.holed:
@@ -158,8 +168,23 @@ func _panel(rect: Rect2) -> void:
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 
 
+func _score_panel_height() -> float:
+	if isles_mode:
+		return 42.0
+	if run_state == null:
+		return 30.0
+	return 54.0 if run_state.infinite else 42.0
+
+
 func _draw_score_panel() -> void:
-	_panel(Rect2(8, 8, 142, 42 if run_state != null else 30))
+	_panel(Rect2(8, 8, 142, _score_panel_height()))
+	if isles_mode:
+		PixelFont.draw(self, game.hole.display_name, Vector2(14, 13), TEXT)
+		PixelFont.draw(self, "STROKES %d" % game.strokes, Vector2(14, 25), ACCENT)
+		PixelFont.draw(self, "BEST %s" % (str(isles_best) if isles_best > 0 else "-"), Vector2(90, 25), TEXT)
+		var reached: bool = game.checkpoint_reached
+		PixelFont.draw(self, "CHECKPOINT REACHED" if reached else "CHECKPOINT AHEAD", Vector2(14, 37), Color("6fe07a") if reached else DIM)
+		return
 	PixelFont.draw(self, "%s  PAR %d" % [game.hole.display_name, game.hole.par], Vector2(14, 13), TEXT)
 	PixelFont.draw(self, "STROKES %d" % game.strokes, Vector2(14, 25), ACCENT)
 	PixelFont.draw(self, "TOTAL %s" % CourseRun.to_par_text(run.total_to_par()), Vector2(90, 25), TEXT)
@@ -173,23 +198,22 @@ func _draw_score_panel() -> void:
 			coin_color = coin_color.lerp(Color.WHITE, _coin_flash / FLASH_TIME)
 		PixelFont.draw(self, "SPARE %d" % spare, Vector2(14, 37), spare_color)
 		PixelFont.draw(self, "COINS %d" % run_state.coins, Vector2(90, 37), coin_color)
+		if run_state.infinite:
+			PixelFont.draw(self, "SET %d" % run_state.set_number, Vector2(14, 49), TEXT)
+			PixelFont.draw(self, "DIFF %d/%d" % [run_state.level, Difficulty.MAX_LEVEL], Vector2(90, 49), TEXT)
 
 
 func _draw_distance_panel() -> void:
 	var wind: float = game.current_wind()
 	var has_wind: bool = wind != 0.0
-	_panel(Rect2(514, 8, 118, 42 if has_wind else 30))
+	_panel(Rect2(514, 8, 118, 30 if has_wind else 18))
 	if has_wind:
 		var strength: int = int(absf(wind))
-		# The hole's far end is to the right, so a positive wind blows right.
+		# A positive wind blows toward the right of the screen.
 		var text: String = "WIND >> %d" % strength if wind > 0.0 else "WIND << %d" % strength
-		PixelFont.draw(self, text, Vector2(520, 37), Color("9fdcf2"))
+		PixelFont.draw(self, text, Vector2(520, 25), Color("9fdcf2"))
 	var pin_yards: int = int(round(game.distance_to_cup() / YARD))
 	PixelFont.draw(self, "PIN  %d YD" % pin_yards, Vector2(520, 13), TEXT)
-	if game.shows_aim_line():
-		var landing: Vector2 = game.preview()["landing"]
-		var reach: int = int(round(absf(landing.x - game.ball.pos.x) / YARD))
-		PixelFont.draw(self, "REACH %d YD" % reach, Vector2(520, 25), ACCENT)
 
 
 func _draw_club_panel() -> void:
@@ -313,11 +337,18 @@ func _draw_hint() -> void:
 	if game.phase == HoleGame.Phase.AIM:
 		# Testing a map can restart it, but a real run has a budget to protect.
 		var last: String = "TAB CARD" if run_state != null else "R RESET"
+		if isles_mode:
+			last = "ESC MENU"
 		var hint: String = "UP/DN ANGLE  A/D LOOK  Q/E CLUB  W/S SPIN  F FLIP  %s" % last
 		# Putts stay on the ground, so angle and spin do nothing.
 		if game.current_club().is_putter:
 			hint = "A/D LOOK  Q/E CLUB  F FLIP  %s" % last
 		PixelFont.draw_centered(self, hint, SCREEN_WIDTH / 2.0, 346.0, TEXT)
+
+
+## True once an infinite run's boss is beaten: the run goes on to a shop and the next set.
+func run_carries_on() -> bool:
+	return run_state != null and run_state.infinite and game.rival != null and game.duel_won
 
 
 func _draw_result() -> void:
@@ -344,15 +375,21 @@ func _draw_result() -> void:
 	PixelFont.draw_centered(self, "TOTAL %s" % total, center, y, TEXT)
 	y += 12.0
 	if not summary.is_empty():
-		var banked: int = int(summary["banked"])
-		var banked_text: String = "PAR: NO CHANGE TO SPARE STROKES"
-		if banked != 0:
-			banked_text = "SPARE STROKES %+d, NOW %d" % [banked, run_state.spare]
-		PixelFont.draw_centered(self, banked_text, center, y, Color("6fe07a") if banked >= 0 else Color("ff8a70"))
-		y += 12.0
+		# After a boss in infinite mode, the notes below say what became of the spare strokes.
+		if not run_carries_on():
+			var banked: int = int(summary["banked"])
+			var banked_text: String = "PAR: NO CHANGE TO SPARE STROKES"
+			if banked != 0:
+				banked_text = "SPARE STROKES %+d, NOW %d" % [banked, run_state.spare]
+			PixelFont.draw_centered(self, banked_text, center, y, Color("6fe07a") if banked >= 0 else Color("ff8a70"))
+			y += 12.0
 		PixelFont.draw_centered(self, RunState.coins_text(summary), center, y, ACCENT)
+		y += 11.0
+	for note in result_notes:
+		PixelFont.draw_centered(self, note, center, y, Color("6fe07a"))
+		y += 9.0
 	var prompt: String = "SPACE TO CONTINUE"
-	if run_state != null and not run.is_last_hole():
+	if run_state != null and (not run.is_last_hole() or run_carries_on()):
 		prompt = "SPACE FOR THE SHOP"
 	elif run_state != null:
 		prompt = "SPACE FOR THE FINAL SCORE"

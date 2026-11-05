@@ -45,6 +45,11 @@ var stage: int = Stage.WAITING
 var holed: bool = false
 
 var _rng := RandomNumberGenerator.new()
+# How good it is at this difficulty. The main game plays at level 0, which is the constants.
+var _miss_chance: float = MISS_CHANCE
+var _power_noise: float = POWER_NOISE
+var _putt_noise: float = PUTT_NOISE
+var _power_steps: int = POWER_STEPS
 var _timer: float = 0.0
 var _turns: int = 0
 var _tricks_left: Array[String] = []
@@ -61,9 +66,14 @@ var _go_far: bool = false
 var _tried_flipping: bool = false
 
 
-func _init(p_game: HoleGame, p_clubs: Array[ClubData], p_seed: int = -1) -> void:
+func _init(p_game: HoleGame, p_clubs: Array[ClubData], p_seed: int = -1, p_level: int = 0) -> void:
 	game = p_game
 	clubs = p_clubs
+	_miss_chance = Difficulty.rival_miss_chance(p_level)
+	_power_noise = Difficulty.rival_power_noise(p_level)
+	_putt_noise = Difficulty.rival_putt_noise(p_level)
+	_power_steps = Difficulty.rival_power_steps(p_level)
+	_cheats_left = Difficulty.rival_cheats(p_level)
 	if p_seed >= 0:
 		_rng.seed = p_seed
 	else:
@@ -133,10 +143,10 @@ func tick(dt: float) -> void:
 func _strike() -> void:
 	var club: ClubData = current_club()
 	var power: float = float(_plan["power"])
-	power += _rng.randfn(0.0, PUTT_NOISE if club.is_putter else POWER_NOISE)
+	power += _rng.randfn(0.0, _putt_noise if club.is_putter else _power_noise)
 	power = clampf(power, SwingMeter.MIN_PRESS_POWER, 1.0)
 	var accuracy: float = 0.0
-	if not club.is_putter and _rng.randf() < MISS_CHANCE:
+	if not club.is_putter and _rng.randf() < _miss_chance:
 		accuracy = _rng.randf_range(-MISS_SIZE, MISS_SIZE)
 	var shot: Dictionary = _shot(club, float(_plan["angle"]), power, accuracy)
 	strokes += 1
@@ -167,8 +177,8 @@ func _list_options() -> void:
 		if not club.is_putter:
 			angles = [club.min_angle_deg, club.loft_deg, lerpf(club.loft_deg, club.max_angle_deg, 0.5), club.max_angle_deg]
 		for angle in angles:
-			for step in range(1, POWER_STEPS + 1):
-				_options.append({ "club": i, "angle": angle, "power": float(step) / float(POWER_STEPS) })
+			for step in range(1, _power_steps + 1):
+				_options.append({ "club": i, "angle": angle, "power": float(step) / float(_power_steps) })
 
 
 # Tries options until this frame's time is up, keeping the safe shot that finishes closest

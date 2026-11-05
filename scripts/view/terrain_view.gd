@@ -46,6 +46,11 @@ func _add_chunk(start_x: int) -> void:
 
 
 func _paint_column(image: Image, col: int, world_x: int, height: int) -> void:
+	# A floating hole's gaps are left clear, and its islands stop where their rock does.
+	if terrain.is_void(float(world_x)):
+		return
+	if terrain.is_floating():
+		height = mini(height, int(round(terrain.underside_y(float(world_x)))))
 	var surface: int = terrain.surface_at(world_x)
 	var is_water: bool = surface == Surface.Type.WATER
 	var top: int = int(round(terrain.basin_y(world_x))) if is_water \
@@ -98,8 +103,20 @@ func _paint_cup(image: Image, col: int, world_x: int) -> void:
 			image.set_pixel(col, y, color)
 
 
+## Draws a standard cup straight onto a canvas, for the title screen's scenery. It matches
+## what the course paints, so the two can't drift apart.
+static func draw_cup(canvas: CanvasItem, cup_x: int, rim: int) -> void:
+	var wall: int = int(ceil(Terrain.CUP_HALF)) - 1
+	var floor_row: int = int(Terrain.CUP_DEPTH) - 1
+	for offset in range(-wall - 1, wall + 2):
+		for row in floor_row + 2:
+			var color: Color = _cup_color(offset, absi(offset), wall, row, floor_row)
+			if color.a > 0.0:
+				canvas.draw_rect(Rect2(cup_x + offset, rim + row, 1, 1), color)
+
+
 # Transparent means leave the ground as it is.
-func _cup_color(offset: int, side: int, wall: int, row: int, floor_row: int) -> Color:
+static func _cup_color(offset: int, side: int, wall: int, row: int, floor_row: int) -> Color:
 	if side == wall + 1:
 		if row == 0:
 			return CUP_LIP

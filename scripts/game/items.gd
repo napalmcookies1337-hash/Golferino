@@ -4,8 +4,8 @@ extends RefCounted
 ## of a club, balls change a BallSim, and perks change the run's own rules.
 ##
 ## Each entry: "id", "kind", "name", "text" (22 characters at most, to fit a shop card),
-## "price" (its full price, reached by the last shop) and "effects". Stickers also list the
-## "clubs" they fit. Items with "unlock"
+## "price" (its full price, reached by the last shop, or from the first shop on with
+## "fixed_price") and "effects". Stickers also list the "clubs" they fit. Items with "unlock"
 ## aren't sold until a finished run earns them, and are meant to add variety, not power.
 
 const KIND_STICKER := "sticker"
@@ -44,6 +44,7 @@ const CATALOG: Array[Dictionary] = [
 	{ "id": "mulligan", "kind": KIND_PERK, "name": "MULLIGAN", "text": "1 FREE PENALTY A HOLE", "price": 26, "effects": { "free_penalties": 1 } },
 	{ "id": "safety_net", "kind": KIND_PERK, "name": "SAFETY NET", "text": "SAVES YOU ONCE: +3", "price": 28, "effects": { "safety_net": 3 } },
 	{ "id": "showman", "kind": KIND_PERK, "name": "SHOWMAN", "text": "TRICK SHOTS PAY COINS", "price": 18, "effects": { "trick": 1 } },
+	{ "id": "landing_arrow", "kind": KIND_PERK, "name": "LANDING ARROW", "text": "SHOWS WHERE SHOTS LAND", "price": 60, "fixed_price": true, "effects": { "landing_arrow": 1 } },
 	{ "id": "extra_shelf", "kind": KIND_PERK, "name": "EXTRA SHELF", "text": "SHOP STOCKS ONE MORE", "price": 22, "effects": { "shelves": 1 }, "unlock": 5 },
 	{ "id": "steady_pay", "kind": KIND_PERK, "name": "STEADY PAY", "text": "+3 COINS FOR PAR", "price": 18, "effects": { "par_bonus": 3 }, "unlock": 6 },
 
@@ -72,22 +73,35 @@ static func unlock_order() -> Array[String]:
 	return ids
 
 
-## Applies stickers to a copy of a club, which is what the player then plays with.
+## Applies stickers to a copy of a club, which is what the player then plays with. Stickers
+## that match stack: their bonuses add up.
 static func club_with_stickers(base: ClubData, sticker_ids: Array) -> ClubData:
 	var club: ClubData = base.duplicate()
+	var counts: Dictionary = {}
 	for id: Variant in sticker_ids:
-		var effects: Dictionary = by_id(str(id)).get("effects", {})
-		club.max_speed *= float(effects.get("speed", 1.0))
-		club.spin_strength *= float(effects.get("spin", 1.0))
-		club.lie_sensitivity *= float(effects.get("lie", 1.0))
-		club.window_scale *= float(effects.get("window", 1.0))
-		club.meter_speed *= float(effects.get("meter", 1.0))
-		club.miss_scale *= float(effects.get("miss", 1.0))
-		club.cup_pull_scale *= float(effects.get("cup_pull", 1.0))
-		var extra_angle: float = float(effects.get("angle", 0.0))
+		counts[str(id)] = int(counts.get(str(id), 0)) + 1
+	for id: String in counts:
+		var effects: Dictionary = by_id(id).get("effects", {})
+		var count: int = counts[id]
+		club.max_speed *= stacked(float(effects.get("speed", 1.0)), count)
+		club.spin_strength *= stacked(float(effects.get("spin", 1.0)), count)
+		club.lie_sensitivity *= stacked(float(effects.get("lie", 1.0)), count)
+		club.window_scale *= stacked(float(effects.get("window", 1.0)), count)
+		club.meter_speed *= stacked(float(effects.get("meter", 1.0)), count)
+		club.miss_scale *= stacked(float(effects.get("miss", 1.0)), count)
+		club.cup_pull_scale *= stacked(float(effects.get("cup_pull", 1.0)), count)
+		var extra_angle: float = float(effects.get("angle", 0.0)) * float(count)
 		club.min_angle_deg = maxf(club.min_angle_deg - extra_angle, HoleGame.MIN_LAUNCH_ANGLE)
 		club.max_angle_deg = minf(club.max_angle_deg + extra_angle, HoleGame.MAX_LAUNCH_ANGLE)
 	return club
+
+
+## What several of one sticker's multiplier come to. A boost adds up, so +50% three times is
+## +150%. A reduction applies again to what's left, since adding them up could pass 100% off.
+static func stacked(value: float, count: int) -> float:
+	if value >= 1.0:
+		return 1.0 + (value - 1.0) * float(count)
+	return pow(value, float(count))
 
 
 ## Sets up a ball from a special ball's effects. An empty id means a plain ball.

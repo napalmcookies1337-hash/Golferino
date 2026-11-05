@@ -2,8 +2,8 @@
 
 Arcade-leaning, side-view golf roguelite in modern pixel art. The same 9-hole
 course every run, a shop between holes, then a duel with a cheating rival on a
-gauntlet hole. Beating the rival ends the run and totals the score. An infinite
-mode comes later: leave room for it, do not build it yet.
+gauntlet hole. Beating the rival ends the run and totals the score. Infinite mode
+carries on with generated holes, set after set, for as long as the player lasts.
 
 ## Decisions
 
@@ -23,14 +23,15 @@ mode comes later: leave room for it, do not build it yet.
 | Your maps | Any map can be edited or made from blank. Maps save to `user://maps` as JSON. Originals are never changed: an edit is a copy that replaces it until restored. The player chooses the course's holes and order, and the last hole is the boss |
 | Moving hazards | Golf cart, windmill, sprinkler, geese. Carts and geese hit a ball once per shot. The aim preview ignores moving hazards, so the player has to time them |
 | Windmill door | A small square door runs through the tower's base, so a ball can pass through. The blades sweep down to the ground, so the player has to time it |
+| Aim guide | Full swings show a dotted arc for the start of the shot, with no marker where it lands and no reach in yards, so the landing is judged by eye. The HUD gives the distance to the pin and the wind. The Landing Arrow perk adds back an arrow marking where a full-power shot lands. It costs 60 coins in every shop, without the usual low early prices, though the Coupon Book and infinite difficulty still change that. Putts never show one |
 | Reading putts | Putts show no aim line, landing marker or reach, so they're judged purely by eye |
 | Posts | A ball starting a shot right beside the windmill tower or on a pad isn't blocked or fired by it, so it can't get stuck |
-| Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the current club's range from this lie |
+| Lies | Rough and sand reduce range, reduce spin and shrink the meter's sweet spot. The Driver loses the most range. The HUD shows the share of the current club's power available from this lie |
 | Slopes | The launch angle tilts by half the ground's slope, and the ball always clears the slope it sits on. Landing downhill runs further, landing uphill runs less |
 | Spin | Depends on the club (Driver half as much as Iron), the lie, and how clean the strike is. A full miss has no spin |
 | Meter return | Takes the same time at any power, so short shots stay timeable |
 | Flagstick | A ball hitting the pin in flight is knocked back and drops near the cup. Low putts pass under it |
-| Stickers | Clubs are not sold. Shop sells stickers; each club holds up to 3 and each gives that club a bonus. A new sticker on a full club replaces one the player chooses, and the old one is lost |
+| Stickers | Clubs are not sold. Shop sells stickers; each club has 3 slots and each sticker gives that club a bonus. More of the same sticker stacks in its slot, up to 3, and the bonuses add up (three Wide Angles give 30 degrees). A reduction such as Forgiver's applies again to what's left, so it can never pass 100%. A new kind of sticker on a full club replaces a slot the player chooses, and that whole stack is lost |
 | Run structure | Fixed 9 holes, then the boss hole. A shop after every hole, including before the boss |
 | Losing a run | Stroke budget, starting at 8 spare strokes. Beating par banks strokes, and strokes over par drain them as they're taken, including penalties. The stroke that uses up the last spare plays out: sinking it saves the run, and otherwise the run ends as the ball stops. Applies on the boss hole too. Restarting a hole is only for testing maps |
 | Shop | Between holes, random mixed stock on 4 shelves: two stickers, one ball, perk or bonus strokes, and one of anything. Perks last for the rest of the run. The player carries up to 3 balls, starting with the plain one in a slot. A bought ball goes straight into play, and on full slots it replaces one the player chooses, which is lost. Balls can only be swapped in the shop. The Sticky Ball stops almost where it lands, on any slope, and putts like any other ball. The Rubber Ball bounces far higher and longer, keeps more speed through each bounce, rebounds harder off hazards, and visibly squashes and stretches. Everything costs 3 coins in the first shop, then prices climb evenly to each item's full price (10-28) by the last shop |
@@ -38,6 +39,11 @@ mode comes later: leave room for it, do not build it yet.
 | Boss | Turn-based duel on the course's last hole, player first. Lowest strokes wins; ties go to the rival, and it ends as soon as the result can't change. The rival uses plain clubs and sometimes mishits, and is only on screen for its own turn, and the player only for theirs, though both balls stay visible. Hazards hit its ball just like the player's. It cheats only twice on the hole: its first water ball can be a free drop, and every second turn it pulls one of a headwind on your next shot, grease that speeds your next meter, a kick of its ball toward the cup, or erasing a stroke. Losing ends the run but the score still counts |
 | Final score | 100 per hole finished, 100 per stroke under par (minus if over), 50 per spare stroke left, 2 per coin left, 1000 for beating the rival, on a scorecard. An unfinished hole doesn't count for or against par |
 | Between runs | Finished runs (that reached a duel result) unlock shop items, one for losing and two for winning (variety, not power). Top 10 high scores saved, including runs that ended early |
+| Collection | On the title menu. Shows everything the shop can sell plus the plain ball, grouped by kind, each with its own picture, which the shop's cards use too. The items on sale from the start are always shown. An item still to be earned is a dark silhouette with its name and effect hidden, and a gold corner marks one that has been earned |
+| Infinite mode | A separate mode on the title menu, locked until the rival has been beaten once in the main game. Sets of 9 generated holes and a boss duel, using the same stroke budget, shops and rules. Every run is different. Running out of strokes or losing a duel ends the run. Beating a boss adds a reward of 6 strokes (shrinking to 1 at the top difficulty) to the spare strokes, banks them all for half as many coins, rounded down, and puts the spare strokes back to the starting 8. Coins and gear carry over, the difficulty rises one step, and a shop leads to the next set. The set and difficulty show in the score box |
+| Infinite difficulty | 10 small steps, then it stays at the top while the sets carry on. Each step makes holes longer for the same par, greens narrower, hazards faster and more numerous, and wind stronger. The rival mishits less, plans more finely and cheats more often. Shop prices rise 4% and the boss reward shrinks. All the numbers are in `difficulty.gd`, and level 0 is the main game's own values |
+| Generated holes | Meant to feel unlike the main course. Every hole has one of eight shapes: a long climb, a descent, a valley, a hump, big waves, steep terraces, a chain of islands, or badlands of broken fairway and waste sand. A set deals them out so it uses them all before repeating, and until difficulty 4 its first two holes avoid the harshest three. About a third play right to left. Pars are a shuffled mix that can include par 6, some pads float in the air, and past the green there may be a bank, a flat shelf or a slope away. Hazards are the usual bunkers, ponds, pads, carts, windmills, sprinklers and geese. Each set ramps up, with the stranger hazards arriving later, and higher difficulty brings them forward. No pond starts within a normal drive of the tee on a par 4 or longer. The boss hole always has every moving hazard. Pads are checked by firing a real ball at them, so none aims into water |
+| Infinite scoring | Same score as the main game over the whole run, plus 1000 per boss beaten, with its own top 10 showing the set reached and bosses beaten. The scorecard shows the current set, and the running total covers every set. Each boss beaten unlocks two shop items, and the duel that ends a run in a loss unlocks one. From the second set on, shop items cost full price and every hole pays the full payout |
 | Camera | Free scroll to inspect the hole before a shot, then smooth chase of the ball with some lead |
 | Course | One cohesive country-club look. Classic hazards first, escalating to moving and stranger ones |
 | Wind | Not part of the normal swing. Only on later holes and as a rival trick |
@@ -52,8 +58,27 @@ mode comes later: leave room for it, do not build it yet.
 | Controls | Keyboard and controller |
 | Target | Windows only, Godot 4 and GDScript |
 
-Not in this version: multiplayer, online leaderboards, procedural holes,
-infinite mode, other platforms.
+Not in this version: multiplayer, online leaderboards, other platforms.
+
+## Floating Isles
+
+An accuracy training mode, open from the start on the title menu. The player chooses 1000, 2000
+or 4000 yards, and gets one random hole of that length across a chain of small islands with only
+sky between them.
+
+| Rule | Decision |
+|---|---|
+| Map | New every time, including after Try Again. Islands are 110-210 px wide and level on top, gaps are 80-340 px, and neighbours differ in height by up to 55 px. The tee has the first island and the green the last |
+| Falling | Falling off an island, or off either end of the map, returns the ball to the tee, or to the checkpoint once reached. Strokes taken so far stay, and the fall itself adds no stroke |
+| Checkpoint | A checkered flag on a pole, with no hole, on the island nearest halfway (never the tee's or the green's). It's reached when the ball comes to rest on that island or any beyond it, so a long shot over it still counts. The flag doesn't touch the ball. A returned ball sits just on the tee side of the flag |
+| Clubs and rules | The plain three clubs and plain ball. No wind, coins, shop, stroke limit or unlocks |
+| Rock | An island has an underside: a ball can hit its side and bounce away, or pass beneath it. It only lands on an island from above |
+| Finishing | The hole gives confetti, then a congratulations screen with the strokes, falls and place on the leaderboard, offering Try Again or Main Menu |
+| Leaderboard | A top ten for each length, side by side on the high scores screen. Fewest strokes first, then fewest falls. Leaving from the pause menu records nothing. Try Again keeps the same length on a new map |
+| Look | A sea of cloud below instead of the hills, at midday |
+
+The rules live in `IslesGenerator`, `Terrain` (`void_spans`, `is_void`, `underside_y`), `BallSim`
+and `HoleGame.falls_return_to_tee`. Ordinary holes have no void spans and play exactly as before.
 
 ## The course (par 43)
 
@@ -90,15 +115,17 @@ Gameplay rules never touch nodes or drawing, so they run headless in tests.
 - `scripts/game/run_state.gd`: one run's budget, coins, what's owned, the shop's stock and the final score
 - `scripts/game/items.gd`: everything the shop sells, as data, and how it changes the numbers
 - `scripts/game/rival.gd`: the rival's turns, choice of shots and cheats
+- `scripts/game/difficulty.gd`: every number infinite mode raises, in one place
+- `scripts/course/hole_generator.gd`: makes infinite mode's holes as ordinary `HoleData`
 - `scripts/game/profile.gd`: high scores and unlocks, saved to `user://profile.json`
 - `scripts/course/map_library.gd` and `hole_io.gd`: saved maps, restoring originals, the course order
 - `scripts/editor/`: `EditorDoc` holds every editing rule with no drawing, `MapEditor` and `EditorUI` are the screen
 - `scripts/app.gd`: moves between the title menu, playing and the editor
-- `scripts/view/`: everything drawn. Nothing here changes game rules
+- `scripts/view/`: everything drawn. Nothing here changes game rules. `item_art.gd` holds every item's picture as text
 - `scripts/audio/`: `Sound` plays everything and keeps the volume levels, and `GameAudio` listens to one hole's rules and picks what to play
 - `tools/make_audio.gd`: composes and synthesizes every sound into `audio/`. The game only loads the finished files
 - `data/`: clubs and holes as `.tres`, so adding one needs no new code
-- `tests/`: `test_runner.tscn` for rules, `shots.tscn` for screenshots
+- `tests/`: `test_runner.tscn` for rules, `shots.tscn` for screenshots of a real run, `editor_check.tscn` for the menus and editor, `generator_check.tscn` to play generated holes at every difficulty, `collection_preview.tscn` to see the collection with an empty save
 
 Stickers, special balls and perks should change a shot by altering the numbers
 passed into `ShotCalc` and `BallSim`, not by adding branches to them.

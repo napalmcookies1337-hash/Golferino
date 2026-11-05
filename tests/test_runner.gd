@@ -1,5 +1,5 @@
 extends Node
-## Rules tests. Run with: Godot --headless --path . res://tests/test_runner.tscn
+## Rules tests. Run with: Godot --headless --path . --quit-after 12000 res://tests/test_runner.tscn
 
 const DT := 1.0 / 60.0
 const HOLE_PATH := "res://data/holes/hole_01.tres"
@@ -2261,7 +2261,13 @@ func _test_stickers() -> void:
 	_check(wide.min_angle_deg == base.min_angle_deg - 10.0 and wide.max_angle_deg == base.max_angle_deg + 10.0, "Wide Angle widens both ends")
 	var two: ClubData = Items.club_with_stickers(base, ["wide_angle", "wide_angle", "wide_angle"])
 	_check(two.max_angle_deg <= HoleGame.MAX_LAUNCH_ANGLE and two.min_angle_deg >= HoleGame.MIN_LAUNCH_ANGLE, "angle stickers stay within the game's limits")
-	_check(absf(Items.club_with_stickers(base, ["power_stripe", "power_stripe"]).max_speed - original_speed * 1.04 * 1.04) < 0.01, "stickers stack")
+	_check(absf(Items.club_with_stickers(base, ["power_stripe", "power_stripe"]).max_speed - original_speed * 1.08) < 0.01, "matching stickers add their bonuses")
+	_check(is_equal_approx(Items.club_with_stickers(base, ["spin_doctor", "spin_doctor", "spin_doctor"]).spin_strength, base.spin_strength * 2.5), "three +50% stickers make +150%")
+	_check(is_equal_approx(Items.club_with_stickers(base, ["rough_rider", "rough_rider"]).lie_sensitivity, base.lie_sensitivity * 0.25), "a reduction applies again to what's left")
+	_check(Items.club_with_stickers(base, ["forgiver", "forgiver", "forgiver"]).miss_scale > 0.0, "three reductions never pass 100%")
+	var three_wide: ClubData = Items.club_with_stickers(base, ["wide_angle", "wide_angle", "wide_angle"])
+	_check(is_equal_approx(three_wide.max_angle_deg, minf(base.max_angle_deg + 30.0, HoleGame.MAX_LAUNCH_ANGLE)), "three Wide Angles give 30 degrees")
+	_check(is_equal_approx(three_wide.min_angle_deg, maxf(base.min_angle_deg - 30.0, HoleGame.MIN_LAUNCH_ANGLE)), "both ways")
 
 	# They reach the actual shot.
 	var plain_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
@@ -2447,6 +2453,9 @@ func _test_shop_stock() -> void:
 func _test_prices_climb() -> void:
 	var state: RunState = _new_run_state()
 	for item: Dictionary in Items.CATALOG:
+		# Some items are the same price throughout, and are checked on their own.
+		if item.get("fixed_price", false):
+			continue
 		state.course.hole_index = 0
 		var label: String = str(item["name"])
 		_check(state.price_of(item) == 3, "%s costs 3 in the first shop" % label)
@@ -2526,15 +2535,31 @@ func _test_buying() -> void:
 	_check(not fresh.buy_sticker(sticker, "putter"), "a sticker won't go on a club it doesn't fit")
 	var coins_before: int = fresh.coins
 	_check(fresh.coins == coins_before, "a refused sticker costs nothing")
-	for _i in 3:
-		_check(fresh.buy_sticker(sticker, "iron"), "a club takes up to 3 stickers")
-	_check(fresh.club_is_full("iron"), "three stickers fill a club")
+	# Matching stickers stack in one slot, up to three.
+	for i in RunState.MAX_STACK:
+		_check(not fresh.club_is_full("iron"), "a stack only takes one slot (%d)" % i)
+		_check(fresh.buy_sticker(sticker, "iron"), "a sticker stacks on its match (%d)" % i)
+	_check(fresh.sticker_slots("iron") == [{ "id": "power_stripe", "count": RunState.MAX_STACK }], "three of a sticker is one slot of three")
+	_check(fresh.stack_is_complete("iron", sticker), "the stack is then complete")
+	var before_fourth: int = fresh.coins
+	_check(not fresh.buy_sticker(sticker, "iron"), "a fourth won't go on")
+	_check(fresh.coins == before_fourth, "and costs nothing")
+	_check(fresh.buy_sticker(Items.by_id("spin_doctor"), "iron"), "another kind takes the next slot")
+	_check(fresh.buy_sticker(Items.by_id("wide_angle"), "iron"), "and another the last")
+	_check(fresh.club_is_full("iron"), "three kinds fill a club")
+	_check(fresh.buy_sticker(Items.by_id("wide_angle"), "iron"), "a full club still stacks on a match")
+	_check(fresh.sticker_count("iron", Items.by_id("wide_angle")) == 2, "making two")
+	_check(not fresh.must_replace_for("iron", Items.by_id("spin_doctor")), "a match never needs a replacement")
+	_check(fresh.must_replace_for("iron", Items.by_id("sweet_tape")), "a new kind on a full club does")
 	var before_replace: int = fresh.coins
 	_check(not fresh.buy_sticker(Items.by_id("sweet_tape"), "iron"), "a full club needs one chosen to replace")
 	_check(fresh.coins == before_replace, "no replacement chosen, no charge")
-	_check(fresh.buy_sticker(Items.by_id("sweet_tape"), "iron", 1), "a new sticker can replace a chosen one")
-	_check(fresh.stickers["iron"] == ["power_stripe", "sweet_tape", "power_stripe"], "only the chosen sticker is lost")
+	_check(fresh.buy_sticker(Items.by_id("sweet_tape"), "iron", 2), "a new sticker can replace a chosen one")
+	_check(fresh.stickers["iron"] == ["power_stripe", "power_stripe", "power_stripe", "spin_doctor", "sweet_tape"], "the whole chosen stack is lost, and only it")
+	_check(fresh.buy_sticker(Items.by_id("spin_doctor"), "iron"), "stacking still works after replacing")
+	_check(fresh.stickers["iron"] == ["power_stripe", "power_stripe", "power_stripe", "spin_doctor", "spin_doctor", "sweet_tape"], "and a stack stays together")
 	_check(fresh.stickers["driver"].is_empty(), "stickers stay on their own club")
+	fresh.stickers["iron"] = ["power_stripe", "sweet_tape"]
 	var clubs: Array[ClubData] = fresh.clubs()
 	var iron: ClubData = _club_named(clubs, "iron")
 	_check(iron.max_speed > _club("iron").max_speed and iron.window_scale > 1.0, "the bag plays with its stickers")
@@ -2680,6 +2705,632 @@ func _test_profile() -> void:
 	var damaged := Profile.new(path)
 	_check(damaged.unlocked.is_empty() and damaged.runs_finished == 0, "a damaged profile is cleaned up")
 	DirAccess.remove_absolute(path)
+	_test_collection()
+
+
+func _test_collection() -> void:
+	# Every item has a picture of the right size, using colors that exist.
+	for item: Dictionary in Items.CATALOG:
+		var id: String = str(item["id"])
+		var rows: Array = ItemArt.ART.get(id, [])
+		_check(rows.size() == ItemArt.SIZE, "%s has a full picture" % id)
+		for y in rows.size():
+			var line: String = rows[y]
+			_check(line.length() == ItemArt.SIZE, "%s picture row %d is the right width" % [id, y])
+			for letter in line:
+				_check(letter == "." or ItemArt.COLORS.has(letter), "%s picture uses a known color" % id)
+	_check(ItemArt.ART.size() == Items.CATALOG.size() + 1, "no pictures of things that don't exist, besides the plain ball")
+	_check(ItemArt.ART.has(CollectionScreen.PLAIN_BALL["id"]), "the plain ball has a picture")
+
+	# No two locked items share a silhouette, or locked items would look the same.
+	var shapes: Dictionary = {}
+	for id: String in Items.unlock_order():
+		var shape: String = ""
+		for line: String in ItemArt.ART[id]:
+			for letter in line:
+				shape += "." if letter == "." else "#"
+		_check(not shapes.has(shape), "%s has its own silhouette" % id)
+		shapes[shape] = true
+
+	var path: String = "user://test_collection_profile.json"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var profile := Profile.new(path)
+	_check(profile.has_item("power_stripe"), "items on sale from the start are owned")
+	_check(not profile.has_item("forgiver"), "an unearned item isn't owned")
+	_check(not profile.has_item("no_such_item"), "something that doesn't exist isn't owned")
+
+	var screen := CollectionScreen.new()
+	screen.setup(profile)
+	var listed: int = 0
+	for row: Array in screen.rows:
+		listed += row.size()
+	_check(listed == Items.CATALOG.size() + 1 and listed == screen.count_all(), "the collection lists everything exactly once, and the plain ball")
+	_check(screen.rows[1][0] == CollectionScreen.PLAIN_BALL, "the plain ball comes first among the balls")
+	_check(screen.describe(CollectionScreen.PLAIN_BALL)["name"] == "PLAIN BALL", "the plain ball is never locked")
+	var start_count: int = Items.CATALOG.size() - Items.unlock_order().size() + 1
+	_check(screen.count_owned() == start_count, "a new player has only the starting items")
+
+	var locked: Dictionary = screen.describe(Items.by_id("forgiver"))
+	_check(locked["name"] == CollectionScreen.HIDDEN_NAME, "a locked item's name is hidden")
+	var forgiver: Dictionary = Items.by_id("forgiver")
+	for key: String in locked:
+		_check(not str(locked[key]).contains(str(forgiver["name"])), "a locked item doesn't give away its name")
+		_check(not str(locked[key]).contains(str(forgiver["text"])), "a locked item doesn't give away its effect")
+
+	var lost: RunState = _new_run_state()
+	lost.ending = RunState.Ending.LOST_TO_RIVAL
+	profile.record_run(lost)
+	_check(profile.has_item("forgiver"), "finishing a duel earns the item")
+	_check(screen.count_owned() == start_count + 1, "the count goes up with it")
+	_check(screen.describe(forgiver)["name"] == forgiver["name"], "an earned item shows its name")
+	_check(not Items.by_id("forgiver").is_empty() and not profile.has_item("two_way_tape"), "the next item stays locked")
+
+	# Moving round the grid, including through the short row and back.
+	screen.move(Vector2i.LEFT)
+	_check(screen.row == 0 and screen.column == (screen.rows[0] as Array).size() - 1, "left wraps round the row")
+	screen.move(Vector2i.UP)
+	_check(screen.row == screen.rows.size() - 1 and screen.column == 0, "up wraps to the short bonus row")
+	screen.move(Vector2i.DOWN)
+	_check(screen.row == 0 and screen.column == (screen.rows[0] as Array).size() - 1, "passing through the short row keeps your place")
+	for _i in 40:
+		screen.move(Vector2i.DOWN)
+		screen.move(Vector2i.RIGHT)
+		_check(not screen.selected_item().is_empty(), "the selection is always on an item")
+	screen.free()
+	DirAccess.remove_absolute(path)
+	_test_infinite_mode()
+	_test_floating_isles()
+
+
+# Island 100-299 and island 500-699, with sky everywhere else.
+func _two_islands() -> HoleData:
+	var hole := HoleData.new()
+	hole.tee_x = 200.0
+	hole.cup_x = 600.0
+	hole.points = PackedVector2Array([Vector2(0, 300), Vector2(500, 300), Vector2(1000, 300)])
+	hole.surface_spans = [{ "from": 0, "to": 1000, "type": Surface.Type.FAIRWAY }]
+	hole.void_spans = [{ "from": 0, "to": 100 }, { "from": 300, "to": 500 }, { "from": 700, "to": 1001 }]
+	return hole
+
+
+func _settle(sim: BallSim) -> void:
+	var steps: int = 0
+	while sim.is_moving() and steps < 3000:
+		sim.step(1.0 / 60.0)
+		steps += 1
+
+
+func _test_floating_isles() -> void:
+	_test_isles_generator()
+	_test_isles_physics()
+	_test_isles_falls()
+	_test_isles_leaderboard()
+
+
+func _test_isles_generator() -> void:
+	var seen: Dictionary = {}
+	for seed_value in 20:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 7000 + seed_value
+		var yards: int = IslesGenerator.COURSE_YARDS[seed_value % IslesGenerator.COURSE_YARDS.size()]
+		var hole: HoleData = IslesGenerator.generate(rng, yards)
+		var terrain := Terrain.new(hole)
+		seen[hole.points] = true
+		_check(is_equal_approx(absf(hole.cup_x - hole.tee_x), float(yards) * 3.0), "the hole is the chosen distance from the tee")
+		_check(not terrain.is_void(hole.checkpoint_x), "the checkpoint stands on an island")
+		_check(not terrain.is_void(hole.checkpoint_from) and terrain.is_void(hole.checkpoint_from - 1.0), "and knows where that island starts")
+		_check(terrain.surface_at(hole.checkpoint_x) == Surface.Type.FAIRWAY, "not the tee's or the green's")
+		var halfway: float = (hole.tee_x + hole.cup_x) / 2.0
+		_check(absf(hole.checkpoint_x - halfway) <= IslesGenerator.GAP_MAX + IslesGenerator.WIDTH_MAX, "it's about halfway")
+		_check(not terrain.in_cup(hole.checkpoint_x), "with no hole there")
+		for piece: Dictionary in hole.scenery:
+			_check(absf(float(piece["x"]) - hole.checkpoint_x) > 40.0, "and no tree in front of its flag")
+		_check(terrain.is_floating(), "Floating Isles is a hole of islands")
+		_check(not terrain.is_void(hole.tee_x), "the tee is on land")
+		_check(not terrain.is_void(hole.cup_x), "and so is the cup")
+		_check(terrain.surface_at(hole.tee_x) == Surface.Type.TEE, "the first island is the tee")
+		_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "the last island is the green")
+		_check(terrain.is_void(0.0) and terrain.is_void(float(terrain.length)), "both ends of the map are sky")
+		var land_from: int = -1
+		var sky_from: int = -1
+		for x in terrain.length + 1:
+			var over_sky: bool = terrain.is_void(float(x))
+			if not over_sky and land_from < 0:
+				land_from = x
+				if sky_from > 0:
+					var gap: int = x - sky_from
+					_check(gap >= int(IslesGenerator.GAP_MIN) - 2 and gap <= int(IslesGenerator.GAP_MAX) + 2, "every gap is one the clubs can carry")
+			elif over_sky and land_from >= 0:
+				var width: int = x - land_from
+				var special: bool = land_from <= int(hole.tee_x) or x > int(hole.cup_x)
+				if not special:
+					_check(width <= int(IslesGenerator.WIDTH_MAX) + 2, "the islands are small")
+				_check(absf(terrain.slope(float(land_from) + 4.0)) < 0.02, "an island's top is level to the edge")
+				_check(terrain.underside_y(float(land_from + width / 2)) > terrain.ground_y(float(land_from + width / 2)) + 20.0, "an island has rock under it")
+				land_from = -1
+				sky_from = x
+	_check(seen.size() == 20, "the map is different every time")
+	var first := RandomNumberGenerator.new()
+	first.seed = 5
+	var second := RandomNumberGenerator.new()
+	second.seed = 5
+	_check(IslesGenerator.generate(first).points == IslesGenerator.generate(second).points, "the same seed makes the same map")
+
+
+func _test_isles_physics() -> void:
+	var terrain := Terrain.new(_two_islands())
+	_check(not Terrain.new(_flat_hole()).is_floating(), "an ordinary hole isn't floating")
+	_check(not Terrain.new(_flat_hole()).is_void(50.0), "and has no sky in it")
+
+	var sim := BallSim.new(terrain)
+	sim.pos = Vector2(200, 260)
+	sim.launch(Vector2(0, 10), 0.0)
+	_settle(sim)
+	_check(sim.state == BallSim.State.RESTING, "a ball dropped on an island lands on it")
+
+	sim.pos = Vector2(400, 260)
+	sim.launch(Vector2(0, 10), 0.0)
+	_settle(sim)
+	_check(sim.state == BallSim.State.OUT_OF_BOUNDS, "a ball over a gap falls off the map")
+	_check(sim.pos.y > float(Terrain.WORLD_HEIGHT), "and only once it's out of the picture")
+
+	sim.place(280.0)
+	sim.launch(Vector2(90, 0), 0.0)
+	_settle(sim)
+	_check(sim.state == BallSim.State.OUT_OF_BOUNDS, "a ball that rolls off the edge falls")
+
+	sim.pos = Vector2(498, 305)
+	sim.launch(Vector2(120, 1), 0.0)
+	sim.step(1.0 / 60.0)
+	_check(sim.vel.x < 0.0, "a ball hitting an island's side bounces off it")
+	_check(sim.pos.y > 300.0, "and isn't lifted onto the top")
+	_settle(sim)
+	_check(sim.state == BallSim.State.OUT_OF_BOUNDS, "then it falls")
+
+	sim.pos = Vector2(480, 420)
+	sim.launch(Vector2(300, 1), 0.0)
+	_settle(sim)
+	_check(sim.state == BallSim.State.OUT_OF_BOUNDS and sim.pos.x > 520.0, "a ball can pass beneath an island")
+
+	var clubs: Array[ClubData] = _clubs()
+	var preview := HoleGame.new(_two_islands(), clubs)
+	_check(preview.preview()["path"].size() > 0, "the aim guide still works over the sky")
+
+
+func _test_isles_falls() -> void:
+	var game := HoleGame.new(_two_islands(), _clubs())
+	game.falls_return_to_tee = true
+	for expected in [1, 2]:
+		game.start_from(285.0)
+		game.select_club(1)
+		game.strike_with(0.3, 0.0)
+		var steps: int = 0
+		while game.phase != HoleGame.Phase.AIM and steps < 2000:
+			game.tick(1.0 / 60.0)
+			steps += 1
+		_check(game.falls == expected, "the fall is counted")
+		_check(game.strokes == expected, "strokes carry on through a fall, with no penalty added")
+		_check(is_equal_approx(game.ball.pos.x, game.hole.tee_x), "and the ball goes back to the tee")
+
+	var ordinary := HoleGame.new(_two_islands(), _clubs())
+	ordinary.start_from(285.0)
+	ordinary.select_club(1)
+	ordinary.strike_with(0.3, 0.0)
+	var count: int = 0
+	while ordinary.phase != HoleGame.Phase.AIM and count < 2000:
+		ordinary.tick(1.0 / 60.0)
+		count += 1
+	_check(ordinary.strokes == 2 and is_equal_approx(ordinary.ball.pos.x, 285.0), "without the rule, a lost ball is the usual penalty")
+	_test_isles_checkpoint()
+
+
+# Three islands: the tee's at 100-249, the checkpoint's at 400-549, and the cup's at 700-849.
+func _checkpoint_islands() -> HoleData:
+	var hole := HoleData.new()
+	hole.tee_x = 170.0
+	hole.cup_x = 775.0
+	hole.checkpoint_x = 475.0
+	hole.checkpoint_from = 400.0
+	hole.points = PackedVector2Array([Vector2(0, 300), Vector2(500, 300), Vector2(1000, 300)])
+	hole.surface_spans = [{ "from": 0, "to": 1000, "type": Surface.Type.FAIRWAY }]
+	hole.void_spans = [{ "from": 0, "to": 100 }, { "from": 250, "to": 400 }, { "from": 550, "to": 700 }, { "from": 850, "to": 1001 }]
+	return hole
+
+
+func _play_out(game: HoleGame, club: int, power: float) -> void:
+	game.select_club(club)
+	game.strike_with(power, 0.0)
+	var steps: int = 0
+	while game.phase != HoleGame.Phase.AIM and steps < 2000:
+		game.tick(1.0 / 60.0)
+		steps += 1
+
+
+func _test_isles_checkpoint() -> void:
+	var game := HoleGame.new(_checkpoint_islands(), _clubs())
+	game.falls_return_to_tee = true
+	var touches: Array[int] = [0]
+	game.checkpoint_touched.connect(func() -> void: touches[0] += 1)
+
+	_play_out(game, 2, 0.05)
+	_check(not game.checkpoint_reached, "resting short of the checkpoint doesn't reach it")
+	game.start_from(240.0)
+	_play_out(game, 1, 0.3)
+	_check(not game.checkpoint_reached and is_equal_approx(game.ball.pos.x, game.hole.tee_x), "a fall before the checkpoint goes back to the tee")
+
+	game.start_from(450.0)
+	_check(not game.checkpoint_reached, "being put on its island isn't reaching it")
+	_play_out(game, 2, 0.05)
+	_check(game.checkpoint_reached and touches[0] == 1, "coming to rest on its island reaches it")
+
+	game.start_from(540.0)
+	var strokes_before: int = game.strokes
+	_play_out(game, 1, 0.3)
+	_check(is_equal_approx(game.ball.pos.x, game.hole.checkpoint_x - HoleGame.CHECKPOINT_STAND_OFF), "a fall after it goes back to the checkpoint")
+	_check(not game.terrain.is_void(game.ball.pos.x), "which is on land")
+	_check(game.strokes == strokes_before + 1, "with strokes still counted and no penalty")
+	_check(game.phase == HoleGame.Phase.AIM, "and play carries on from there")
+	_play_out(game, 2, 0.05)
+	_check(touches[0] == 1, "it only announces itself once")
+	game.start_from(240.0)
+	_play_out(game, 1, 0.3)
+	_check(game.ball.pos.x > game.hole.checkpoint_from, "and it's kept, whatever island the fall was from")
+
+	var long_shot := HoleGame.new(_checkpoint_islands(), _clubs())
+	long_shot.falls_return_to_tee = true
+	long_shot.start_from(710.0)
+	_play_out(long_shot, 2, 0.05)
+	_check(long_shot.checkpoint_reached, "resting on an island past it counts too")
+
+	long_shot.restart()
+	_check(not long_shot.checkpoint_reached, "and starting over clears it")
+
+	var ordinary := HoleGame.new(_checkpoint_islands(), _clubs())
+	ordinary.start_from(450.0)
+	_play_out(ordinary, 2, 0.05)
+	_check(not ordinary.checkpoint_reached, "outside Floating Isles it does nothing")
+
+
+func _test_isles_leaderboard() -> void:
+	var path := "user://test_isles_profile.json"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var profile := Profile.new(path)
+	_check(profile.best_isles_strokes(4000) == 0, "no best before a first crossing")
+	_check(profile.record_isles(4000, 50, 3) == 1, "a first crossing tops the table")
+	_check(profile.record_isles(4000, 40, 0) == 1, "fewer strokes go above it")
+	_check(profile.record_isles(4000, 60, 1) == 3, "more strokes go below")
+	_check(profile.record_isles(4000, 50, 1) == 2, "on the same strokes, fewer falls win")
+	_check(profile.record_isles(4000, 50, 3) == 4, "an exact tie goes below the earlier one")
+	_check(profile.best_isles_strokes(4000) == 40, "the best is the fewest strokes")
+	_check(profile.isles_table(1000).is_empty() and profile.isles_table(2000).is_empty(), "each length has its own table")
+	_check(profile.record_isles(1000, 12, 0) == 1, "so a short course isn't ranked against a long one")
+	_check(profile.best_isles_strokes(1000) == 12 and profile.best_isles_strokes(4000) == 40, "and each keeps its own best")
+	_check(profile.high_scores.is_empty() and profile.infinite_scores.is_empty(), "it's a table of its own")
+	for i in 12:
+		profile.record_isles(4000, 70 + i, 0)
+	_check(profile.isles_table(4000).size() == Profile.MAX_SCORES, "the table holds ten")
+	_check(profile.record_isles(4000, 500, 0) == 0, "a score too poor doesn't make it")
+	var reloaded := Profile.new(path)
+	_check(reloaded.isles_table(4000) == profile.isles_table(4000), "the leaderboard is saved")
+	_check(reloaded.isles_table(1000) == profile.isles_table(1000), "for every length")
+	# A save from when there was only the 4000 yard course.
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string('{"isles_scores": [{"strokes": "x"}, 7, {"strokes": 90, "falls": "y"}, {"strokes": 30}]}')
+	file.close()
+	var damaged := Profile.new(path)
+	_check(damaged.isles_table(4000).size() == 2 and damaged.best_isles_strokes(4000) == 30, "an old leaderboard moves to the 4000 yard table, keeping what it can")
+	_check(int(damaged.isles_table(4000)[1]["falls"]) == 0, "and cleans up the rest")
+	_check(damaged.isles_table(2000).is_empty(), "leaving the others empty")
+	file = FileAccess.open(path, FileAccess.WRITE)
+	file.store_string('{"isles_scores": {"1000": "oops", "2000": [{"strokes": 25, "falls": 1}], "777": [{"strokes": 1}]}}')
+	file.close()
+	var mixed := Profile.new(path)
+	_check(mixed.isles_table(1000).is_empty() and mixed.best_isles_strokes(2000) == 25, "a damaged table doesn't harm its neighbours")
+	_check(not mixed.isles_scores.has(777), "and a length that doesn't exist is ignored")
+	DirAccess.remove_absolute(path)
+
+
+func _test_landing_arrow_perk() -> void:
+	var arrow: Dictionary = Items.by_id("landing_arrow")
+	_check(arrow["kind"] == Items.KIND_PERK and not arrow.has("unlock"), "the Landing Arrow is a perk on sale from the start")
+	var state: RunState = _new_run_state()
+	_check(state.price_of(arrow) == 60, "it costs 60 in the first shop (%d)" % state.price_of(arrow))
+	state.course.hole_index = state.course.hole_count() - 2
+	_check(state.price_of(arrow) == 60, "and still 60 in the last")
+	state.course.hole_index = 0
+	_check(state.price_of(Items.by_id("power_stripe")) == RunState.START_PRICE, "other items keep their low early prices")
+	state.perks.append("coupon")
+	_check(state.price_of(arrow) == 48, "the Coupon Book still takes its share off")
+	state.perks.clear()
+	state.level = 5
+	_check(state.price_of(arrow) == roundi(60.0 * Difficulty.price_scale(5)), "and infinite difficulty still adds to it")
+	state.level = 0
+	state.coins = 59
+	_check(not state.buy(arrow), "59 coins won't buy it")
+	state.coins = 60
+	_check(state.buy(arrow) and state.coins == 0, "60 will")
+	_check(state.perks.has("landing_arrow") and state.perk_number("landing_arrow", 0.0) > 0.0, "and the run has the perk")
+	var sold_out := false
+	for _i in 60:
+		for item: Dictionary in state.roll_stock():
+			sold_out = sold_out or item["id"] == "landing_arrow"
+	_check(not sold_out, "it isn't sold again once owned")
+	var fresh: RunState = _new_run_state()
+	var seen := false
+	for _i in 200:
+		for item: Dictionary in fresh.roll_stock():
+			seen = seen or item["id"] == "landing_arrow"
+	_check(seen, "the shop does stock it")
+
+
+func _test_infinite_mode() -> void:
+	_test_landing_arrow_perk()
+	# Level 0 has to leave the main game exactly as it was.
+	_check(is_equal_approx(Difficulty.price_scale(0), 1.0), "level 0 doesn't change prices")
+	_check(is_equal_approx(Difficulty.rival_miss_chance(0), Rival.MISS_CHANCE), "level 0 is the usual rival")
+	_check(Difficulty.rival_cheats(0) == Rival.CHEATS_PER_HOLE, "level 0 cheats the usual amount")
+	_check(Difficulty.rival_power_steps(0) == Rival.POWER_STEPS, "level 0 plans the usual way")
+	for level in Difficulty.MAX_LEVEL:
+		_check(Difficulty.price_scale(level + 1) > Difficulty.price_scale(level), "prices rise at level %d" % level)
+		_check(Difficulty.rival_miss_chance(level + 1) < Difficulty.rival_miss_chance(level), "the rival improves at level %d" % level)
+		_check(Difficulty.rival_miss_chance(level + 1) > 0.0, "the rival can always still mishit")
+		_check(Difficulty.boss_reward(level + 1) <= Difficulty.boss_reward(level), "rewards don't grow at level %d" % level)
+		_check(Difficulty.boss_reward(level + 1) >= 1, "beating a boss always pays something")
+		_check(Difficulty.green_half(level + 1) >= 60.0, "greens stay big enough at level %d" % level)
+
+	# Every generated hole is a proper hole, at every level, whatever the dice say.
+	var kinds_by_level: Dictionary = {}
+	for level in Difficulty.MAX_LEVEL + 1:
+		for seed_value in 12:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = seed_value * 100 + level
+			var holes: Array[HoleData] = HoleGenerator.generate_set(rng, level)
+			_check(holes.size() == HoleGenerator.HOLES_PER_SET + 1, "a set is nine holes and a boss")
+			_check(holes[-1].display_name == "BOSS HOLE" and holes[-1].par == HoleGenerator.BOSS_PAR, "a set ends on a boss hole")
+			var par_total: int = 0
+			for i in holes.size():
+				par_total += holes[i].par
+				_check_generated_hole(holes[i], level, i, kinds_by_level)
+			_check(par_total >= 43 and par_total <= 48, "a set has a sensible par (%d)" % par_total)
+			var boss: HoleData = holes[-1]
+			var boss_end: float = absf(boss.cup_x - boss.tee_x) - Difficulty.green_half(level)
+			for entry: Dictionary in boss.obstacles:
+				if entry["kind"] != "coin" and entry.has("x"):
+					_check(absf(float(entry["x"]) - boss.tee_x) < boss_end, "the boss hole's hazards stay short of the green (level %d seed %d)" % [level, seed_value])
+			var boss_kinds: Dictionary = {}
+			for entry: Dictionary in holes[-1].obstacles:
+				boss_kinds[entry["kind"]] = true
+			for kind: String in ["cart", "goose", "windmill", "sprinkler"]:
+				_check(boss_kinds.has(kind), "the boss hole has a %s (level %d seed %d)" % [kind, level, seed_value])
+	_check(_first_hole_hazards(kinds_by_level, 0) == [], "the first holes at level 0 have no moving hazards")
+
+	# They're unlike the main course: both directions, new pars, floating pads, varied shapes.
+	var variety_rng := RandomNumberGenerator.new()
+	variety_rng.seed = 99
+	var reversed_holes: int = 0
+	var forward_holes: int = 0
+	var long_holes: int = 0
+	var floating_pads: int = 0
+	var titles: Dictionary = {}
+	var wettest: float = 0.0
+	var biggest_rise: float = 0.0
+	for _i in 12:
+		for hole: HoleData in HoleGenerator.generate_set(variety_rng, 4):
+			if hole.cup_x < hole.tee_x:
+				reversed_holes += 1
+			else:
+				forward_holes += 1
+			if hole.par == 6:
+				long_holes += 1
+			titles[hole.title] = true
+			var low: float = INF
+			var high: float = -INF
+			for point in hole.points:
+				low = minf(low, point.y)
+				high = maxf(high, point.y)
+			biggest_rise = maxf(biggest_rise, high - low)
+			var water: float = 0.0
+			for span: Dictionary in hole.water_spans:
+				water += float(span["to"]) - float(span["from"])
+			wettest = maxf(wettest, water / float(hole.points[hole.points.size() - 1].x))
+			for entry: Dictionary in hole.obstacles:
+				if entry["kind"] == "pad" and entry.has("y"):
+					floating_pads += 1
+	_check(reversed_holes > 15 and forward_holes > 15, "holes play both ways (%d, %d)" % [reversed_holes, forward_holes])
+	_check(long_holes > 3, "some holes are par 6, which the main course has none of")
+	_check(floating_pads > 3, "some pads float")
+	_check(titles.size() > 60, "titles vary (%d)" % titles.size())
+	_check(wettest > 0.2, "some holes are a good part water (%.2f)" % wettest)
+	_check(biggest_rise > 130.0, "some holes have big changes in height (%.0f)" % biggest_rise)
+
+	# A hole flipped end for end plays the same.
+	var flip_rng := RandomNumberGenerator.new()
+	flip_rng.seed = 12
+	var plain: HoleData = HoleGenerator.generate_hole(flip_rng, 3, 2, 4, false, "valley")
+	var plain_length: float = plain.points[plain.points.size() - 1].x
+	var flipped: HoleData = plain.duplicate(true)
+	HoleGenerator._mirror(flipped)
+	var plain_terrain := Terrain.new(plain)
+	var flipped_terrain := Terrain.new(flipped)
+	for x in range(40, int(plain_length) - 40, 37):
+		_check(absf(plain_terrain.ground_y(float(x)) - flipped_terrain.ground_y(plain_length - float(x))) < 6.0, "flipped ground matches at %d" % x)
+	_check(flipped_terrain.surface_at(flipped.tee_x) == Surface.Type.TEE, "a flipped hole still tees off from a tee")
+	_check(flipped_terrain.surface_at(flipped.cup_x) == Surface.Type.GREEN, "and has its cup on a green")
+	_check(is_equal_approx(flipped.wind, -plain.wind), "with its wind turned round")
+
+	# The same seed makes the same holes, and different seeds don't.
+	var one := RandomNumberGenerator.new()
+	one.seed = 5
+	var two := RandomNumberGenerator.new()
+	two.seed = 5
+	var three := RandomNumberGenerator.new()
+	three.seed = 6
+	var hole_one: HoleData = HoleGenerator.generate_hole(one, 3, 4, 4, false)
+	_check(HoleIO.to_dict(hole_one) == HoleIO.to_dict(HoleGenerator.generate_hole(two, 3, 4, 4, false)), "a seed repeats its holes")
+	_check(HoleIO.to_dict(hole_one) != HoleIO.to_dict(HoleGenerator.generate_hole(three, 3, 4, 4, false)), "another seed makes different holes")
+	# Generated holes survive being read back, the same as a saved map.
+	_check(HoleIO.from_dict(HoleIO.to_dict(hole_one)) != null, "a generated hole is a valid map")
+
+	# Beating a boss: rewards, difficulty and carried totals.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var first_set: CourseRun = CourseRun.from_holes(HoleGenerator.generate_set(rng, 0))
+	var state := RunState.new(first_set, _clubs(), [], 3)
+	state.infinite = true
+	state.coins = 77
+	state.spare = 4
+	state.perks.append("coupon")
+	state.stickers["driver"].append("power_stripe")
+	first_set.record_score(first_set.current_hole().par - 1)
+	var first_price: int = state.price_of(Items.by_id("power_stripe"))
+	_check(first_price == maxi(roundi(float(RunState.START_PRICE) * 0.8), 1), "the first shop of a run is cheap")
+	var paid: Dictionary = state.beat_boss()
+	var pile: int = 4 + Difficulty.boss_reward(0)
+	_check(int(paid["banked"]) == pile, "the spare strokes and the boss's reward are banked (%d)" % int(paid["banked"]))
+	_check(int(paid["coins"]) == pile / 2, "and pay half as many coins")
+	_check(state.coins == 77 + pile / 2, "which go on the coins")
+	_check(state.spare == RunState.START_SPARE, "spare strokes go back to the start")
+	_check(state.level == 1 and state.set_number == 2 and state.bosses_beaten == 1, "beating the boss raises the difficulty")
+	_check(state.perks == ["coupon"] and state.stickers["driver"] == ["power_stripe"], "gear carries over")
+	var odd_state := RunState.new(first_set, _clubs(), [], 3)
+	odd_state.spare = 3
+	_check(int(odd_state.beat_boss()["coins"]) == (3 + Difficulty.boss_reward(0)) / 2, "an odd stroke rounds down")
+	var none_left := RunState.new(first_set, _clubs(), [], 3)
+	none_left.spare = -2
+	_check(int(none_left.beat_boss()["banked"]) == Difficulty.boss_reward(0), "being under never costs coins")
+	state.coins = 77
+	var second_set: CourseRun = first_set.next_set(HoleGenerator.generate_set(rng, state.level))
+	state.course = second_set
+	_check(second_set.hole_index == 0 and second_set.scores.is_empty(), "the next set starts at its first hole")
+	_check(second_set.total_to_par() == -1 and second_set.finished_holes() == 1, "totals carry over between sets")
+	var price: int = state.price_of(Items.by_id("power_stripe"))
+	_check(price == roundi(18.0 * 0.8 * Difficulty.price_scale(1)), "later sets charge full price and more (%d)" % price)
+	_check(state.hole_payout(0, 4, 4) == RunState.PAYOUT_LATE, "later sets pay the full hole payout")
+	var score: Dictionary = state.final_score()
+	var saw_bosses: bool = false
+	for row: Dictionary in score["rows"]:
+		if str(row["label"]).begins_with("BOSSES BEATEN 1"):
+			saw_bosses = int(row["points"]) == RunState.SCORE_RIVAL_BEATEN
+	_check(saw_bosses, "the final score counts bosses beaten")
+	for _i in Difficulty.MAX_LEVEL + 5:
+		state.beat_boss()
+	_check(state.level == Difficulty.MAX_LEVEL, "difficulty stops at its maximum")
+	_check(state.set_number == 2 + Difficulty.MAX_LEVEL + 5, "the sets carry on past it")
+
+	# The profile: its own table, the lock, and unlocks.
+	var path: String = "user://test_infinite_profile.json"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var profile := Profile.new(path)
+	_check(not profile.rival_beaten, "infinite mode starts locked")
+	var lost_main: RunState = _new_run_state()
+	lost_main.ending = RunState.Ending.LOST_TO_RIVAL
+	profile.record_run(lost_main)
+	_check(not profile.rival_beaten, "losing to the rival doesn't open it")
+	var won_main: RunState = _new_run_state()
+	won_main.ending = RunState.Ending.BEAT_RIVAL
+	profile.record_run(won_main)
+	_check(profile.rival_beaten, "beating the rival opens it")
+	var unlocked_before: int = profile.unlocked.size()
+	var from_boss: Array[String] = profile.record_boss_beaten()
+	_check(from_boss.size() == Profile.UNLOCKS_FOR_WINNING, "a boss beaten unlocks two items")
+	_check(profile.unlocked.size() == unlocked_before + 2, "and they're saved on the profile")
+	var main_scores: int = profile.high_scores.size()
+	var infinite_lost: RunState = _new_run_state()
+	infinite_lost.infinite = true
+	infinite_lost.set_number = 3
+	infinite_lost.bosses_beaten = 2
+	infinite_lost.ending = RunState.Ending.LOST_TO_RIVAL
+	var infinite_result: Dictionary = profile.record_run(infinite_lost)
+	_check(int(infinite_result["place"]) == 1 and profile.infinite_scores.size() == 1, "infinite runs have their own table")
+	_check(profile.high_scores.size() == main_scores, "and don't crowd the main game's")
+	_check((infinite_result["unlocked"] as Array).size() == mini(1, Items.unlock_order().size() - unlocked_before - 2), "losing the final duel unlocks one")
+	var reloaded := Profile.new(path)
+	_check(reloaded.rival_beaten and reloaded.infinite_scores.size() == 1, "all of it survives a restart")
+	_check(int(reloaded.infinite_scores[0]["sets"]) == 3 and int(reloaded.infinite_scores[0]["bosses"]) == 2, "with how far the run got")
+	# Saves from before infinite mode existed.
+	var old_save := FileAccess.open(path, FileAccess.WRITE)
+	old_save.store_string(JSON.stringify({ "high_scores": [{ "score": 900, "ending": RunState.Ending.BEAT_RIVAL, "to_par": 0 }], "unlocked": [], "runs_finished": 1 }))
+	old_save.close()
+	var from_old: Profile = Profile.new(path)
+	_check(from_old.rival_beaten, "an old save that beat the rival has infinite mode open")
+	_check(from_old.infinite_scores.is_empty(), "with an empty table")
+	var bad_save := FileAccess.open(path, FileAccess.WRITE)
+	bad_save.store_string(JSON.stringify({ "infinite_scores": ["oops", { "score": "x", "sets": "y" }], "rival_beaten": "maybe" }))
+	bad_save.close()
+	var damaged: Profile = Profile.new(path)
+	_check(damaged.infinite_scores.size() == 1 and int(damaged.infinite_scores[0]["sets"]) == 1, "damaged infinite scores are cleaned up")
+	_check(not damaged.rival_beaten, "and a damaged lock stays shut")
+	DirAccess.remove_absolute(path)
+
+	# A sample actually played, since a hole can look right and still be impossible. The
+	# generator_check scene does this properly at every difficulty.
+	var play_rng := RandomNumberGenerator.new()
+	play_rng.seed = 21
+	var sample: Array[HoleData] = HoleGenerator.generate_set(play_rng, 5)
+	for i: int in [0, 4, sample.size() - 1]:
+		_check(_play_round(sample[i], play_rng, 0.0, 0.0) > 0, "generated %s can be finished" % sample[i].display_name)
+
+
+func _first_hole_hazards(kinds_by_level: Dictionary, level: int) -> Array:
+	var found: Array = kinds_by_level.get("%d_0" % level, {}).keys()
+	var moving: Array = []
+	for kind: String in found:
+		if kind == "cart" or kind == "windmill" or kind == "sprinkler" or kind == "goose":
+			moving.append(kind)
+	return moving
+
+
+func _check_generated_hole(hole: HoleData, level: int, index: int, kinds_by_level: Dictionary) -> void:
+	var label: String = "%s %s (level %d, cup %d)" % [hole.display_name, hole.title, level, int(hole.cup_x)]
+	var terrain := Terrain.new(hole)
+	_check(hole.title != "", "%s has a title" % label)
+	_check(hole.par >= 3 and hole.par <= 7, "%s has a sensible par" % label)
+	_check(terrain.surface_at(hole.tee_x) == Surface.Type.TEE, "%s tees off from a tee" % label)
+	_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "%s has its cup on a green" % label)
+	_check(terrain.surface_at(hole.cup_x - 30.0) == Surface.Type.GREEN, "%s has green before the cup" % label)
+	_check(absf(terrain.slope(hole.cup_x - 20.0)) < 0.28, "%s has a green that can hold a ball" % label)
+	_check(not hole.scenery.is_empty(), "%s has trees" % label)
+	for i in range(1, hole.points.size()):
+		_check(hole.points[i].x >= hole.points[i - 1].x + HoleIO.MIN_POINT_GAP, "%s has its ground points in order" % label)
+	for piece: Dictionary in hole.scenery:
+		_check(absf(float(piece["x"]) - hole.tee_x) > 45.0, "%s has no tree on the tee" % label)
+		_check(absf(float(piece["x"]) - hole.cup_x) > 60.0, "%s has no tree on the pin" % label)
+	for span: Dictionary in hole.water_spans:
+		if hole.par != 3:
+			var nearest: float = minf(absf(float(span["from"]) - hole.tee_x), absf(float(span["to"]) - hole.tee_x))
+			_check(nearest >= HoleGenerator.POND_EARLIEST - HoleGenerator.TEE_X - 12.0, "%s leaves room for a drive before its pond (%d)" % [label, int(nearest)])
+	for offset: float in [-50.0, -25.0, 0.0, 25.0, 50.0]:
+		_check(terrain.surface_at(hole.cup_x + offset) == Surface.Type.GREEN, "%s has no water or sand on its green" % label)
+	for x in range(0, terrain.length, 8):
+		var y: float = terrain.ground_y(float(x))
+		_check(y > 60.0 and y < float(Terrain.WORLD_HEIGHT) - 20.0, "%s keeps its ground in the world (%d at %d)" % [label, int(y), x])
+	var coins: int = 0
+	var seen: Dictionary = kinds_by_level.get("%d_%d" % [level, index], {})
+	for obstacle in Obstacle.build_all(hole, terrain):
+		seen[obstacle.kind] = true
+		if obstacle is BouncePadObstacle:
+			var pad: BouncePadObstacle = obstacle
+			var sim := BallSim.new(terrain)
+			sim.obstacles = Obstacle.build_all(hole, terrain)
+			sim.wind = hole.wind
+			sim.ignore_moving = true
+			_start_ball(sim, pad.center + pad.normal * 12.0, -pad.normal * 120.0)
+			_run_to_stop(sim)
+			_check(sim.state != BallSim.State.IN_WATER, "%s pad at %d doesn't fire into water" % [label, int(pad.x)])
+		elif obstacle is CoinObstacle:
+			coins += 1
+	kinds_by_level["%d_%d" % [level, index]] = seen
+	_check(coins == HoleGenerator.COINS_PER_HOLE, "%s has its coins" % label)
+	for entry: Dictionary in hole.obstacles:
+		if entry["kind"] == "coin":
+			_check(float(entry["y"]) < terrain.ground_y(float(entry["x"])), "%s has its coins above ground" % label)
+		elif entry.has("x"):
+			_check(terrain.surface_at(float(entry["x"])) != Surface.Type.WATER, "%s has nothing standing in water" % label)
+			_check(absf(float(entry["x"]) - hole.tee_x) > 40.0, "%s has nothing on the tee" % label)
+			_check(absf(float(entry["x"]) - hole.cup_x) > 60.0, "%s has nothing on the pin" % label)
 
 
 func _test_maps_gain_coins() -> void:
@@ -3038,9 +3689,6 @@ func _test_course_progression() -> void:
 	run.advance()
 	_check(run.hole_index == 0 and run.scores.is_empty(), "finishing the boss hole starts a new round")
 
-	run.jump_by(-1)
-	_check(run.hole_index == 9, "reviewing wraps around the course")
-
 	var game: HoleGame = _game()
 	var presses: Array[bool] = []
 	game.continue_requested.connect(func() -> void: presses.append(true))
@@ -3123,7 +3771,7 @@ func _count_event(key: String) -> void:
 
 
 # Returns the strokes taken, or -1 if the round hit the shot limit.
-func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float, timing_noise: float) -> int:
+func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float, timing_noise: float, patient: bool = false) -> int:
 	var game := HoleGame.new(hole, _clubs())
 	if power_noise > 0.0:
 		game.penalty_taken.connect(func(kind: String) -> void: _count_event(kind))
@@ -3140,6 +3788,10 @@ func _play_round(hole: HoleData, rng: RandomNumberGenerator, power_noise: float,
 		# Back at the same spot means that plan failed, so take the shot that carries furthest.
 		if is_equal_approx(game.ball.pos.x, last_x):
 			power = _set_longest_safe_shot(game, power)
+			# As a person would, waits a moment for a moving hazard to get out of the way.
+			if patient:
+				for _wait in rng.randi_range(30, 240):
+					game.tick(DT)
 		last_x = game.ball.pos.x
 		game.strike_with(power, accuracy)
 		var steps: int = 0

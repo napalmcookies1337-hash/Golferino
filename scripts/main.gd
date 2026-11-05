@@ -15,6 +15,7 @@ const HIT_STOP_FULL := 0.09
 const HIT_STOP_PERFECT := 0.05
 const FULL_POWER_SHAKE := 3.0
 const HAZARD_SHAKE := 1.5
+const ISLES_FINISH_PAUSE := 1.6
 
 var run: CourseRun
 var game: HoleGame
@@ -28,11 +29,22 @@ var embedded: bool = false
 var library: MapLibrary
 ## High scores and unlocks. Uses the player's own if not set.
 var profile: Profile
+## True for infinite mode: generated holes, set after set, until the run ends.
+var infinite: bool = false
+## Makes an infinite run repeatable, for tests. A negative seed means a different run each time.
+var infinite_seed: int = -1
+## True for Floating Isles: one random hole of islands, with its own leaderboard.
+var floating_isles: bool = false
+## How long a Floating Isles course to play.
+var isles_yards: int = IslesGenerator.DEFAULT_YARDS
+## Makes the islands repeatable, for tests. A negative seed means a new map each time.
+var isles_seed: int = -1
 ## The run in progress. Null when testing a map, which has no budget, coins or shop.
 var run_state: RunState
 var shop: ShopScreen
 var pause_menu: PauseView
 var run_over: RunOverScreen
+var isles_finish: IslesFinishScreen
 
 var _base_clubs: Array[ClubData] = []
 var _world: Node2D
@@ -43,6 +55,8 @@ var _overlay: CanvasLayer
 var _rival_strokes_at_end: int = -1
 var _flag: FlagView
 var _hit_stop: float = 0.0
+var _hole_rng := RandomNumberGenerator.new()
+var _isles_place: int = 0
 
 
 ## Plays one map instead of the course. A negative start means from the tee.
@@ -76,9 +90,28 @@ func _ready() -> void:
 
 
 func _begin_new_run() -> void:
-	run = CourseRun.from_holes(library.load_course())
+	if floating_isles:
+		_begin_isles()
+		return
+	if infinite:
+		# The seed goes in the log, so a bad hole can be made again and looked at.
+		_hole_rng.seed = infinite_seed if infinite_seed >= 0 else randi()
+		print("infinite mode seed: %d" % _hole_rng.seed)
+		run = CourseRun.from_holes(HoleGenerator.generate_set(_hole_rng, 0))
+	else:
+		run = CourseRun.from_holes(library.load_course())
 	run_state = RunState.new(run, _base_clubs, profile.unlocked)
+	run_state.infinite = infinite
 	_rival_strokes_at_end = -1
+	load_current_hole()
+
+
+# A fresh map every time, including after Try Again.
+func _begin_isles() -> void:
+	_hole_rng.seed = isles_seed if isles_seed >= 0 else randi()
+	print("floating isles seed: %d" % _hole_rng.seed)
+	var only: Array[HoleData] = [IslesGenerator.generate(_hole_rng, isles_yards)]
+	run = CourseRun.from_holes(only)
 	load_current_hole()
 
 
@@ -107,9 +140,10 @@ func load_current_hole() -> void:
 		game.free_penalties = int(run_state.perk_number("free_penalties", 0.0))
 		if _is_duel_hole():
 			var plain_clubs: Array[ClubData] = _base_clubs
-			game.start_duel(Rival.new(game, plain_clubs))
+			game.start_duel(Rival.new(game, plain_clubs, -1, run_state.level))
 	else:
 		game = HoleGame.new(run.current_hole(), _base_clubs)
+		game.falls_return_to_tee = floating_isles
 	if is_testing() and _test_start_x >= 0.0:
 		game.start_from(_test_start_x)
 	_build_views()
@@ -132,6 +166,7 @@ func _build_views() -> void:
 	var mood: int = _time_of_day()
 	var background := BackgroundView.new()
 	background.setup(camera, mood)
+	background.above_the_clouds = game.terrain.is_floating()
 	_world.add_child(background)
 	var tint := CanvasModulate.new()
 	tint.color = BackgroundView.tint_of(mood)
@@ -156,6 +191,11 @@ func _build_views() -> void:
 	_flag.setup(game.terrain)
 	_world.add_child(_flag)
 
+	if game.hole.checkpoint_x >= 0.0:
+		var checkpoint := CheckpointFlagView.new()
+		checkpoint.setup(game.terrain, game.hole.checkpoint_x)
+		_world.add_child(checkpoint)
+
 	var golfer := GolferView.new()
 	golfer.setup(game)
 	_world.add_child(golfer)
@@ -169,7 +209,7 @@ func _build_views() -> void:
 		_world.add_child(rival_ball)
 
 	var aim := AimView.new()
-	aim.setup(game)
+	aim.setup(game, run_state != null and run_state.perk_number("landing_arrow", 0.0) > 0.0)
 	_world.add_child(aim)
 
 	var ball := BallView.new()
@@ -187,6 +227,9 @@ func _build_views() -> void:
 	hud = Hud.new()
 	hud.setup(game, camera, run)
 	hud.run_state = run_state
+	if floating_isles:
+		hud.isles_mode = true
+		hud.isles_best = profile.best_isles_strokes(isles_yards)
 	hud_layer.add_child(hud)
 
 	var audio := GameAudio.new()
@@ -196,7 +239,7 @@ func _build_views() -> void:
 
 # Testing one map stays at midday, since it has no place in a course.
 func _time_of_day() -> int:
-	if is_testing():
+	if is_testing() or floating_isles:
 		return BackgroundView.Mood.MIDDAY
 	return BackgroundView.mood_for(run.hole_index, run.hole_count(), _is_duel_hole())
 
@@ -215,6 +258,7 @@ func _connect_signals() -> void:
 	game.trick_shot.connect(_on_trick_shot)
 	game.penalty_forgiven.connect(_on_penalty_forgiven)
 	game.out_of_strokes.connect(_on_out_of_strokes)
+	game.checkpoint_touched.connect(_on_checkpoint_touched)
 	if game.rival != null:
 		var rival_ball: BallSim = game.rival.ball
 		game.rival.announced.connect(func(text: String) -> void: hud.show_message(text, Rival.CHEAT_TIME))
@@ -238,7 +282,7 @@ func _physics_process(delta: float) -> void:
 
 # The shop, the pause menu and the final score all stop the course behind them.
 func _is_interrupted() -> bool:
-	return shop != null or pause_menu != null or run_over != null
+	return shop != null or pause_menu != null or run_over != null or isles_finish != null
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -248,8 +292,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run_state != null and event.is_action_pressed("scorecard", false):
 		hud.show_card = not hud.show_card
 		Sound.sfx("menu_move")
-	elif run_state != null and event.is_action_pressed("quit", false):
-		if game.phase != HoleGame.Phase.OUT_OF_STROKES:
+	elif (run_state != null or floating_isles) and event.is_action_pressed("quit", false):
+		# Once the ball's dropped, the finish screen is on its way and has its own way out.
+		var waiting_on_finish: bool = floating_isles and game.phase == HoleGame.Phase.COMPLETE
+		if game.phase != HoleGame.Phase.OUT_OF_STROKES and not waiting_on_finish:
 			_open_pause()
 	elif Controls.swing_pressed(event):
 		game.press_swing()
@@ -271,10 +317,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		game.flip_facing()
 	elif is_testing() and event.is_action_pressed("restart", false):
 		game.restart()
-	elif event.is_action_pressed("review_next_hole", false):
-		_review_jump(1)
-	elif event.is_action_pressed("review_prev_hole", false):
-		_review_jump(-1)
 	elif event.is_action_pressed("quit", false):
 		if embedded:
 			exit_requested.emit()
@@ -291,10 +333,16 @@ func _handle_interrupted_input(event: InputEvent) -> void:
 func _open_pause() -> void:
 	pause_menu = PauseView.new()
 	pause_menu.resumed.connect(_close_pause, CONNECT_DEFERRED)
-	pause_menu.run_ended.connect(_give_up, CONNECT_DEFERRED)
+	if floating_isles:
+		pause_menu.end_label = "MAIN MENU"
+		pause_menu.end_note = "ONLY A FINISHED CROSSING GOES ON THE LEADERBOARD"
+		pause_menu.run_ended.connect(_leave_isles, CONNECT_DEFERRED)
+	else:
+		pause_menu.run_ended.connect(_give_up, CONNECT_DEFERRED)
 	if shop != null:
 		shop.set_process_unhandled_input(false)
 	_overlay.add_child(pause_menu)
+	hud.message_hidden = true
 	Sound.sfx("menu_ok")
 
 
@@ -302,6 +350,7 @@ func _close_pause() -> void:
 	if pause_menu != null:
 		pause_menu.queue_free()
 		pause_menu = null
+	hud.message_hidden = false
 	if shop != null:
 		shop.set_process_unhandled_input(true)
 
@@ -315,6 +364,38 @@ func _give_up() -> void:
 	if run_state.ending == RunState.Ending.NONE:
 		run_state.ending = RunState.Ending.GAVE_UP
 	_end_run()
+
+
+func _leave_isles() -> void:
+	_close_pause()
+	_close_isles_finish()
+	if embedded:
+		exit_requested.emit()
+	else:
+		_begin_isles()
+
+
+func _try_isles_again() -> void:
+	_close_isles_finish()
+	_begin_isles()
+
+
+func _close_isles_finish() -> void:
+	if isles_finish != null:
+		isles_finish.queue_free()
+		isles_finish = null
+
+
+# The ball's in the hole. The score's already saved, so this only has to say so.
+func _open_isles_finish() -> void:
+	if isles_finish != null or game.phase != HoleGame.Phase.COMPLETE:
+		return
+	isles_finish = IslesFinishScreen.new()
+	isles_finish.setup(isles_yards, game.strokes, game.falls, _isles_place, profile.best_isles_strokes(isles_yards))
+	isles_finish.try_again.connect(_try_isles_again, CONNECT_DEFERRED)
+	isles_finish.main_menu.connect(_leave_isles, CONNECT_DEFERRED)
+	_overlay.add_child(isles_finish)
+	Sound.stop_jingle()
 
 
 func _open_shop() -> void:
@@ -336,7 +417,12 @@ func _close_shop() -> void:
 
 func _leave_shop() -> void:
 	_close_shop()
-	run.advance()
+	# Only infinite mode has a shop after the boss, and it leads to the next set of holes.
+	if run.is_last_hole():
+		run = run.next_set(HoleGenerator.generate_set(_hole_rng, run_state.level))
+		run_state.course = run
+	else:
+		run.advance()
 	load_current_hole()
 
 
@@ -362,11 +448,6 @@ func _after_run_over() -> void:
 		_begin_new_run()
 
 
-func _review_jump(step: int) -> void:
-	run.jump_by(step)
-	load_current_hole()
-
-
 func _on_shot_struck(quality: String, _power: float) -> void:
 	if quality != "":
 		hud.show_message(quality, 1.1)
@@ -383,7 +464,15 @@ func _on_shot_struck(quality: String, _power: float) -> void:
 
 func _on_penalty_taken(kind: String) -> void:
 	var text: String = "SPLASH! +1 STROKE" if kind == "water" else "OUT OF BOUNDS! +1 STROKE"
+	if kind == "fall":
+		text = "YOU FELL! BACK TO THE CHECKPOINT" if game.checkpoint_reached else "YOU FELL! BACK TO THE TEE"
 	hud.show_message(text, HoleGame.PENALTY_TIME)
+
+
+func _on_checkpoint_touched() -> void:
+	hud.show_message("CHECKPOINT!", 1.8)
+	Sound.sfx("mulligan")
+	fx.burst(Vector2(game.hole.checkpoint_x, game.terrain.ground_y(game.hole.checkpoint_x) - CheckpointFlagView.POLE_HEIGHT), Color("f7f4e6"), 16, 90.0)
 
 
 func _on_penalty_forgiven() -> void:
@@ -423,6 +512,12 @@ func _on_out_of_strokes() -> void:
 
 
 func _on_hole_finished(strokes: int, _score_name: String) -> void:
+	if floating_isles:
+		_isles_place = profile.record_isles(isles_yards, strokes, game.falls)
+		# A moment for the confetti, unless the player presses on first.
+		await get_tree().create_timer(ISLES_FINISH_PAUSE).timeout
+		_open_isles_finish()
+		return
 	if run_state == null:
 		run.record_score(strokes)
 		return
@@ -431,15 +526,30 @@ func _on_hole_finished(strokes: int, _score_name: String) -> void:
 	else:
 		run_state.leave_hole_unfinished(strokes)
 	if game.rival != null:
-		run_state.ending = RunState.Ending.BEAT_RIVAL if game.duel_won else RunState.Ending.LOST_TO_RIVAL
+		if infinite and game.duel_won:
+			_on_boss_beaten()
+		else:
+			run_state.ending = RunState.Ending.BEAT_RIVAL if game.duel_won else RunState.Ending.LOST_TO_RIVAL
+
+
+# The run carries on. The result panel says what the win was worth.
+func _on_boss_beaten() -> void:
+	var paid: Dictionary = run_state.beat_boss()
+	var new_items: Array[String] = profile.record_boss_beaten()
+	hud.result_notes.append("%d SPARE STROKES BANKED: +%d COINS" % [int(paid["banked"]), int(paid["coins"])])
+	hud.result_notes.append("SPARE BACK TO %d, DIFFICULTY %d" % [run_state.spare, run_state.level])
+	if not new_items.is_empty():
+		hud.result_notes.append("NOW IN THE SHOP: %s" % ", ".join(new_items))
 
 
 # The press arrives from inside the hole's own rules, so swap holes after it returns.
 func _on_continue_requested() -> void:
-	if run_state == null:
+	if floating_isles:
+		_open_isles_finish.call_deferred()
+	elif run_state == null:
 		run.advance()
 		load_current_hole.call_deferred()
-	elif run.is_last_hole():
+	elif run.is_last_hole() and not hud.run_carries_on():
 		_end_run.call_deferred()
 	else:
 		_open_shop.call_deferred()

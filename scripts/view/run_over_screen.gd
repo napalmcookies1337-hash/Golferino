@@ -126,7 +126,10 @@ func _headline() -> Array:
 func _draw() -> void:
 	draw_rect(Rect2(0, 0, 640, 360), BACKGROUND)
 	var headline: Array = _headline()
-	PixelFont.draw_centered(self, str(headline[0]), 320.0, 18.0, headline[1], 3)
+	PixelFont.draw_centered(self, str(headline[0]), 320.0, 14.0, headline[1], 3)
+	if run.infinite:
+		var how_far: String = "INFINITE: REACHED SET %d, DIFFICULTY %d OF %d" % [run.set_number, run.level, Difficulty.MAX_LEVEL]
+		PixelFont.draw_centered(self, how_far, 320.0, 40.0, TEXT)
 	ScorecardView.draw_table(self, run.course, Vector2(18, 54))
 	if rival_strokes >= 0:
 		PixelFont.draw_centered(self, "THE RIVAL'S CARD ON THE BOSS HOLE: %d" % rival_strokes, 320.0, 116.0, DIM)

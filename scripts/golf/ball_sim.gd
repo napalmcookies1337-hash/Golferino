@@ -31,6 +31,11 @@ const PIN_DROP_DAMPING := 0.4
 ## A skipping ball keeps this much speed, and has to land at least this fast.
 const SKIP_KEEP := 0.65
 const MIN_SKIP_SPEED := 60.0
+## A ball this close under an island's top still counts as landing on it, not hitting its side.
+const ISLAND_TOP_GRACE := 3.0
+const ISLAND_WALL_REBOUND := 0.35
+## How far below the world a falling ball goes before it's gone.
+const FALL_MARGIN := 20.0
 
 var terrain: Terrain
 var pos: Vector2 = Vector2.ZERO
@@ -137,23 +142,52 @@ func step(dt: float) -> void:
 
 func _step_air(dt: float) -> void:
 	var accel: float = GRAVITY + spin * SPIN_LIFT
-	if terrain.in_cup(pos.x):
+	if _over_the_cup():
 		accel += CUP_PULL * cup_pull_scale
 	vel.y += accel * dt
 	vel.x += wind * dt
+	var old_pos: Vector2 = pos
 	var old_x: float = pos.x
 	pos += vel * dt
 	_interact_with_obstacles(dt)
 	_check_pin(old_x)
 
-	if terrain.in_cup(pos.x):
+	if _over_the_cup():
 		if pos.y > terrain.rim_y:
 			_step_inside_cup()
 		return
 
+	if terrain.is_floating() and _meets_island_from_outside(old_pos):
+		return
 	var ground: float = terrain.ground_y(pos.x)
 	if pos.y + RADIUS >= ground:
 		_collide(ground)
+
+
+# In line with the cup, and not falling past underneath a floating hole's green.
+func _over_the_cup() -> bool:
+	return terrain.in_cup(pos.x) and not (terrain.is_floating() and pos.y > terrain.underside_y(pos.x))
+
+
+# On a floating hole a ball can pass beneath an island, or clip the rock from the side. True
+# when that's been dealt with, so only a ball coming down from above lands on the top.
+func _meets_island_from_outside(old_pos: Vector2) -> bool:
+	if terrain.is_void(pos.x):
+		return true
+	var ground: float = terrain.ground_y(pos.x)
+	if pos.y + RADIUS < ground:
+		return false
+	if pos.y - RADIUS > terrain.underside_y(pos.x):
+		return true
+	var from_gap: bool = terrain.is_void(old_pos.x) and pos.y + RADIUS > ground + ISLAND_TOP_GRACE
+	var from_below: bool = not terrain.is_void(old_pos.x) and old_pos.y - RADIUS > terrain.underside_y(old_pos.x)
+	if not from_gap and not from_below:
+		return false
+	var speed: float = vel.length()
+	pos = old_pos
+	vel = Vector2(-vel.x * ISLAND_WALL_REBOUND, absf(vel.y) * ISLAND_WALL_REBOUND)
+	bounced.emit(pos, Surface.Type.ROUGH, speed)
+	return true
 
 
 func _interact_with_obstacles(dt: float) -> bool:
@@ -272,6 +306,11 @@ func _step_roll(dt: float) -> void:
 		pos.x = new_x
 		state = State.AIRBORNE
 		return
+	# Over the edge of an island.
+	if terrain.is_void(new_x):
+		pos.x = new_x
+		state = State.AIRBORNE
+		return
 	if terrain.surface_at(new_x) == Surface.Type.WATER:
 		pos.x = new_x
 		pos.y = terrain.ground_y(new_x) - RADIUS
@@ -307,7 +346,8 @@ func _enter_water() -> void:
 
 
 func _check_bounds() -> void:
-	if pos.x < 0.0 or pos.x > float(terrain.length):
+	var fell: bool = terrain.is_floating() and pos.y > float(Terrain.WORLD_HEIGHT) + FALL_MARGIN
+	if pos.x < 0.0 or pos.x > float(terrain.length) or fell:
 		vel = Vector2.ZERO
 		state = State.OUT_OF_BOUNDS
 		hazard.emit(pos, "out_of_bounds")
