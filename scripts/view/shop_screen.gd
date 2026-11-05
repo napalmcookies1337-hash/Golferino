@@ -361,7 +361,8 @@ func _draw_balls() -> void:
 		var in_play: bool = run.balls[slot] == run.ball_id
 		PixelFont.draw(self, _ball_name(run.balls[slot]), rect.position + Vector2(5, 6), IN_PLAY if in_play else TEXT)
 		if in_play:
-			draw_rect(Rect2(rect.end.x - 10.0, rect.position.y + 6.0, 6, 6), IN_PLAY)
+			var label_x: float = rect.end.x - 5.0 - float(PixelFont.text_width("IN PLAY"))
+			PixelFont.draw(self, "IN PLAY", Vector2(label_x, rect.position.y + 6.0), IN_PLAY)
 
 
 func _ball_name(id: String) -> String:
