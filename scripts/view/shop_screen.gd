@@ -5,7 +5,7 @@ extends Node2D
 
 signal done
 
-enum Mode { BROWSE, PICK_CLUB, PICK_SLOT }
+enum Mode { BROWSE, PICK_CLUB, PICK_SLOT, BALLS, REPLACE_BALL }
 
 const BACKGROUND := Color("13303a")
 const PANEL := Color("0d2029")
@@ -32,7 +32,10 @@ const BAG_ROW_HEIGHT := 22.0
 const BAG_LABEL_WIDTH := 56.0
 const SLOT_WIDTH := 176.0
 const SLOT_HEIGHT := 18.0
+const BALLS_TOP := 262.0
+const BALLS_HEIGHT := 26.0
 const CHARS_PER_LINE := 96
+const IN_PLAY := Color("6fe07a")
 
 var run: RunState
 var stock: Array[Dictionary] = []
@@ -42,6 +45,7 @@ var mode: int = Mode.BROWSE
 var cursor: int = 0
 var club_cursor: int = 0
 var slot_cursor: int = 0
+var ball_cursor: int = 0
 var show_card: bool = false
 
 var _menu_input := MenuInput.new()
@@ -75,7 +79,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		show_card = not show_card
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("swing", false):
+	if Controls.swing_pressed(event):
 		_confirm()
 		get_viewport().set_input_as_handled()
 		return
@@ -94,6 +98,9 @@ func _move(step: Vector2i) -> void:
 		Mode.BROWSE:
 			if step.x != 0:
 				cursor = posmod(cursor + step.x, stock.size() + 1)
+			elif step.y > 0 and cursor == stock.size():
+				ball_cursor = maxi(run.balls.find(run.ball_id), 0)
+				mode = Mode.BALLS
 			elif step.y > 0:
 				cursor = stock.size()
 			elif step.y < 0 and cursor == stock.size():
@@ -104,6 +111,14 @@ func _move(step: Vector2i) -> void:
 		Mode.PICK_SLOT:
 			if step.x != 0:
 				slot_cursor = posmod(slot_cursor + step.x, RunState.STICKERS_PER_CLUB)
+		Mode.BALLS:
+			if step.x != 0:
+				ball_cursor = posmod(ball_cursor + step.x, run.balls.size())
+			elif step.y < 0:
+				mode = Mode.BROWSE
+		Mode.REPLACE_BALL:
+			if step.x != 0:
+				ball_cursor = posmod(ball_cursor + step.x, RunState.BALL_SLOTS)
 
 
 # Skips clubs this sticker doesn't fit.
@@ -131,6 +146,12 @@ func _confirm() -> void:
 				_finish_sticker(club_id, -1)
 		Mode.PICK_SLOT:
 			_finish_sticker(Items.ALL_CLUBS[club_cursor], slot_cursor)
+		Mode.BALLS:
+			run.equip_ball(ball_cursor)
+		Mode.REPLACE_BALL:
+			if run.buy(_selected_item(), ball_cursor):
+				sold[cursor] = true
+			mode = Mode.BROWSE
 
 
 func _cancel() -> void:
@@ -144,6 +165,9 @@ func _try_buy() -> void:
 	if item["kind"] == Items.KIND_STICKER:
 		club_cursor = Items.ALL_CLUBS.find((item["clubs"] as Array)[0])
 		mode = Mode.PICK_CLUB
+	elif item["kind"] == Items.KIND_BALL and run.balls_full():
+		ball_cursor = 0
+		mode = Mode.REPLACE_BALL
 	elif run.buy(item):
 		sold[cursor] = true
 
@@ -169,14 +193,29 @@ func _slot_rect(row: int, slot: int) -> Rect2:
 	return Rect2(x, BAG_TOP + 5.0 + float(row) * BAG_ROW_HEIGHT, SLOT_WIDTH, SLOT_HEIGHT)
 
 
+func _ball_rect(slot: int) -> Rect2:
+	var x: float = BAG_LEFT + BAG_LABEL_WIDTH + float(slot) * (SLOT_WIDTH + 4.0)
+	return Rect2(x, BALLS_TOP + 4.0, SLOT_WIDTH, SLOT_HEIGHT)
+
+
 func _hover(at: Vector2) -> void:
 	match mode:
-		Mode.BROWSE:
+		Mode.BROWSE, Mode.BALLS:
 			for i in stock.size():
 				if _card_rect(i).has_point(at):
 					cursor = i
+					mode = Mode.BROWSE
 			if LEAVE_BUTTON.has_point(at):
 				cursor = stock.size()
+				mode = Mode.BROWSE
+			for slot in run.balls.size():
+				if _ball_rect(slot).has_point(at):
+					ball_cursor = slot
+					mode = Mode.BALLS
+		Mode.REPLACE_BALL:
+			for slot in RunState.BALL_SLOTS:
+				if _ball_rect(slot).has_point(at):
+					ball_cursor = slot
 		Mode.PICK_CLUB:
 			for row in Items.ALL_CLUBS.size():
 				if (_selected_item()["clubs"] as Array).has(Items.ALL_CLUBS[row]) and _row_rect(row).has_point(at):
@@ -203,6 +242,8 @@ func _is_over_choice(at: Vector2) -> bool:
 			return _row_rect(club_cursor).has_point(at)
 		Mode.PICK_SLOT:
 			return _slot_rect(club_cursor, slot_cursor).has_point(at)
+		Mode.BALLS, Mode.REPLACE_BALL:
+			return _ball_rect(ball_cursor).has_point(at)
 	return false
 
 
@@ -218,7 +259,8 @@ func _draw() -> void:
 		_draw_card(i)
 	_draw_leave_button()
 	_draw_bag()
-	_draw_owned()
+	_draw_balls()
+	_draw_perks()
 	_draw_prompt()
 	if show_card:
 		draw_rect(Rect2(0, 0, 640, 360), Color(0, 0, 0, 0.6))
@@ -279,10 +321,11 @@ func _draw_bag() -> void:
 	var panel := Rect2(BAG_LEFT, BAG_TOP, CARDS_WIDTH, BAG_ROW_HEIGHT * 3.0 + 6.0)
 	draw_rect(panel, PANEL)
 	draw_rect(panel, DIM, false, 1.0)
+	var picking: bool = mode == Mode.PICK_CLUB or mode == Mode.PICK_SLOT
 	for row in clubs.size():
 		var club_id: String = Items.ALL_CLUBS[row]
-		var fits: bool = mode == Mode.BROWSE or (_selected_item().get("clubs", []) as Array).has(club_id)
-		var row_selected: bool = mode != Mode.BROWSE and club_cursor == row
+		var fits: bool = not picking or (_selected_item().get("clubs", []) as Array).has(club_id)
+		var row_selected: bool = picking and club_cursor == row
 		var label_color: Color = ACCENT if row_selected else (TEXT if fits else DIM)
 		PixelFont.draw(self, clubs[row], Vector2(BAG_LEFT + 6.0, BAG_TOP + 10.0 + float(row) * BAG_ROW_HEIGHT), label_color)
 		var on_club: Array = run.stickers[club_id]
@@ -298,17 +341,42 @@ func _draw_bag() -> void:
 			PixelFont.draw(self, name_text, rect.position + Vector2(5, 6), text_color)
 
 
-func _draw_owned() -> void:
-	var y: float = BAG_TOP + BAG_ROW_HEIGHT * 3.0 + 12.0
-	var ball_name: String = "PLAIN" if run.ball_id == "" else str(Items.by_id(run.ball_id)["name"])
-	PixelFont.draw(self, "BALL: %s" % ball_name, Vector2(BAG_LEFT, y), TEXT)
+# The balls being carried. The one in play is marked, and only this screen can change it.
+func _draw_balls() -> void:
+	var panel := Rect2(BAG_LEFT, BALLS_TOP, CARDS_WIDTH, BALLS_HEIGHT)
+	var choosing: bool = mode == Mode.BALLS or mode == Mode.REPLACE_BALL
+	draw_rect(panel, PANEL)
+	draw_rect(panel, DIM, false, 1.0)
+	PixelFont.draw(self, "BALLS", Vector2(BAG_LEFT + 6.0, BALLS_TOP + 10.0), ACCENT if choosing else TEXT)
+	for slot in RunState.BALL_SLOTS:
+		var rect: Rect2 = _ball_rect(slot)
+		var selected: bool = choosing and ball_cursor == slot
+		var edge: Color = Color(1, 1, 1, 0.15)
+		if selected:
+			edge = BAD if mode == Mode.REPLACE_BALL else ACCENT
+		draw_rect(rect, edge, false, 1.0)
+		if slot >= run.balls.size():
+			PixelFont.draw(self, "-", rect.position + Vector2(5, 6), DIM)
+			continue
+		var in_play: bool = run.balls[slot] == run.ball_id
+		PixelFont.draw(self, _ball_name(run.balls[slot]), rect.position + Vector2(5, 6), IN_PLAY if in_play else TEXT)
+		if in_play:
+			draw_rect(Rect2(rect.end.x - 10.0, rect.position.y + 6.0, 6, 6), IN_PLAY)
+
+
+func _ball_name(id: String) -> String:
+	return "PLAIN BALL" if id == "" else str(Items.by_id(id)["name"])
+
+
+func _draw_perks() -> void:
+	var y: float = BALLS_TOP + BALLS_HEIGHT + 6.0
 	var perk_names: Array[String] = []
 	for id in run.perks:
 		perk_names.append(str(Items.by_id(id)["name"]))
 	var perk_text: String = "PERKS: %s" % (", ".join(perk_names) if not perk_names.is_empty() else "NONE")
 	var lines: Array[String] = _wrap(perk_text, CHARS_PER_LINE)
 	for i in lines.size():
-		PixelFont.draw(self, lines[i], Vector2(BAG_LEFT, y + 12.0 + float(i) * 10.0), TEXT)
+		PixelFont.draw(self, lines[i], Vector2(BAG_LEFT, y + float(i) * 10.0), TEXT)
 
 
 func _draw_prompt() -> void:
@@ -316,11 +384,21 @@ func _draw_prompt() -> void:
 	match mode:
 		Mode.BROWSE:
 			var item: Dictionary = _selected_item()
-			if not item.is_empty() and not sold.has(cursor):
+			if item.is_empty():
+				text = "SPACE TO LEAVE   DOWN TO SWAP BALLS   UP TO GO BACK   TAB SCORECARD"
+			elif not sold.has(cursor):
 				if not run.can_afford(item):
 					PixelFont.draw_centered(self, "NOT ENOUGH COINS", 320.0, 330.0, BAD)
-				elif item["kind"] == Items.KIND_BALL and run.ball_id != "":
-					PixelFont.draw_centered(self, "REPLACES YOUR %s" % str(Items.by_id(run.ball_id)["name"]), 320.0, 330.0, ACCENT)
+				elif item["kind"] == Items.KIND_BALL and run.balls_full():
+					PixelFont.draw_centered(self, "YOUR BALLS ARE FULL: YOU'LL REPLACE ONE", 320.0, 330.0, ACCENT)
+		Mode.BALLS:
+			text = "LEFT/RIGHT TO PICK   SPACE TO PLAY THIS BALL   UP TO GO BACK"
+			var id: String = run.balls[ball_cursor]
+			var about: String = "NO TRICKS, NO SURPRISES" if id == "" else str(Items.by_id(id)["text"])
+			PixelFont.draw_centered(self, "%s: %s" % [_ball_name(id), about], 320.0, 330.0, ACCENT)
+		Mode.REPLACE_BALL:
+			text = "LEFT/RIGHT TO PICK   SPACE TO REPLACE   ESC TO CANCEL"
+			PixelFont.draw_centered(self, "YOUR BALLS ARE FULL: THE ONE YOU REPLACE IS LOST", 320.0, 330.0, BAD)
 		Mode.PICK_CLUB:
 			text = "UP/DOWN TO PICK   SPACE TO PUT IT ON   ESC TO CANCEL"
 			PixelFont.draw_centered(self, "WHICH CLUB GETS %s?" % str(_selected_item()["name"]), 320.0, 330.0, ACCENT)

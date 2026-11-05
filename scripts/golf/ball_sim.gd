@@ -53,7 +53,7 @@ var bounce_scale: float = 1.0
 var grip_scale: float = 1.0
 ## How much it visibly squashes when it lands. Only the view reads this.
 var squash_scale: float = 0.0
-## Slowdown while rolling.
+## Slowdown while rolling after a landing.
 var roll_scale: float = 1.0
 ## Pull over the cup.
 var cup_pull_scale: float = 1.0
@@ -248,7 +248,10 @@ func _collide(ground: float) -> void:
 
 func _step_roll(dt: float) -> void:
 	var surface: int = terrain.surface_at(pos.x)
-	var friction: float = float(Surface.props(surface)["roll_friction"]) * roll_scale
+	var friction: float = float(Surface.props(surface)["roll_friction"])
+	# Only a ball that has landed: a putt rolls the same whatever the ball.
+	if bounce_count > 0:
+		friction *= roll_scale
 	var tangent: Vector2 = terrain.tangent(pos.x)
 	var slope_pull: float = GRAVITY * tangent.y
 

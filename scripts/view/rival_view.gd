@@ -22,7 +22,8 @@ func _ready() -> void:
 
 
 func _update_pose() -> void:
-	visible = not rival.holed
+	# It only comes out for its own turn.
+	visible = game.phase == HoleGame.Phase.RIVAL_TURN and not rival.holed
 	_strike_time += get_process_delta_time()
 	match rival.stage:
 		Rival.Stage.SWINGING:

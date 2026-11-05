@@ -2,8 +2,10 @@ class_name SwingMeter
 extends RefCounted
 ## The 3-click meter. Press 1 starts it, press 2 sets power on the way up, press 3
 ## sets accuracy on the way back. The cursor runs 0 to 1, and below 0 is the miss
-## zone past the sweet spot. Putts use a sweep instead: the cursor moves by itself, and
-## one press takes the power with no accuracy check.
+## zone past the sweet spot. Reaching the top of the bar is a full power shot, and the
+## cursor holds there a moment so a late power press can't count as the accuracy press.
+## Putts use a sweep instead: one press starts the cursor and the next takes the power,
+## with no accuracy check.
 
 enum Stage { IDLE, RISING, RETURNING, DONE, SWEEPING }
 
@@ -11,6 +13,10 @@ enum Stage { IDLE, RISING, RETURNING, DONE, SWEEPING }
 const SWEEP_TIME := 1.3
 ## A press can't set less power than this.
 const MIN_PRESS_POWER := 0.02
+## A power press this close to the top counts as full power.
+const FULL_POWER_FROM := 0.97
+## How long the cursor waits at the top on a full power swing. Presses do nothing meanwhile.
+const TOP_HOLD := 0.22
 
 const RISE_TIME := 1.05
 const RETURN_TIME := 0.92
@@ -30,8 +36,11 @@ var cursor: float = 0.0
 var power: float = 0.0
 ## 0 is perfect. Positive is early (up to 1), negative is late (down to -1).
 var accuracy: float = 0.0
+## True once this swing has reached the top of the bar.
+var full_power: bool = false
 
 var _sweep_direction: float = 1.0
+var _top_hold: float = 0.0
 
 
 func reset() -> void:
@@ -39,10 +48,12 @@ func reset() -> void:
 	cursor = 0.0
 	power = 0.0
 	accuracy = 0.0
+	full_power = false
+	_top_hold = 0.0
 	_sweep_direction = 1.0
 
 
-## Starts the moving cursor that a putt's single press stops.
+## Starts the moving cursor that a putt's next press stops.
 func start_sweep() -> void:
 	reset()
 	stage = Stage.SWEEPING
@@ -59,10 +70,14 @@ func press() -> void:
 			reset()
 			stage = Stage.RISING
 		Stage.RISING:
-			power = clampf(cursor, MIN_PRESS_POWER, 1.0)
-			stage = Stage.RETURNING
+			if cursor >= FULL_POWER_FROM:
+				_reach_full_power()
+			else:
+				power = clampf(cursor, MIN_PRESS_POWER, 1.0)
+				stage = Stage.RETURNING
 		Stage.RETURNING:
-			_lock_accuracy()
+			if _top_hold <= 0.0:
+				_lock_accuracy()
 
 
 func tick(real_dt: float) -> void:
@@ -79,10 +94,11 @@ func tick(real_dt: float) -> void:
 		Stage.RISING:
 			cursor += dt / RISE_TIME
 			if cursor >= 1.0:
-				cursor = 1.0
-				power = 1.0
-				stage = Stage.RETURNING
+				_reach_full_power()
 		Stage.RETURNING:
+			if _top_hold > 0.0:
+				_top_hold -= real_dt
+				return
 			# The return takes the same time at any power, so short shots stay timeable.
 			cursor -= dt * maxf(power, MIN_RETURN_POWER) / RETURN_TIME
 			if cursor <= MISS_END:
@@ -92,6 +108,14 @@ func tick(real_dt: float) -> void:
 
 func is_done() -> bool:
 	return stage == Stage.DONE
+
+
+func _reach_full_power() -> void:
+	cursor = 1.0
+	power = 1.0
+	full_power = true
+	_top_hold = TOP_HOLD
+	stage = Stage.RETURNING
 
 
 func _lock_accuracy() -> void:

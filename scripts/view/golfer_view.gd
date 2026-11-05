@@ -55,9 +55,6 @@ func _update_pose() -> void:
 			_stand_at_ball()
 			_arm_angle = _address_angle()
 			_hinge = 0.0
-			# Rocks the putter in time with the moving meter.
-			if game.meter.stage == SwingMeter.Stage.SWEEPING:
-				_update_backswing()
 		HoleGame.Phase.SWING:
 			_update_backswing()
 		HoleGame.Phase.DOWNSWING:

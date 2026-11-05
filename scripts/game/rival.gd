@@ -2,8 +2,9 @@ class_name Rival
 extends RefCounted
 ## The cheating rival on the boss hole. Takes turns with the player on the same hole, with
 ## its own ball and the plain clubs, picking shots the way a decent player would and
-## mishitting some of them. Moving hazards pass straight through its ball, and every other
-## turn it cheats some other way.
+## mishitting some of them. Hazards hit its ball just like the player's, and it can't time
+## them any better. It cheats on every other turn, only twice a hole, and calling a water
+## ball a free drop counts as one of the two.
 
 signal announced(text: String)
 signal holed_out
@@ -15,17 +16,18 @@ const SWING_TIME := 0.35
 const PENALTY_TIME := 1.1
 const CHEAT_TIME := 1.9
 ## How far off a planned shot's power it can be.
-const POWER_NOISE := 0.07
-const PUTT_NOISE := 0.08
+const POWER_NOISE := 0.045
+const PUTT_NOISE := 0.06
 ## How often a swing is mistimed, and how badly at worst.
-const MISS_CHANCE := 0.35
-const MISS_SIZE := 0.4
+const MISS_CHANCE := 0.2
+const MISS_SIZE := 0.3
 const POWER_STEPS := 10
 ## Time it spends working out its shot each frame, so the game never stutters.
 const PLANNING_BUDGET_USEC := 3000
 const SIM_STEP := 1.0 / 60.0
 const SIM_MAX_STEPS := 900
-## Cheats it can pull, in a random order each duel. It also gets one free drop from water.
+const CHEATS_PER_HOLE := 2
+## Cheats it can pull, in a random order each duel. A free drop from water is another.
 const TRICKS := ["gust", "kick", "grease", "pencil"]
 const GUST_STRENGTH := 35.0
 const GREASE_SPEED := 1.25
@@ -46,6 +48,7 @@ var _rng := RandomNumberGenerator.new()
 var _timer: float = 0.0
 var _turns: int = 0
 var _tricks_left: Array[String] = []
+var _cheats_left: int = CHEATS_PER_HOLE
 var _free_drop_used: bool = false
 var _last_spot_x: float = 0.0
 var _last_plan_spot: float = -1.0
@@ -66,6 +69,7 @@ func _init(p_game: HoleGame, p_clubs: Array[ClubData], p_seed: int = -1) -> void
 	else:
 		_rng.randomize()
 	ball = _new_sim()
+	ball.ignore_moving = false
 	ball.place(game.hole.tee_x)
 	_last_spot_x = game.hole.tee_x
 	facing = _toward_cup()
@@ -209,7 +213,7 @@ func _finish_plan() -> Dictionary:
 	return { "club": 1, "angle": clubs[1].max_angle_deg, "power": 1.0 }
 
 
-# Moving hazards don't touch its ball at all. That's the cheat that lets it keep up.
+# Plans ignore moving hazards, the same as the player's preview. Its real ball doesn't.
 func _new_sim() -> BallSim:
 	var sim := BallSim.new(game.terrain)
 	sim.obstacles = game.obstacles
@@ -237,11 +241,12 @@ func _on_ball_holed() -> void:
 func _on_ball_hazard(_at: Vector2, _kind: String) -> void:
 	_timer = 0.0
 	stage = Stage.PENALTY
-	if _free_drop_used:
+	if _free_drop_used or _cheats_left <= 0:
 		strokes += 1
 		announced.emit("THE RIVAL TAKES A PENALTY")
 	else:
 		_free_drop_used = true
+		_cheats_left -= 1
 		announced.emit("THE RIVAL CALLS IT A FREE DROP!")
 
 
@@ -255,27 +260,35 @@ func _end_shot() -> void:
 
 
 func _pull_trick() -> bool:
+	if _cheats_left <= 0:
+		return false
 	while not _tricks_left.is_empty():
-		var trick: String = _tricks_left.pop_front()
-		match trick:
-			"gust":
-				var toward_player_cup: float = signf(game.hole.cup_x - game.ball.pos.x)
-				game.set_gust(-toward_player_cup * GUST_STRENGTH)
-				announced.emit("THE RIVAL WAVES A FAN! HEADWIND!")
+		if _try_trick(_tricks_left.pop_front()):
+			_cheats_left -= 1
+			return true
+	return false
+
+
+func _try_trick(trick: String) -> bool:
+	match trick:
+		"gust":
+			var toward_player_cup: float = signf(game.hole.cup_x - game.ball.pos.x)
+			game.set_gust(-toward_player_cup * GUST_STRENGTH)
+			announced.emit("THE RIVAL WAVES A FAN! HEADWIND!")
+			return true
+		"grease":
+			game.set_meter_cheat(GREASE_SPEED)
+			announced.emit("THE RIVAL GREASED YOUR GRIP!")
+			return true
+		"pencil":
+			if strokes >= 2:
+				strokes -= 1
+				announced.emit("THE RIVAL ERASES A STROKE!")
 				return true
-			"grease":
-				game.set_meter_cheat(GREASE_SPEED)
-				announced.emit("THE RIVAL GREASED YOUR GRIP!")
+		"kick":
+			if _kick_ball():
+				announced.emit("THE RIVAL KICKS ITS BALL!")
 				return true
-			"pencil":
-				if strokes >= 2:
-					strokes -= 1
-					announced.emit("THE RIVAL ERASES A STROKE!")
-					return true
-			"kick":
-				if _kick_ball():
-					announced.emit("THE RIVAL KICKS ITS BALL!")
-					return true
 	return false
 
 

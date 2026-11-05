@@ -78,4 +78,4 @@ func total_to_par() -> int:
 
 
 static func to_par_text(value: int) -> String:
-	return "E" if value == 0 else "%+d" % value
+	return "0" if value == 0 else "%+d" % value

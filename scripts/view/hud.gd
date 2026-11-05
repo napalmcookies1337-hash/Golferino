@@ -112,8 +112,7 @@ func _draw_score_panel() -> void:
 	_panel(Rect2(8, 8, 142, 42 if run_state != null else 30))
 	PixelFont.draw(self, "%s  PAR %d" % [game.hole.display_name, game.hole.par], Vector2(14, 13), TEXT)
 	PixelFont.draw(self, "STROKES %d" % game.strokes, Vector2(14, 25), ACCENT)
-	var total: String = "E" if run.scores.is_empty() else CourseRun.to_par_text(run.total_to_par())
-	PixelFont.draw(self, "TOTAL %s" % total, Vector2(90, 25), TEXT)
+	PixelFont.draw(self, "TOTAL %s" % CourseRun.to_par_text(run.total_to_par()), Vector2(90, 25), TEXT)
 	if run_state != null:
 		var spare: int = run_state.live_spare(game.strokes, game.hole.par)
 		if game.phase == HoleGame.Phase.COMPLETE:
@@ -230,8 +229,9 @@ func _draw_meter() -> void:
 	if game.phase == HoleGame.Phase.AIM:
 		var prompt: String = "SPACE TO PUTT" if is_putt else "SPACE TO SWING"
 		PixelFont.draw_centered(self, prompt, METER_LEFT + total / 2.0, METER_TOP - 14.0, TEXT)
-		if not is_putt:
-			return
+		return
+	if meter.full_power and game.phase != HoleGame.Phase.BALL_MOVING:
+		PixelFont.draw_centered(self, "FULL POWER!!", METER_LEFT + total / 2.0, METER_TOP - 16.0, ACCENT)
 
 	if meter.stage == SwingMeter.Stage.RETURNING or meter.stage == SwingMeter.Stage.DONE:
 		var power_x: float = sweet_x + meter.power * METER_POWER_WIDTH
@@ -256,7 +256,7 @@ func _draw_hint() -> void:
 
 
 func _draw_result() -> void:
-	var rect := Rect2(170, 84, 300, 124)
+	var rect := Rect2(150, 84, 340, 124)
 	_panel(rect)
 	var center: float = SCREEN_WIDTH / 2.0
 	PixelFont.draw_centered(self, _result_name, center, 94.0, ACCENT, 3 if _result_name.length() <= 13 else 2)

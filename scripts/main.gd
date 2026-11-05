@@ -221,7 +221,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif run_state != null and event.is_action_pressed("quit", false):
 		if game.phase != HoleGame.Phase.OUT_OF_STROKES:
 			_open_pause()
-	elif event.is_action_pressed("swing", false):
+	elif Controls.swing_pressed(event):
 		game.press_swing()
 	elif event.is_action_pressed("club_next", false):
 		game.cycle_club(1)

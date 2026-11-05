@@ -11,10 +11,13 @@ var main: Node2D
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	# Clear out shots from earlier runs, so nothing stale gets reviewed.
-	for file_name in DirAccess.get_files_at(OUT_DIR):
-		DirAccess.remove_absolute("%s/%s" % [OUT_DIR, file_name])
+	if DisplayServer.get_name() != "headless":
+		for file_name in DirAccess.get_files_at(OUT_DIR):
+			DirAccess.remove_absolute("%s/%s" % [OUT_DIR, file_name])
 	if FileAccess.file_exists(PROFILE_PATH):
 		DirAccess.remove_absolute(PROFILE_PATH)
+	# These checks press keys faster than a person can.
+	Controls.swing_gap_msec = 0
 	main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	main.profile = Profile.new(PROFILE_PATH)
 	add_child(main)
@@ -33,11 +36,14 @@ func _run() -> void:
 	await _shoot_hazards()
 	await _test_coin_and_card()
 	await _test_rubber_ball()
+	await _test_full_power()
+	await _save_cup_closeup()
 	await _test_pause()
 	await _test_out_of_strokes()
 	await _test_duel()
 	if FileAccess.file_exists(PROFILE_PATH):
 		DirAccess.remove_absolute(PROFILE_PATH)
+	print("shots finished")
 	get_tree().quit()
 
 
@@ -64,7 +70,7 @@ func _test_real_input() -> void:
 	await _wait(0.05)
 	_expect(game().facing == 1, "controller X flips the golfer back")
 
-	# The driver keeps the three-press swing. One-press putting is in editor_check.
+	# The driver keeps the three-press swing. Two-press putting is in editor_check.
 	_press_key(KEY_SPACE)
 	await _wait(0.6)
 	_expect(game().phase == HoleGame.Phase.SWING, "Space starts the swing")
@@ -168,6 +174,7 @@ func _test_shop() -> void:
 	await _wait(0.1)
 	_expect(run_state.stickers["driver"] == ["sweet_tape", "power_stripe", "wide_angle"], "the chosen sticker is replaced")
 	await _save("shop_04_after_buying")
+	await _test_shop_balls(shop, run_state)
 
 	_press_key(KEY_TAB)
 	await _wait(0.1)
@@ -185,6 +192,92 @@ func _test_shop() -> void:
 	# A clean bag for the rest of the checks.
 	run_state.stickers = { "driver": [], "iron": [], "putter": [] }
 	run_state.ball_id = ""
+
+
+# Swaps balls and replaces one, with real key presses.
+func _test_shop_balls(shop: ShopScreen, run_state: RunState) -> void:
+	_expect(run_state.balls == ["", "skipper"], "bought balls go in with the plain one")
+	shop.cursor = shop.stock.size()
+	_press_key(KEY_DOWN)
+	await _wait(0.05)
+	_expect(shop.mode == ShopScreen.Mode.BALLS and shop.ball_cursor == 1, "Down from the leave button reaches the ball in play")
+	_press_key(KEY_LEFT)
+	await _wait(0.05)
+	await _save("shop_06_balls")
+	_press_key(KEY_SPACE)
+	await _wait(0.05)
+	_expect(run_state.ball_id == "", "Space swaps to the selected ball")
+	_press_key(KEY_RIGHT)
+	await _wait(0.05)
+	_press_key(KEY_SPACE)
+	await _wait(0.05)
+	_expect(run_state.ball_id == "skipper", "and back again")
+	_press_key(KEY_UP)
+	await _wait(0.05)
+	_expect(shop.mode == ShopScreen.Mode.BROWSE and shop.cursor == shop.stock.size(), "Up leaves the balls")
+
+	# All full, so a new one asks which to replace.
+	run_state.balls.assign(["", "skipper", "wind_cutter"])
+	shop.stock[2] = Items.by_id("sticky_ball")
+	shop.sold.clear()
+	shop.cursor = 2
+	var coins_before: int = run_state.coins
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_expect(shop.mode == ShopScreen.Mode.REPLACE_BALL and run_state.coins == coins_before, "a fourth ball asks what to replace")
+	await _save("shop_07_replace_ball")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.05)
+	_expect(shop.mode == ShopScreen.Mode.BROWSE and main.pause_menu == null, "Esc cancels it")
+	_press_key(KEY_SPACE)
+	await _wait(0.05)
+	_press_key(KEY_RIGHT)
+	await _wait(0.05)
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_expect(run_state.balls == ["", "sticky_ball", "wind_cutter"], "the chosen ball is replaced")
+	_expect(run_state.ball_id == "sticky_ball", "and the new one goes into play")
+	shop.cursor = 0
+	run_state.balls.assign([""])
+
+
+# Lets the bar run to the top, with a power press too late that mustn't count as accuracy.
+func _test_full_power() -> void:
+	main.run.hole_index = 0
+	main.load_current_hole()
+	await _wait(0.4)
+	_press_key(KEY_SPACE)
+	while not game().meter.full_power:
+		await get_tree().physics_frame
+	await _wait(0.08)
+	_press_key(KEY_SPACE)
+	await _wait(0.05)
+	_expect(game().phase == HoleGame.Phase.SWING and not game().meter.is_done(), "a late power press doesn't end the swing")
+	await _save("full_power_01_meter")
+	while game().meter.cursor > 0.0:
+		await get_tree().physics_frame
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(game().last_quality == "FULL POWER!!", "the shot says FULL POWER!! (%s)" % game().last_quality)
+	await _save("full_power_02_message")
+
+
+# The cup from close up, scaled to see its pixels.
+func _save_cup_closeup() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	main.run.hole_index = 0
+	main.load_current_hole()
+	var cup: Vector2 = Vector2(game().hole.cup_x, game().terrain.rim_y)
+	game().start_from(cup.x - 26.0)
+	await _wait(1.5)
+	await RenderingServer.frame_post_draw
+	var at: Vector2 = get_viewport().get_canvas_transform() * cup
+	var image: Image = get_viewport().get_texture().get_image()
+	var region := Rect2i(int(at.x) - 50, int(at.y) - 45, 100, 65)
+	var closeup: Image = image.get_region(region)
+	closeup.resize(region.size.x * 8, region.size.y * 8, Image.INTERPOLATE_NEAREST)
+	closeup.save_png("%s/cup_closeup.png" % OUT_DIR)
 
 
 # A rubber ball squashes as it lands, then stretches as it springs back up.
@@ -289,6 +382,13 @@ func _test_out_of_strokes() -> void:
 	_expect(main.run_state.spare == RunState.START_SPARE and main.run_state.coins == 0, "a new run starts fresh")
 
 
+func _find_rival_view() -> RivalView:
+	for child in main._world.get_children():
+		if child is RivalView:
+			return child
+	return null
+
+
 # Plays the boss hole with both sides, watching the rival's turn and how it ends.
 func _test_duel() -> void:
 	var run_state: RunState = main.run_state
@@ -302,6 +402,8 @@ func _test_duel() -> void:
 	await _wait(0.5)
 	var rival: Rival = game().rival
 	_expect(rival != null, "the last hole brings out the rival")
+	var rival_view: RivalView = _find_rival_view()
+	_expect(not rival_view.visible, "the rival stays off screen during the player's turn")
 	await _save("duel_01_tee")
 	game().select_club(0)
 	game().strike_with(0.85, 0.0)
@@ -309,6 +411,7 @@ func _test_duel() -> void:
 		await get_tree().physics_frame
 	_expect(game().phase == HoleGame.Phase.RIVAL_TURN, "the rival takes its turn")
 	await _wait(0.5)
+	_expect(rival_view.visible, "the rival appears for its own turn")
 	await _save("duel_02_rival_thinking")
 	while rival.stage == Rival.Stage.THINKING:
 		await get_tree().physics_frame
@@ -320,6 +423,7 @@ func _test_duel() -> void:
 		await get_tree().physics_frame
 	_expect(game().phase == HoleGame.Phase.AIM, "then it's the player's turn")
 	await _wait(0.6)
+	_expect(not rival_view.visible, "and leaves again after it")
 	await _save("duel_05_your_turn")
 	_expect(rival.strokes >= 1, "the rival has played")
 
@@ -424,6 +528,9 @@ func _wait(seconds: float) -> void:
 
 
 func _save(shot_name: String) -> void:
+	# With no window there's nothing to save, but every other check still runs.
+	if DisplayServer.get_name() == "headless":
+		return
 	await RenderingServer.frame_post_draw
 	var image: Image = get_viewport().get_texture().get_image()
 	var path: String = "%s/%s.png" % [OUT_DIR, shot_name]

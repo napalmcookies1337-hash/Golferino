@@ -22,8 +22,10 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(0, -POLE_HEIGHT, 1, POLE_HEIGHT + 3.0), Color("f4f4ea"))
-	draw_rect(Rect2(1, -POLE_HEIGHT, 1, POLE_HEIGHT + 3.0), Color("a9a99c"))
+	# The pole stands on the bottom of the cup.
+	var pole: float = POLE_HEIGHT + terrain.cup_depth - 1.0
+	draw_rect(Rect2(0, -POLE_HEIGHT, 1, pole), Color("f4f4ea"))
+	draw_rect(Rect2(1, -POLE_HEIGHT, 1, pole), Color("a9a99c"))
 	for col in 15:
 		var wave: float = round(sin(float(col) * 0.7 - _time * 5.0) * float(col) / 7.0)
 		var half: int = 5 - col / 3

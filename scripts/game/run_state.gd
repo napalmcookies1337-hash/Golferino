@@ -13,6 +13,9 @@ const START_PRICE := 3
 const PAYOUT_EARLY := 3
 const PAYOUT_LATE := 5
 const PAYOUT_LATE_FROM_HOLE := 4
+## Paid on top for a hole in one, with or without any perks.
+const HOLE_IN_ONE_BONUS := 8
+const BALL_SLOTS := 3
 
 const SCORE_PER_HOLE := 100
 const SCORE_PER_UNDER_PAR := 100
@@ -28,7 +31,10 @@ var spare: int = START_SPARE
 var coins: int = 0
 ## Stickers on each club, by club id, in the order they went on.
 var stickers: Dictionary = { "driver": [], "iron": [], "putter": [] }
+## The ball in play. An empty id is the plain ball.
 var ball_id: String = ""
+## The balls being carried, which is what the shop swaps between.
+var balls: Array[String] = [""]
 var perks: Array[String] = []
 var ending: int = Ending.NONE
 ## This hole's coins so far, for its summary.
@@ -103,16 +109,17 @@ func finish_hole(strokes: int) -> Dictionary:
 	var banked: int = par - strokes
 	spare += banked
 	var payout: int = hole_payout(course.hole_index, strokes, par)
-	coins += payout
-	return { "payout": payout, "pickups": hole_pickups, "tricks": hole_tricks, "banked": banked }
+	var ace: int = HOLE_IN_ONE_BONUS if strokes == 1 else 0
+	coins += payout + ace
+	return { "payout": payout, "ace": ace, "pickups": hole_pickups, "tricks": hole_tricks, "banked": banked }
 
 
 ## One line saying what a hole earned, naming only the sources that paid.
 static func coins_text(summary: Dictionary) -> String:
 	var parts: PackedStringArray = PackedStringArray()
 	var total: int = 0
-	for source: Array in [["payout", "FOR HOLE"], ["pickups", "PICKED UP"], ["tricks", "TRICKS"]]:
-		var amount: int = int(summary[source[0]])
+	for source: Array in [["payout", "FOR HOLE"], ["ace", "ACE"], ["pickups", "PICKED UP"], ["tricks", "TRICKS"]]:
+		var amount: int = int(summary.get(source[0], 0))
 		total += amount
 		if amount > 0:
 			parts.append("%d %s" % [amount, source[1]])
@@ -190,17 +197,37 @@ func _random_item(kinds: Array, taken: Array[Dictionary]) -> Dictionary:
 func _is_for_sale(item: Dictionary) -> bool:
 	if item.has("unlock") and not _unlocked.has(str(item["id"])):
 		return false
-	return item["id"] != ball_id and not perks.has(str(item["id"]))
+	var id: String = str(item["id"])
+	return id != ball_id and not balls.has(id) and not perks.has(id)
 
 
-## Buys anything except a sticker, which needs a club. Returns false if it can't be afforded.
-func buy(item: Dictionary) -> bool:
+func balls_full() -> bool:
+	return balls.size() >= BALL_SLOTS
+
+
+## Puts a ball that's being carried into play.
+func equip_ball(slot: int) -> void:
+	if slot >= 0 and slot < balls.size():
+		ball_id = balls[slot]
+
+
+## Buys anything except a sticker, which needs a club. A new ball goes straight into play,
+## and once all the slots are full it replaces the one at replace_slot, which is lost.
+## Returns false if it can't be bought.
+func buy(item: Dictionary, replace_slot: int = -1) -> bool:
 	if not can_afford(item) or item["kind"] == Items.KIND_STICKER:
+		return false
+	var is_ball: bool = item["kind"] == Items.KIND_BALL
+	if is_ball and balls_full() and (replace_slot < 0 or replace_slot >= balls.size()):
 		return false
 	coins -= price_of(item)
 	match str(item["kind"]):
 		Items.KIND_BALL:
 			ball_id = str(item["id"])
+			if balls_full():
+				balls[replace_slot] = ball_id
+			else:
+				balls.append(ball_id)
 		Items.KIND_PERK:
 			perks.append(str(item["id"]))
 		Items.KIND_STROKES:

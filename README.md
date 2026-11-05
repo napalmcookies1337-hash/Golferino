@@ -42,7 +42,7 @@ Maps are saved in `%APPDATA%\Godot\app_userdata\Golferino\maps`.
 
 | Action | Keyboard | Controller |
 |---|---|---|
-| Swing (3 presses), or putt (1 press) | Space or Enter | A |
+| Swing (3 presses), or putt (2 presses) | Space or Enter | A |
 | Launch angle (hold) | Up / Down | D-pad up / down |
 | Look along the hole | A / D or Left / Right | D-pad left / right or left stick |
 | Change club | Q / E, or 1 / 2 / 3 | LB / RB |

@@ -263,13 +263,12 @@ func shows_aim_line() -> bool:
 func press_swing() -> void:
 	match phase:
 		Phase.AIM:
+			# A putt's first press only starts its cursor, and the next one sets the power.
 			if current_club().is_putter:
-				# A putt is one press: the moving cursor sets the power.
+				meter.start_sweep()
+			else:
+				meter.reset()
 				meter.press()
-				_set_phase(Phase.DOWNSWING)
-				return
-			meter.reset()
-			meter.press()
 			_set_phase(Phase.SWING)
 		Phase.SWING:
 			meter.press()
@@ -295,8 +294,6 @@ func tick(dt: float) -> void:
 	for obstacle in obstacles:
 		obstacle.tick(dt)
 	match phase:
-		Phase.AIM:
-			meter.tick(dt)
 		Phase.SWING:
 			meter.tick(dt)
 			if meter.is_done():
@@ -383,12 +380,7 @@ func _reset_aim() -> void:
 	var lie_window: float = float(Surface.props(lie_surface())["lie_window"])
 	meter.perfect_window = SwingMeter.PERFECT_WINDOW * lie_window * current_club().window_scale
 	meter.time_scale = current_club().meter_speed * _meter_cheat
-	# With the putter in hand the meter is always moving, ready for its one press.
-	if current_club().is_putter:
-		if meter.stage != SwingMeter.Stage.SWEEPING:
-			meter.start_sweep()
-	else:
-		meter.reset()
+	meter.reset()
 
 
 # Offers a sensible club so most shots need no menu input. The player can change it.

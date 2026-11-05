@@ -15,6 +15,8 @@ func _ready() -> void:
 	_test_meter_accuracy()
 	_test_meter_auto_limits()
 	_test_shot_quality_effects()
+	_test_full_power()
+	_test_double_tap_guard()
 	_test_power_scales_distance()
 	_test_lie_reduces_distance()
 	_test_terrain_lookups()
@@ -47,7 +49,7 @@ func _ready() -> void:
 	_test_imperfect_player_scores()
 	_test_no_spot_is_a_trap()
 	_test_trees_are_scenery()
-	_test_putting_is_one_press()
+	_test_putting_is_two_presses()
 	_test_aim_line_is_for_full_swings()
 	_test_tree_pieces()
 	_test_bounce_pads()
@@ -180,6 +182,66 @@ func _test_meter_auto_limits() -> void:
 	_check(meter.accuracy == -1.0, "ignoring press 3 is the worst late miss")
 
 
+func _test_full_power() -> void:
+	# Letting the bar reach the top is full power.
+	var topped := SwingMeter.new()
+	topped.press()
+	while topped.stage == SwingMeter.Stage.RISING:
+		topped.tick(DT)
+	_check(topped.full_power and topped.power == 1.0, "reaching the top is full power")
+	# A power press just too late doesn't count as the accuracy press.
+	topped.press()
+	_check(topped.stage == SwingMeter.Stage.RETURNING and not topped.is_done(), "a late power press isn't an accuracy press")
+	while topped.cursor > 0.0:
+		topped.tick(DT)
+	topped.press()
+	_check(topped.is_done() and topped.accuracy == 0.0, "the accuracy press still works after that")
+
+	# So does pressing right at the top, and a double tap can't turn it into a miss.
+	var pressed := SwingMeter.new()
+	pressed.press()
+	pressed.cursor = SwingMeter.FULL_POWER_FROM
+	pressed.press()
+	_check(pressed.full_power and pressed.power == 1.0, "pressing at the top is full power")
+	pressed.press()
+	_check(not pressed.is_done(), "a double tap at the top does nothing")
+
+	var short := SwingMeter.new()
+	short.press()
+	short.cursor = 0.8
+	short.press()
+	_check(not short.full_power, "lower down it isn't full power")
+
+	# It goes further, and says so.
+	var driver: ClubData = _club("driver")
+	var full: Dictionary = ShotCalc.compute(driver, 1.0, 0.0, 0, 1, 1.0)
+	var nearly: Dictionary = ShotCalc.compute(driver, 0.99, 0.0, 0, 1, 1.0)
+	_check(full["quality"] == "FULL POWER!!", "a clean full power shot is named")
+	_check(Vector2(full["velocity"]).length() > Vector2(nearly["velocity"]).length() * 1.05, "full power is faster than nearly full")
+	var far: float = _shot_distance("driver", 1.0, 0.0, 0)
+	var less: float = _shot_distance("driver", 0.99, 0.0, 0)
+	_check(far > less * 1.05, "and goes further (%.0f, %.0f)" % [far, less])
+	_check(ShotCalc.compute(_club("putter"), 1.0, 0.0, 0, 1, 1.0)["quality"] == "", "putts have no full power")
+	var putt_full: Vector2 = ShotCalc.compute(_club("putter"), 1.0, 0.0, 0, 1, 1.0)["velocity"]
+	_check(is_equal_approx(putt_full.length(), _club("putter").max_speed), "or any extra distance")
+
+
+func _test_double_tap_guard() -> void:
+	Controls.register()
+	var press := InputEventAction.new()
+	press.action = "swing"
+	press.pressed = true
+	var first: bool = Controls.swing_pressed(press)
+	_check(first, "a swing press counts")
+	_check(not Controls.swing_pressed(press), "a second one straight after doesn't")
+	var kept_gap: int = Controls.swing_gap_msec
+	Controls.swing_gap_msec = 0
+	_check(Controls.swing_pressed(press), "once the gap has passed, it counts again")
+	Controls.swing_gap_msec = kept_gap
+	press.pressed = false
+	_check(not Controls.swing_pressed(press), "a release isn't a press")
+
+
 func _test_shot_quality_effects() -> void:
 	var driver: ClubData = _club("driver")
 	var perfect: Dictionary = ShotCalc.compute(driver, 1.0, 0.0, 0, 1, 1.0)
@@ -191,7 +253,7 @@ func _test_shot_quality_effects() -> void:
 	_check(_elevation(early_v) > _elevation(perfect_v), "early miss launches higher")
 	_check(early_v.length() < perfect_v.length(), "early miss loses speed")
 	_check(_elevation(late_v) < _elevation(perfect_v), "late miss launches lower")
-	_check(perfect["quality"] == "PERFECT!", "perfect is named")
+	_check(ShotCalc.compute(driver, 0.9, 0.0, 0, 1, 1.0)["quality"] == "PERFECT!", "perfect is named")
 	_check(early["quality"] == "POP-UP", "early is named")
 	_check(late["quality"] == "LOW AND HOT", "late is named")
 	_check(_shot_distance("driver", 1.0, 1.0, 0) < _shot_distance("driver", 1.0, 0.0, 0), "pop-up is short")
@@ -489,11 +551,11 @@ func _test_flip() -> void:
 		steps += 1
 	_check(game.ball.pos.x < 500.0 and game.facing == 1, "the next shot faces the cup again")
 
-	# Putts can flip too, while the meter keeps moving.
+	# Putts can flip too.
 	var putt := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
 	putt.select_club(2)
 	putt.flip_facing()
-	_check(putt.facing == -1 and putt.meter.stage == SwingMeter.Stage.SWEEPING, "a putt can flip with its meter still moving")
+	_check(putt.facing == -1, "a putt can flip")
 
 
 func _test_aim_line_is_for_full_swings() -> void:
@@ -506,7 +568,7 @@ func _test_aim_line_is_for_full_swings() -> void:
 
 func _test_short_shot_return() -> void:
 	var times: Array[float] = []
-	for power: float in [1.0, 0.5, 0.2]:
+	for power: float in [0.95, 0.5, 0.2]:
 		var meter := SwingMeter.new()
 		meter.press()
 		meter.cursor = power
@@ -693,8 +755,11 @@ func _test_club_ranges() -> void:
 	print("Full-power totals on flat fairway: driver %d yd, iron %d yd, putter %d yd" % [
 		int(driver / 3.0), int(iron / 3.0), int(putter / 3.0)])
 	_check(driver > iron and iron > putter, "clubs are ordered by range")
-	_check(driver > 700.0 and driver < 950.0, "driver total is in range (%.0f)" % driver)
-	_check(iron > 420.0 and iron < 640.0, "iron total is in range (%.0f)" % iron)
+	# Measured just under the top of the bar, since full power is a bonus on top of this.
+	var driver_base: float = _shot_distance("driver", 0.99, 0.0, 0)
+	var iron_base: float = _shot_distance("iron", 0.99, 0.0, 0)
+	_check(driver_base > 700.0 and driver_base < 950.0, "driver total is in range (%.0f)" % driver_base)
+	_check(iron_base > 420.0 and iron_base < 640.0, "iron total is in range (%.0f)" % iron_base)
 
 
 # A bot picks the best power for each shot. Proves the hole can be finished, and
@@ -804,11 +869,11 @@ func _test_trees_are_scenery() -> void:
 	_check(is_equal_approx(plain_game.ball.pos.x, wooded_game.ball.pos.x), "trees don't change where a shot finishes")
 
 
-func _test_putting_is_one_press() -> void:
+func _test_putting_is_two_presses() -> void:
 	# The meter itself.
 	var meter := SwingMeter.new()
 	meter.start_sweep()
-	_check(meter.stage == SwingMeter.Stage.SWEEPING, "a sweep starts moving by itself")
+	_check(meter.stage == SwingMeter.Stage.SWEEPING, "a sweep starts moving")
 	var peak: float = 0.0
 	for _i in int(SwingMeter.SWEEP_TIME * 60.0) + 10:
 		meter.tick(DT)
@@ -819,31 +884,35 @@ func _test_putting_is_one_press() -> void:
 		_check(meter.cursor >= 0.0 and meter.cursor <= 1.0, "it stays on the meter")
 	var at_press: float = meter.cursor
 	meter.press()
-	_check(meter.is_done(), "one press finishes it")
+	_check(meter.is_done(), "the press finishes it")
 	_check(is_equal_approx(meter.power, maxf(at_press, 0.02)) and meter.accuracy == 0.0, "it takes the power, and no accuracy")
 
-	# In play: on the green, the putter is ready and one press hits the ball.
+	# In play: on the green, the meter waits for the first press and the second hits the ball.
 	var game: HoleGame = _game()
 	game.ball.place(1380.0)
 	game._begin_aim()
 	_check(game.current_club().is_putter, "the putter comes up on the green")
-	_check(game.meter.stage == SwingMeter.Stage.SWEEPING, "its meter is already moving")
-	var before: float = game.meter.cursor
+	_check(game.meter.stage == SwingMeter.Stage.IDLE, "its meter waits while aiming")
 	for _i in 30:
 		game.tick(DT)
-	_check(game.meter.cursor != before, "the meter moves while aiming")
-	_check(game.phase == HoleGame.Phase.AIM and game.strokes == 0, "nothing happens until the press")
+	_check(game.meter.cursor == 0.0 and game.phase == HoleGame.Phase.AIM, "and doesn't move until the press")
+	game.press_swing()
+	_check(game.meter.stage == SwingMeter.Stage.SWEEPING and game.phase == HoleGame.Phase.SWING, "the first press starts the putt's meter")
+	_check(game.strokes == 0, "without hitting anything")
+	for _i in 30:
+		game.tick(DT)
+	_check(game.meter.cursor > 0.0, "the meter moves after that")
 	var set_power: float = game.meter.cursor
 	game.press_swing()
-	_check(game.meter.is_done(), "a single press sets the power")
+	_check(game.meter.is_done(), "the second press sets the power")
 	_check(is_equal_approx(game.meter.power, set_power), "at the cursor's position")
 	game.press_swing()
 	game.press_swing()
 	var guard: int = 0
-	while game.phase == HoleGame.Phase.DOWNSWING and guard < 60:
+	while game.phase != HoleGame.Phase.BALL_MOVING and guard < 60:
 		game.tick(DT)
 		guard += 1
-	_check(game.strokes == 1, "one press is one stroke, even with extra presses (%d)" % game.strokes)
+	_check(game.strokes == 1, "a putt is one stroke, even with extra presses (%d)" % game.strokes)
 	_check(game.phase == HoleGame.Phase.BALL_MOVING, "the ball is struck")
 	_check(game.last_quality == "", "putts have no quality message")
 	var putt_speed: float = absf(game.ball.vel.x)
@@ -861,7 +930,7 @@ func _test_putting_is_one_press() -> void:
 	mixed.ball.place(1380.0)
 	mixed._begin_aim()
 	mixed.select_club(1)
-	_check(mixed.meter.stage == SwingMeter.Stage.IDLE, "picking the iron stops the sweep")
+	_check(mixed.meter.stage == SwingMeter.Stage.IDLE, "the iron's meter also waits")
 	mixed.press_swing()
 	_check(mixed.phase == HoleGame.Phase.SWING and mixed.strokes == 0, "the iron's first press starts its meter")
 	mixed.press_swing()
@@ -871,16 +940,16 @@ func _test_putting_is_one_press() -> void:
 
 	var switched: HoleGame = _game()
 	switched.select_club(2)
-	_check(switched.meter.stage == SwingMeter.Stage.SWEEPING, "picking the putter off the green starts the sweep")
-	switched.select_club(0)
-	_check(switched.meter.stage == SwingMeter.Stage.IDLE, "and picking the driver stops it")
-	switched.select_club(2)
+	_check(switched.meter.stage == SwingMeter.Stage.IDLE, "picking the putter off the green leaves the meter still")
 	switched.press_swing()
 	for _i in 20:
 		switched.tick(DT)
-	_check(switched.strokes == 1, "putting off the green is also one press")
+	switched.press_swing()
+	for _i in 20:
+		switched.tick(DT)
+	_check(switched.strokes == 1, "putting off the green is also two presses")
 
-	# After a putt that doesn't drop, the next one is ready to go.
+	# After a putt that doesn't drop, the next one starts the same way.
 	var again: HoleGame = _game()
 	again.ball.place(1380.0)
 	again._begin_aim()
@@ -889,7 +958,7 @@ func _test_putting_is_one_press() -> void:
 	while again.phase != HoleGame.Phase.AIM and settle < 3000:
 		again.tick(DT)
 		settle += 1
-	_check(again.meter.stage == SwingMeter.Stage.SWEEPING, "the sweep is ready again for the next putt")
+	_check(again.meter.stage == SwingMeter.Stage.IDLE, "the next putt waits for its first press")
 
 
 func _test_tree_pieces() -> void:
@@ -2162,6 +2231,29 @@ func _test_special_balls() -> void:
 	_check(sticky_x < plain_x - 5.0, "a sticky ball runs out less (%.0f, %.0f)" % [sticky_x, plain_x])
 	_check(rubber_x > plain_x + 5.0, "a rubber ball runs out more (%.0f, %.0f)" % [rubber_x, plain_x])
 
+	# A sticky ball all but stops where it first lands, and still putts normally.
+	var run_outs: Dictionary = {}
+	for ball_id: String in ["", "sticky_ball"]:
+		var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), ball_id)
+		game.select_club(1)
+		game.strike_with(0.6, 0.0)
+		var first_landing: Array[float] = []
+		game.ball.bounced.connect(func(at: Vector2, _surface: int, _speed: float) -> void:
+			if first_landing.is_empty():
+				first_landing.append(at.x))
+		_finish_shot(game)
+		run_outs[ball_id] = game.ball.pos.x - first_landing[0]
+	print("run out after landing: plain %.0f px, sticky %.0f px" % [run_outs[""], run_outs["sticky_ball"]])
+	_check(float(run_outs["sticky_ball"]) < 12.0, "a sticky ball stops almost where it lands (%.0f)" % run_outs["sticky_ball"])
+	var putts: Dictionary = {}
+	for ball_id: String in ["", "sticky_ball"]:
+		var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs(), ball_id)
+		game.select_club(2)
+		game.strike_with(0.5, 0.0)
+		_finish_shot(game)
+		putts[ball_id] = game.ball.pos.x
+	_check(is_equal_approx(float(putts[""]), float(putts["sticky_ball"])), "a sticky ball putts like any other")
+
 	var windy: HoleData = _flat_hole({ "cup_x": 990.0 })
 	windy.wind = 40.0
 	_check(is_equal_approx(HoleGame.new(windy, _clubs(), "wind_cutter").current_wind(), 12.0), "a Wind Cutter takes 30% of the wind")
@@ -2307,7 +2399,16 @@ func _test_prices_climb() -> void:
 	# What a hole earned, in words that can't be taken for points.
 	_check(RunState.coins_text({ "payout": 3, "pickups": 0, "tricks": 0 }) == "+3 COINS: 3 FOR HOLE", "only sources that paid are named")
 	_check(RunState.coins_text({ "payout": 5, "pickups": 3, "tricks": 4 }) == "+12 COINS: 5 FOR HOLE, 3 PICKED UP, 4 TRICKS", "every source is named")
-	_check(RunState.coins_text({ "payout": 13, "pickups": 16, "tricks": 15 }).length() <= 48, "the longest line fits the panel")
+	_check(RunState.coins_text({ "payout": 13, "ace": 8, "pickups": 16, "tricks": 15 }).length() <= 55, "the longest line fits the panel")
+
+	# A hole in one pays 8 more, with no perks, and only on the first stroke.
+	var ace_run: RunState = _new_run_state()
+	var ace: Dictionary = ace_run.finish_hole(1)
+	_check(int(ace["ace"]) == 8 and ace_run.coins == 11, "a hole in one pays 8 on top of the hole's 3 (%d)" % ace_run.coins)
+	var two_run: RunState = _new_run_state()
+	var two: Dictionary = two_run.finish_hole(2)
+	_check(int(two["ace"]) == 0 and two_run.coins == 3, "two strokes pays no bonus")
+	_check(CourseRun.to_par_text(0) == "0", "even par shows as 0")
 
 	# Coins left really do reach the final score: 7 on hole 1 with 3 pickups leaves 6 coins.
 	var run: RunState = _new_run_state()
@@ -2329,7 +2430,23 @@ func _test_buying() -> void:
 	_check(state.buy(ball) and state.ball_id == "skipper", "buying a ball equips it")
 	_check(state.coins == 100 - ball_price, "buying costs its price")
 	state.buy(Items.by_id("wind_cutter"))
-	_check(state.ball_id == "wind_cutter", "a new ball replaces the old one")
+	_check(state.ball_id == "wind_cutter", "a new ball goes straight into play")
+	_check(state.balls == ["", "skipper", "wind_cutter"], "and joins the plain ball and the first one")
+	state.equip_ball(1)
+	_check(state.ball_id == "skipper", "you can swap to a ball you're carrying")
+	state.equip_ball(0)
+	_check(state.ball_id == "", "including the plain ball")
+	state.equip_ball(7)
+	_check(state.ball_id == "", "an empty slot changes nothing")
+	var sticky: Dictionary = Items.by_id("sticky_ball")
+	var coins_held: int = state.coins
+	_check(not state.buy(sticky), "a fourth ball needs a slot to replace")
+	_check(state.coins == coins_held and state.balls.size() == 3, "and costs nothing until it has one")
+	_check(state.buy(sticky, 1) and state.balls == ["", "sticky_ball", "wind_cutter"], "it replaces the chosen ball")
+	_check(state.ball_id == "sticky_ball", "and goes into play")
+	for _round in 100:
+		for item in state.roll_stock():
+			_check(item["id"] != "sticky_ball" and item["id"] != "wind_cutter", "the shop doesn't sell a ball you carry")
 	var strokes_before: int = state.spare
 	state.buy(Items.by_id("spare_strokes"))
 	_check(state.spare == strokes_before + 2, "bonus strokes go on the budget")
@@ -2649,6 +2766,8 @@ func _test_rival_cheats() -> void:
 	var rival: Rival = game.rival
 	var said: Array[String] = []
 	rival.announced.connect(func(text: String) -> void: said.append(text))
+	# Each trick is checked here, whatever the limit on a real hole.
+	rival._cheats_left = 99
 
 	var plain_wind: float = game.current_wind()
 	rival._tricks_left.assign(["gust"])
@@ -2715,7 +2834,46 @@ func _test_rival_cheats() -> void:
 	turns.rival._turns = 2
 	turns.rival._end_shot()
 	_check(tally.size() == 1 and turns.rival.stage == Rival.Stage.CHEATING, "a cheat on an even turn")
+	turns.rival._end_shot()
+	_check(tally.size() == 2, "a second cheat")
+	turns.rival._end_shot()
+	_check(tally.size() == 2 and turns.rival.is_turn_over(), "and never a third on the same hole")
 	turns.end_duel()
+
+	# A free drop is one of the two.
+	var mixed: HoleGame = _duel_game()
+	mixed.rival._cheats_left = 1
+	mixed.rival.strokes = 2
+	mixed.rival._on_ball_hazard(Vector2.ZERO, "water")
+	_check(mixed.rival.strokes == 2 and mixed.rival._cheats_left == 0, "a free drop uses up a cheat")
+	_check(not mixed.rival._pull_trick(), "so it has none left for a trick")
+	mixed.end_duel()
+	var spent: HoleGame = _duel_game()
+	spent.rival._cheats_left = 0
+	spent.rival.strokes = 2
+	spent.rival._on_ball_hazard(Vector2.ZERO, "water")
+	_check(spent.rival.strokes == 3, "with no cheats left, water costs it a penalty")
+	spent.end_duel()
+
+	# Hazards hit its ball just like the player's, though its plans can't see them coming.
+	var blocked_hole: HoleData = _flat_hole({ "cup_x": 990.0 })
+	blocked_hole.obstacles = [{ "kind": "windmill", "x": 400.0, "turn_speed": 0.0 }]
+	var blocked := HoleGame.new(blocked_hole, _clubs())
+	blocked.start_duel(Rival.new(blocked, _clubs(), 3))
+	_check(not blocked.rival.ball.ignore_moving, "moving hazards hit the rival's ball")
+	_check(blocked.rival._new_sim().ignore_moving, "its plans ignore them, like the player's preview")
+	var player_sim: BallSim = blocked.ball
+	player_sim.pos = Vector2(380.0, 270.0)
+	player_sim.launch(Vector2(200.0, -1.0), 0.0)
+	var rival_sim: BallSim = blocked.rival.ball
+	rival_sim.pos = Vector2(380.0, 270.0)
+	rival_sim.launch(Vector2(200.0, -1.0), 0.0)
+	for _i in 10:
+		player_sim.step(DT)
+		rival_sim.step(DT)
+	_check(rival_sim.vel.is_equal_approx(player_sim.vel), "a blade knocks its ball the same as the player's")
+	_check(rival_sim.vel.x < 0.0, "and really does knock it back")
+	blocked.end_duel()
 	game.end_duel()
 
 
@@ -2805,7 +2963,7 @@ func _test_course_progression() -> void:
 	_check(run.total_to_par() == 1, "the total compares to par on finished holes only")
 	_check(CourseRun.to_par_text(run.total_to_par()) == "+1", "over par shows a plus")
 	run.record_score(2)
-	_check(CourseRun.to_par_text(run.total_to_par()) == "E", "even par shows E")
+	_check(CourseRun.to_par_text(run.total_to_par()) == "0", "even par shows 0")
 	_check(CourseRun.to_par_text(-2) == "-2", "under par shows a minus")
 
 	while not run.is_last_hole():

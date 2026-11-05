@@ -9,6 +9,13 @@ const SOIL := [
 ]
 const STONE := Color("8a7460")
 const CUP_DARK := Color("14100d")
+const CUP_SHADE_TOP := Color("4a4036")
+const CUP_SHADE_MID := Color("2a231d")
+const CUP_LIGHT_WALL := Color("5e5246")
+const CUP_LINER := Color("d9dccf")
+const CUP_LINER_SHADE := Color("a4a89a")
+const CUP_RING := Color("2e2016")
+const CUP_LIP := Color("f6ffcf")
 
 var terrain: Terrain
 
@@ -62,6 +69,47 @@ func _paint_column(image: Image, col: int, world_x: int, height: int) -> void:
 			image.set_pixel(col, y, _turf(surface, world_x, y, depth))
 		else:
 			image.set_pixel(col, y, _soil(world_x, depth, y))
+
+	_paint_cup(image, col, world_x)
+
+
+# The cup in cross-section: a white liner with a rounded bottom set into the ground, dark
+# inside and lit on one wall, with a bright lip of turf either side of the opening.
+func _paint_cup(image: Image, col: int, world_x: int) -> void:
+	var offset: int = world_x - int(round(terrain.cup_x))
+	var side: int = absi(offset)
+	var wall: int = int(ceil(terrain.cup_half)) - 1
+	if side > wall + 1:
+		return
+	var rim: int = int(round(terrain.rim_y))
+	var floor_row: int = int(terrain.cup_depth) - 1
+	for row in floor_row + 2:
+		var y: int = rim + row
+		if y >= image.get_height():
+			return
+		var color: Color = _cup_color(offset, side, wall, row, floor_row)
+		if color.a > 0.0:
+			image.set_pixel(col, y, color)
+
+
+# Transparent means leave the ground as it is.
+func _cup_color(offset: int, side: int, wall: int, row: int, floor_row: int) -> Color:
+	if side == wall + 1:
+		if row == 0:
+			return CUP_LIP
+		return CUP_RING if row < floor_row else Color.TRANSPARENT
+	if row == floor_row + 1:
+		return CUP_RING if side < wall else Color.TRANSPARENT
+	var liner: Color = CUP_LINER_SHADE if offset > 0 else CUP_LINER
+	if side == wall:
+		return CUP_RING if row == floor_row else liner
+	if row == floor_row or (side == wall - 1 and row == floor_row - 1):
+		return liner
+	if row < 2:
+		return CUP_SHADE_TOP
+	if offset == wall - 1 and row < 6:
+		return CUP_LIGHT_WALL
+	return CUP_SHADE_MID if row < 5 else CUP_DARK
 
 
 func _turf_depth(surface: int) -> int:

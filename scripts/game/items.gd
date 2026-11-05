@@ -29,9 +29,9 @@ const CATALOG: Array[Dictionary] = [
 	{ "id": "forgiver", "kind": KIND_STICKER, "name": "FORGIVER", "text": "MISSES HURT LESS", "price": 16, "clubs": SWING_CLUBS, "effects": { "miss": 0.6 }, "unlock": 1 },
 	{ "id": "two_way_tape", "kind": KIND_STICKER, "name": "TWO-WAY TAPE", "text": "+12% RANGE, SMALL SPOT", "price": 14, "clubs": SWING_CLUBS, "effects": { "speed": 1.06, "window": 0.8 }, "unlock": 3 },
 
-	# Special balls. Only one at a time, kept until replaced.
+	# Special balls. The player carries a few and swaps between them in the shop.
 	{ "id": "wind_cutter", "kind": KIND_BALL, "name": "WIND CUTTER", "text": "WIND BARELY MOVES IT", "price": 12, "effects": { "wind": 0.3 } },
-	{ "id": "sticky_ball", "kind": KIND_BALL, "name": "STICKY BALL", "text": "STOPS WHERE IT LANDS", "price": 12, "effects": { "bounce": 0.6, "roll": 1.5 } },
+	{ "id": "sticky_ball", "kind": KIND_BALL, "name": "STICKY BALL", "text": "STOPS WHERE IT LANDS", "price": 12, "effects": { "bounce": 0.3, "grip": 0.4, "roll": 3.0 } },
 	{ "id": "rubber_ball", "kind": KIND_BALL, "name": "RUBBER BALL", "text": "BOUNCES AND RUNS MORE", "price": 12, "effects": { "bounce": 2.2, "grip": 1.12, "knock": 1.6, "squash": 1.0 } },
 	{ "id": "skipper", "kind": KIND_BALL, "name": "SKIPPER", "text": "SKIPS OFF WATER ONCE", "price": 16, "effects": { "water_skips": 1 } },
 	{ "id": "heavy_ball", "kind": KIND_BALL, "name": "HEAVY BALL", "text": "HAZARDS KNOCK IT LESS", "price": 14, "effects": { "knock": 0.5 }, "unlock": 2 },

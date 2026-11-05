@@ -2,6 +2,21 @@ class_name Controls
 extends RefCounted
 ## Registers keyboard and controller bindings in one place.
 
+## A second swing press this soon after the last one is a double tap, and is ignored.
+static var swing_gap_msec: int = 100
+static var _last_swing_msec: int = -100000
+
+
+## True when this event is a real press of swing, not the bounce of the one before it.
+static func swing_pressed(event: InputEvent) -> bool:
+	if not event.is_action_pressed("swing", false):
+		return false
+	var now: int = Time.get_ticks_msec()
+	if now - _last_swing_msec < swing_gap_msec:
+		return false
+	_last_swing_msec = now
+	return true
+
 
 static func register() -> void:
 	_add("swing", [KEY_SPACE, KEY_ENTER], [JOY_BUTTON_A])

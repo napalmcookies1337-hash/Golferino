@@ -337,11 +337,14 @@ func _one_press_putt() -> void:
 	await _wait(0.6)
 	var main: Node = _test_main()
 	_expect(main.game.current_club().is_putter, "the putter comes up on the green")
-	_expect(main.game.meter.stage == SwingMeter.Stage.SWEEPING, "the putting meter is moving by itself")
+	_expect(main.game.meter.stage == SwingMeter.Stage.IDLE, "the putting meter waits for a press")
+	_press_key(KEY_SPACE)
+	await _wait(0.4)
+	_expect(main.game.meter.stage == SwingMeter.Stage.SWEEPING and main.game.strokes == 0, "the first press of Space starts the meter")
 	await _save("editor_16b_putting_meter")
 	_press_key(KEY_SPACE)
 	await _wait(0.4)
-	_expect(main.game.strokes == 1, "one press of Space putts")
+	_expect(main.game.strokes == 1, "the second press of Space putts")
 	await _save("editor_16c_putt_rolling")
 	_press_key(KEY_ESCAPE)
 	await _wait(0.3)
@@ -533,6 +536,9 @@ func _wait(seconds: float) -> void:
 
 
 func _save(shot_name: String) -> void:
+	# With no window there's nothing to save, but every other check still runs.
+	if DisplayServer.get_name() == "headless":
+		return
 	await RenderingServer.frame_post_draw
 	var image: Image = get_viewport().get_texture().get_image()
 	image.save_png("%s/%s.png" % [OUT_DIR, shot_name])
