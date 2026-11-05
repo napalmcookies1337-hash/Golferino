@@ -5,7 +5,14 @@ The approved design and architecture are in [DESIGN.md](DESIGN.md).
 
 **Status:** Milestone 5 delivered for review: the full run, with art, music, sound and polish.
 
-## Run it
+## Download
+
+[Download Golferino for Windows](https://github.com/napalmcookies1337-hash/Golferino/releases/latest/download/Golferino-Windows.zip)
+
+Unzip it and double-click `Golferino.exe`, keeping `Golferino.pck` in the same folder.
+Windows may warn about an unknown publisher: choose **More info**, then **Run anyway**.
+
+## Run it from the source
 
 Double-click `Play.bat`, or run it from PowerShell:
 
