@@ -57,6 +57,7 @@ var _flag: FlagView
 var _hit_stop: float = 0.0
 var _hole_rng := RandomNumberGenerator.new()
 var _isles_place: int = 0
+var _next_course: Array[HoleData] = []
 
 
 ## Plays one map instead of the course. A negative start means from the tee.
@@ -139,8 +140,7 @@ func load_current_hole() -> void:
 		game.stroke_limit = run_state.stroke_limit(game.hole.par)
 		game.free_penalties = int(run_state.perk_number("free_penalties", 0.0))
 		if _is_duel_hole():
-			var plain_clubs: Array[ClubData] = _base_clubs
-			game.start_duel(Rival.new(game, plain_clubs, -1, run_state.level))
+			game.start_duel(_new_rival())
 	else:
 		game = HoleGame.new(run.current_hole(), _base_clubs)
 		game.falls_return_to_tee = floating_isles
@@ -149,14 +149,38 @@ func load_current_hole() -> void:
 	_build_views()
 	_connect_signals()
 	Sound.stop_jingle()
-	Sound.music("boss" if game.rival != null else "course")
-	Sound.set_outdoors(true)
+	Sound.music(_course_track())
+	Sound.set_outdoors(true, _in_swamp())
 	ScreenWipe.open(_overlay)
+	if _in_swamp() and run.hole_index == 0 and not is_testing():
+		hud.show_message("WELCOME TO SWAMPY SHORES", 2.4)
 	hud.show_message("%s: %s" % [game.hole.display_name, game.hole.title], 2.2)
 	if game.rival != null:
 		hud.show_message("THE RIVAL CHALLENGES YOU!", 2.6)
 	if is_testing():
 		hud.banner = "TESTING: ESC RETURNS TO THE EDITOR. SCORES DON'T COUNT."
+
+
+func _in_swamp() -> bool:
+	return game.hole.biome == HoleData.BIOME_SWAMP
+
+
+func _course_track() -> String:
+	if floating_isles:
+		return "isles"
+	if _in_swamp():
+		return "swamp_boss" if game.rival != null else "swamp"
+	return "boss" if game.rival != null else "grassy"
+
+
+# The rival plays with plain clubs. In the swamp it plays better, but never cheats more.
+func _new_rival() -> Rival:
+	var plain_clubs: Array[ClubData] = _base_clubs
+	if not _in_swamp():
+		return Rival.new(game, plain_clubs, -1, run_state.level)
+	var swamp_rival := Rival.new(game, plain_clubs, -1, Difficulty.swamp_rival_level(run_state.level))
+	swamp_rival.limit_cheats(Rival.CHEATS_PER_HOLE)
+	return swamp_rival
 
 
 func _build_views() -> void:
@@ -184,7 +208,7 @@ func _build_views() -> void:
 	_world.add_child(water)
 
 	var obstacle_view := ObstacleView.new()
-	obstacle_view.setup(game.obstacles)
+	obstacle_view.setup(game.obstacles, _in_swamp())
 	_world.add_child(obstacle_view)
 
 	_flag = FlagView.new()
@@ -203,9 +227,13 @@ func _build_views() -> void:
 	if game.rival != null:
 		var rival_view := RivalView.new()
 		rival_view.setup_rival(game, game.rival)
-		_world.add_child(rival_view)
 		var rival_ball := BallView.new()
-		rival_ball.setup_other(game, game.rival.ball, Color("d9a8ff"), Color("9a6fd0"))
+		if _in_swamp():
+			rival_view.wear_swamp_colors()
+			rival_ball.setup_other(game, game.rival.ball, Color("c4e86a"), Color("86a845"))
+		else:
+			rival_ball.setup_other(game, game.rival.ball, Color("d9a8ff"), Color("9a6fd0"))
+		_world.add_child(rival_view)
 		_world.add_child(rival_ball)
 
 	var aim := AimView.new()
@@ -239,6 +267,8 @@ func _build_views() -> void:
 
 # Testing one map stays at midday, since it has no place in a course.
 func _time_of_day() -> int:
+	if _in_swamp():
+		return BackgroundView.swamp_mood_for(run.hole_index, run.hole_count(), _is_duel_hole())
 	if is_testing() or floating_isles:
 		return BackgroundView.Mood.MIDDAY
 	return BackgroundView.mood_for(run.hole_index, run.hole_count(), _is_duel_hole())
@@ -417,9 +447,13 @@ func _close_shop() -> void:
 
 func _leave_shop() -> void:
 	_close_shop()
-	# Only infinite mode has a shop after the boss, and it leads to the next set of holes.
+	# A shop after a boss only comes when there's more to play: infinite mode's next set of holes,
+	# or Swampy Shores after the main game's first rival.
 	if run.is_last_hole():
-		run = run.next_set(HoleGenerator.generate_set(_hole_rng, run_state.level))
+		if infinite:
+			run = run.next_set(HoleGenerator.generate_set(_hole_rng, run_state.level, HoleGenerator.biome_for_set(run_state.set_number)))
+		else:
+			run = run.next_set(_next_course)
 		run_state.course = run
 	else:
 		run.advance()
@@ -463,7 +497,11 @@ func _on_shot_struck(quality: String, _power: float) -> void:
 
 
 func _on_penalty_taken(kind: String) -> void:
-	var text: String = "SPLASH! +1 STROKE" if kind == "water" else "OUT OF BOUNDS! +1 STROKE"
+	var text: String = "OUT OF BOUNDS! +1 STROKE"
+	if kind == "water":
+		text = "PLOP! +1 STROKE" if _in_swamp() else "SPLASH! +1 STROKE"
+	elif kind == "gator":
+		text = "CHOMP! +1 STROKE"
 	if kind == "fall":
 		text = "YOU FELL! BACK TO THE CHECKPOINT" if game.checkpoint_reached else "YOU FELL! BACK TO THE TEE"
 	hud.show_message(text, HoleGame.PENALTY_TIME)
@@ -528,6 +566,8 @@ func _on_hole_finished(strokes: int, _score_name: String) -> void:
 	if game.rival != null:
 		if infinite and game.duel_won:
 			_on_boss_beaten()
+		elif game.duel_won and run_state.set_number == 1 and _load_next_course():
+			_on_first_rival_beaten()
 		else:
 			run_state.ending = RunState.Ending.BEAT_RIVAL if game.duel_won else RunState.Ending.LOST_TO_RIVAL
 
@@ -538,6 +578,21 @@ func _on_boss_beaten() -> void:
 	var new_items: Array[String] = profile.record_boss_beaten()
 	hud.result_notes.append("%d SPARE STROKES BANKED: +%d COINS" % [int(paid["banked"]), int(paid["coins"])])
 	hud.result_notes.append("SPARE BACK TO %d, DIFFICULTY %d" % [run_state.spare, run_state.level])
+	if not new_items.is_empty():
+		hud.result_notes.append("NOW IN THE SHOP: %s" % ", ".join(new_items))
+
+
+# True if there's a second course to go on to.
+func _load_next_course() -> bool:
+	_next_course = library.load_course(HoleData.BIOME_SWAMP)
+	return not _next_course.is_empty()
+
+
+# Everything carries over as it is, so the panel still shows what the hole did to the spare strokes.
+func _on_first_rival_beaten() -> void:
+	run_state.beat_first_rival()
+	var new_items: Array[String] = profile.record_boss_beaten()
+	hud.result_notes.append("+%d POINTS. ONWARD TO SWAMPY SHORES" % RunState.SCORE_RIVAL_BEATEN)
 	if not new_items.is_empty():
 		hud.result_notes.append("NOW IN THE SHOP: %s" % ", ".join(new_items))
 
@@ -561,13 +616,18 @@ func _on_ball_bounced(at: Vector2, surface: int, impact_speed: float) -> void:
 	var color := Color(0.55, 0.8, 0.35)
 	if surface == Surface.Type.SAND:
 		color = Color(0.93, 0.83, 0.56)
-	fx.dust(at + Vector2(0, 2), color, 5 if surface != Surface.Type.SAND else 12, 0)
+	elif surface == Surface.Type.MUD:
+		color = Color(0.33, 0.25, 0.15)
+	fx.dust(at + Vector2(0, 2), color, 12 if surface == Surface.Type.SAND or surface == Surface.Type.MUD else 5, 0)
 
 
 func _on_ball_hazard(at: Vector2, kind: String) -> void:
 	if kind == "water":
 		fx.splash(at)
 		camera.shake(HAZARD_SHAKE)
+	elif kind == "gator":
+		fx.burst(at, Color("a8d860"), 16, 90.0)
+		camera.shake(HAZARD_SHAKE * 1.5)
 
 
 func _on_pin_hit(at: Vector2) -> void:
@@ -595,6 +655,14 @@ func _on_obstacle_hit(at: Vector2, kind: String) -> void:
 			camera.shake(HAZARD_SHAKE)
 		"sprinkler":
 			fx.splash(at)
+		"frog":
+			hud.show_message("RIBBIT!", 1.1)
+			fx.dust(at, Color("7fc24e"), 10, 0)
+			camera.shake(HAZARD_SHAKE)
+		"vent":
+			hud.show_message("GASSED!", 1.1)
+			fx.dust(at, Color("a8c85a"), 14, 0)
+			camera.shake(HAZARD_SHAKE)
 
 
 func _on_rival_touched(at: Vector2, kind: String) -> void:

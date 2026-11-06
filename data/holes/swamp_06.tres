@@ -1,0 +1,142 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_x3tnt"]
+
+[resource]
+script = ExtResource("1_x3tnt")
+display_name = "HOLE 6"
+biome = "swamp"
+par = 5
+cup_x = 2060.0
+points = PackedVector2Array(0, 280, 60, 284, 130, 286, 360, 290, 560, 302, 720, 312, 900, 310, 1010, 304, 1060, 352, 1240, 356, 1300, 302, 1460, 292, 1640, 290, 1820, 280, 1950, 276, 2060, 274, 2180, 276, 2320, 248)
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 560,
+"type": 1
+}, {
+"from": 560,
+"to": 1010,
+"type": 6
+}, {
+"from": 1310,
+"to": 1860,
+"type": 1
+}, {
+"from": 1720,
+"to": 1800,
+"type": 6
+}, {
+"from": 1950,
+"to": 2170,
+"type": 2
+}]
+water_spans = [{
+"from": 1020,
+"level": 328.0,
+"to": 1295
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 320.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 320.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 470.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 470.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1400.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1400.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1680.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1680.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2240.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 2240.0
+}]
+obstacles = [{
+"kind": "lily",
+"width": 64.0,
+"x": 1150.0
+}, {
+"burst_time": 1.1,
+"height": 90.0,
+"kind": "vent",
+"offset": 1.0,
+"quiet_time": 2.6,
+"x": 1560.0
+}, {
+"from": 1340.0,
+"kind": "frog",
+"speed": 70.0,
+"start": 1420.0,
+"to": 1500.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 1660.0
+}, {
+"kind": "coin",
+"x": 341.0,
+"y": 241.0
+}, {
+"kind": "coin",
+"x": 564.0,
+"y": 247.0
+}, {
+"kind": "coin",
+"x": 786.0,
+"y": 250.0
+}, {
+"kind": "coin",
+"x": 1009.0,
+"y": 235.0
+}, {
+"kind": "coin",
+"x": 1231.0,
+"y": 252.0
+}, {
+"kind": "coin",
+"x": 1454.0,
+"y": 239.0
+}, {
+"kind": "coin",
+"x": 1676.0,
+"y": 228.0
+}, {
+"kind": "coin",
+"x": 1899.0,
+"y": 210.0
+}]
+title = "THE LONG BOG"

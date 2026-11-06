@@ -7,6 +7,9 @@ const CHUNK_WIDTH := 512
 const SOIL := [
 	Color("6b4a32"), Color("5d3f2b"), Color("503524"), Color("432c1f"), Color("37241a"),
 ]
+const SWAMP_SOIL := [
+	Color("3d3324"), Color("332a1d"), Color("2a2318"), Color("231d14"), Color("1c1710"),
+]
 const FLOWERS := [Color("ffffff"), Color("ffe25a"), Color("f79ac0")]
 const STONE := Color("8a7460")
 const CUP_DARK := Color("14100d")
@@ -19,10 +22,12 @@ const CUP_RING := Color("2e2016")
 const CUP_LIP := Color("f6ffcf")
 
 var terrain: Terrain
+var _swamp: bool = false
 
 
 func setup(p_terrain: Terrain) -> void:
 	terrain = p_terrain
+	_swamp = terrain.biome == HoleData.BIOME_SWAMP
 
 
 func _ready() -> void:
@@ -52,13 +57,15 @@ func _paint_column(image: Image, col: int, world_x: int, height: int) -> void:
 	if terrain.is_floating():
 		height = mini(height, int(round(terrain.underside_y(float(world_x)))))
 	var surface: int = terrain.surface_at(world_x)
-	var is_water: bool = surface == Surface.Type.WATER
+	var is_water: bool = terrain.is_wet(float(world_x))
 	var top: int = int(round(terrain.basin_y(world_x))) if is_water \
 			else int(round(terrain.ground_y(world_x)))
 	var in_cup: bool = terrain.in_cup(float(world_x))
 	var cup_bottom: int = int(terrain.rim_y + terrain.cup_depth)
 
-	if surface == Surface.Type.ROUGH and _hash(world_x, 7) % 4 == 0:
+	if _swamp:
+		_paint_swamp_tufts(image, col, world_x, top, surface)
+	elif surface == Surface.Type.ROUGH and _hash(world_x, 7) % 4 == 0:
 		var tuft: int = 1 + _hash(world_x, 11) % 3
 		for y in range(maxi(top - tuft, 0), top):
 			image.set_pixel(col, y, Color("3f7a2f"))
@@ -75,13 +82,29 @@ func _paint_column(image: Image, col: int, world_x: int, height: int) -> void:
 			continue
 		var depth: int = y - top
 		if is_water:
-			image.set_pixel(col, y, Color("2e4a55") if depth < 4 else _soil(world_x, depth, y))
+			var bed: Color = Color("2a3320") if _swamp else Color("2e4a55")
+			image.set_pixel(col, y, bed if depth < 4 else _soil(world_x, depth, y))
 		elif depth < turf_edge:
 			image.set_pixel(col, y, _turf(surface, world_x, y, depth))
 		else:
 			image.set_pixel(col, y, _soil(world_x, depth, y))
 
 	_paint_cup(image, col, world_x)
+
+
+# Tall reeds in the rough, the odd bubble of mud, and scraps of moss on the fairway.
+func _paint_swamp_tufts(image: Image, col: int, world_x: int, top: int, surface: int) -> void:
+	if surface == Surface.Type.ROUGH and _hash(world_x, 7) % 3 == 0:
+		var reed: int = 2 + _hash(world_x, 11) % 7
+		for y in range(maxi(top - reed, 0), top):
+			image.set_pixel(col, y, Color("4d6130"))
+		if _hash(world_x, 29) % 6 == 0 and top - reed - 2 >= 0:
+			image.set_pixel(col, top - reed - 1, Color("5a3d24"))
+			image.set_pixel(col, top - reed - 2, Color("5a3d24"))
+	elif surface == Surface.Type.MUD and _hash(world_x, 17) % 11 == 0 and top >= 1:
+		image.set_pixel(col, top - 1, Color("6a5536"))
+	elif surface == Surface.Type.FAIRWAY and _hash(world_x, 13) % 9 == 0 and top >= 1:
+		image.set_pixel(col, top - 1, Color("8c9e4c"))
 
 
 # The cup in cross-section: a white liner with a rounded bottom set into the ground, dark
@@ -146,6 +169,13 @@ func _turf_depth(surface: int) -> int:
 
 
 func _turf(surface: int, x: int, y: int, depth: int) -> Color:
+	if surface == Surface.Type.MUD:
+		if depth == 0:
+			return Color("7a6340")
+		# Wet streaks through it, so it reads as mud at a glance.
+		return Color("3e301d") if _hash(x / 3, y / 2) % 4 == 0 else Color("54422a")
+	if _swamp:
+		return _swamp_turf(surface, x, y, depth)
 	match surface:
 		Surface.Type.FAIRWAY, Surface.Type.TEE:
 			if depth == 0:
@@ -167,11 +197,32 @@ func _turf(surface: int, x: int, y: int, depth: int) -> Color:
 			return Color("3f7a2f") if _hash(x, y) % 5 == 0 else Color("4e8f38")
 
 
+func _swamp_turf(surface: int, x: int, y: int, depth: int) -> Color:
+	match surface:
+		Surface.Type.FAIRWAY, Surface.Type.TEE:
+			if depth == 0:
+				return Color("b4c070")
+			return Color("7f9146") if int(float(x) / 14.0) % 2 == 0 else Color("74853f")
+		Surface.Type.GREEN:
+			if depth == 0:
+				return Color("dcec94")
+			return Color("a8c75a") if depth < 4 else Color("90b04e")
+		Surface.Type.SAND:
+			if depth == 0:
+				return Color("cfc594")
+			return Color("9c9264") if _hash(x, y) % 6 == 0 else Color("b5aa7a")
+		_:
+			if depth == 0:
+				return Color("67783c")
+			return Color("3f4f28") if _hash(x, y) % 5 == 0 else Color("4c5e2e")
+
+
 func _soil(x: int, depth: int, y: int) -> Color:
 	if _hash(x / 2, y / 2) % 113 == 0:
-		return STONE
+		return STONE.darkened(0.4) if _swamp else STONE
 	var band: float = float(depth) / 38.0 + float(_hash(x, y) % 3) * 0.12
-	return SOIL[mini(int(band), SOIL.size() - 1)]
+	var palette: Array = SWAMP_SOIL if _swamp else SOIL
+	return palette[mini(int(band), palette.size() - 1)]
 
 
 func _hash(x: int, y: int) -> int:

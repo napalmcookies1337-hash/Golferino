@@ -47,6 +47,7 @@ func _show_title() -> void:
 	title.editor_chosen.connect(_open_editor, CONNECT_DEFERRED)
 	title.scores_chosen.connect(_show_scores, CONNECT_DEFERRED)
 	title.collection_chosen.connect(_show_collection, CONNECT_DEFERRED)
+	title.jukebox_chosen.connect(_show_jukebox, CONNECT_DEFERRED)
 	title.quit_chosen.connect(func() -> void: get_tree().quit())
 	_swap_screen(title)
 
@@ -57,6 +58,13 @@ func _show_collection() -> void:
 	collection.done.connect(_show_title, CONNECT_DEFERRED)
 	collection.done.connect(func() -> void: Sound.sfx("menu_back"))
 	_swap_screen(collection)
+
+
+func _show_jukebox() -> void:
+	var jukebox := JukeboxScreen.new()
+	jukebox.done.connect(_show_title, CONNECT_DEFERRED)
+	jukebox.done.connect(func() -> void: Sound.sfx("menu_back"))
+	_swap_screen(jukebox)
 
 
 func _show_scores() -> void:

@@ -8,12 +8,13 @@ signal isles_chosen
 signal editor_chosen
 signal scores_chosen
 signal collection_chosen
+signal jukebox_chosen
 signal quit_chosen
 
-enum Item { PLAY, INFINITE, ISLES, EDITOR, SCORES, COLLECTION, MUSIC, SOUND, QUIT }
+enum Item { PLAY, INFINITE, ISLES, EDITOR, SCORES, COLLECTION, MUSIC, SOUND, JUKEBOX, QUIT }
 
-const ITEMS := ["PLAY", "INFINITE MODE", "FLOATING ISLES", "MAP EDITOR", "HIGH SCORES", "COLLECTION", "MUSIC", "SOUND", "QUIT"]
-const ITEM_TOP := 170.0
+const ITEMS := ["PLAY", "INFINITE MODE", "FLOATING ISLES", "MAP EDITOR", "HIGH SCORES", "COLLECTION", "MUSIC", "SOUND", "JUKEBOX", "QUIT"]
+const ITEM_TOP := 156.0
 const ITEM_GAP := 18.0
 const CENTER_X := 320.0
 const ACCENT := Color("ffe25a")
@@ -27,8 +28,8 @@ const LOGO_BALL_RADIUS := 20.0
 const BALL_FLIGHT_TIME := 1.7
 const TEE_X := 112.0
 const CUP_X := 560.0
-const MENU_PANEL := Rect2(196, 162, 248, 172)
-const HINT_Y := 150.0
+const MENU_PANEL := Rect2(196, 149, 248, 188)
+const HINT_Y := 138.0
 
 var library: MapLibrary
 var profile: Profile
@@ -47,7 +48,7 @@ func setup(p_library: MapLibrary, p_profile: Profile) -> void:
 
 
 func _ready() -> void:
-	Sound.music("course")
+	Sound.music("title")
 	Sound.set_outdoors(true)
 	_course_size = library.course_order().size()
 	_camera = Camera2D.new()
@@ -165,6 +166,9 @@ func _choose(index: int) -> void:
 		Item.COLLECTION:
 			Sound.sfx("menu_ok")
 			collection_chosen.emit()
+		Item.JUKEBOX:
+			Sound.sfx("menu_ok")
+			jukebox_chosen.emit()
 		Item.MUSIC, Item.SOUND:
 			# Space steps the level round, for anyone without left and right to hand.
 			var level: int = Sound.music_level if index == Item.MUSIC else Sound.sfx_level

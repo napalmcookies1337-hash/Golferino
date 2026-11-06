@@ -55,6 +55,14 @@ static func _build_one(entry: Dictionary, terrain: Terrain) -> Obstacle:
 			return BouncePadObstacle.new(terrain, entry)
 		"coin":
 			return CoinObstacle.new(terrain, entry)
+		"frog":
+			return FrogObstacle.new(terrain, entry)
+		"vent":
+			return VentObstacle.new(terrain, entry)
+		"gator":
+			return GatorObstacle.new(terrain, entry)
+		"lily":
+			return LilyObstacle.new(terrain, entry)
 	push_error("Unknown obstacle kind: %s" % str(entry.get("kind", "")))
 	return null
 

@@ -5,8 +5,10 @@ extends RefCounted
 ## until it's restored.
 
 const COURSE_PATH := "res://data/course_01.tres"
+const SWAMP_COURSE_PATH := "res://data/course_02.tres"
 const DEFAULT_DIR := "user://maps"
 const ORDER_FILE := "course_order.json"
+const SWAMP_ORDER_FILE := "swamp_order.json"
 const COIN_MIN_HEIGHT := 6.0
 
 ## How a map relates to the originals.
@@ -15,17 +17,23 @@ enum Kind { ORIGINAL, EDITED, CUSTOM }
 var dir: String
 var _builtin_paths: Dictionary = {}
 var _builtin_order: Array[String] = []
+var _builtin_swamp_order: Array[String] = []
 
 
 ## Tests pass their own folder, so they never touch the player's maps.
 func _init(p_dir: String = DEFAULT_DIR) -> void:
 	dir = p_dir
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	var course: CourseData = load(COURSE_PATH)
+	_read_builtin(COURSE_PATH, _builtin_order)
+	_read_builtin(SWAMP_COURSE_PATH, _builtin_swamp_order)
+
+
+func _read_builtin(course_path: String, order: Array[String]) -> void:
+	var course: CourseData = load(course_path)
 	for path: String in course.hole_paths:
 		var id: String = path.get_file().get_basename()
 		_builtin_paths[id] = path
-		_builtin_order.append(id)
+		order.append(id)
 
 
 func is_original(id: String) -> bool:
@@ -41,9 +49,10 @@ func kind_of(id: String) -> int:
 ## All map ids: originals in course order, then custom maps by name.
 func list_ids() -> Array[String]:
 	var ids: Array[String] = _builtin_order.duplicate()
+	ids.append_array(_builtin_swamp_order)
 	var custom: Array[String] = []
 	for file_name in DirAccess.get_files_at(dir):
-		if file_name.ends_with(".json") and file_name != ORDER_FILE:
+		if file_name.ends_with(".json") and file_name != ORDER_FILE and file_name != SWAMP_ORDER_FILE:
 			var id: String = file_name.get_basename()
 			if not is_original(id):
 				custom.append(id)
@@ -109,10 +118,11 @@ func delete_map(id: String) -> void:
 		return
 	if FileAccess.file_exists(_user_path(id)):
 		DirAccess.remove_absolute(_user_path(id))
-	var order: Array[String] = course_order()
-	while order.has(id):
-		order.erase(id)
-	save_course_order(order)
+	for biome: String in [HoleData.BIOME_GRASSY, HoleData.BIOME_SWAMP]:
+		var order: Array[String] = course_order(biome)
+		while order.has(id):
+			order.erase(id)
+		save_course_order(order, biome)
 
 
 func new_custom_id() -> String:
@@ -122,9 +132,9 @@ func new_custom_id() -> String:
 	return "map_%03d" % number
 
 
-## The ids the course plays, in order. The last one is the boss hole.
-func course_order() -> Array[String]:
-	var path: String = "%s/%s" % [dir, ORDER_FILE]
+## The ids a course plays, in order. The last one is the boss hole.
+func course_order(biome: String = HoleData.BIOME_GRASSY) -> Array[String]:
+	var path: String = _order_path(biome)
 	if FileAccess.file_exists(path):
 		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if data is Array:
@@ -133,20 +143,24 @@ func course_order() -> Array[String]:
 				if is_original(str(id)) or FileAccess.file_exists(_user_path(str(id))):
 					order.append(str(id))
 			return order
-	return _builtin_order.duplicate()
+	return _builtin_swamp_order.duplicate() if biome == HoleData.BIOME_SWAMP else _builtin_order.duplicate()
 
 
-func save_course_order(order: Array[String]) -> void:
-	var file := FileAccess.open("%s/%s" % [dir, ORDER_FILE], FileAccess.WRITE)
+func save_course_order(order: Array[String], biome: String = HoleData.BIOME_GRASSY) -> void:
+	var file := FileAccess.open(_order_path(biome), FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(order))
 		file.close()
 
 
-## The course's holes, labelled by their position in it.
-func load_course() -> Array[HoleData]:
+func _order_path(biome: String) -> String:
+	return "%s/%s" % [dir, SWAMP_ORDER_FILE if biome == HoleData.BIOME_SWAMP else ORDER_FILE]
+
+
+## A course's holes, labelled by their position in it.
+func load_course(biome: String = HoleData.BIOME_GRASSY) -> Array[HoleData]:
 	var holes: Array[HoleData] = []
-	var order: Array[String] = course_order()
+	var order: Array[String] = course_order(biome)
 	for id in order:
 		var hole: HoleData = load_hole(id)
 		if hole != null:

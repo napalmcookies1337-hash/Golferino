@@ -19,6 +19,15 @@ func setup_rival(p_game: HoleGame, p_rival: Rival) -> void:
 	cap = Color("2a2438")
 
 
+## The same rival for the swamp rematch, kitted out to match.
+func wear_swamp_colors() -> void:
+	shirt = Color("4f8a3c")
+	shirt_dark = Color("356429")
+	pants = Color("9a7b3e")
+	pants_dark = Color("745a2b")
+	cap = Color("20302a")
+
+
 func _ready() -> void:
 	_stand_at_ball()
 

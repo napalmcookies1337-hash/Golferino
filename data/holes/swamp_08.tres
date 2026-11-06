@@ -1,0 +1,160 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_ld6h6"]
+
+[resource]
+script = ExtResource("1_ld6h6")
+display_name = "HOLE 8"
+biome = "swamp"
+par = 5
+cup_x = 2120.0
+points = PackedVector2Array(0, 292, 60, 296, 130, 296, 340, 298, 480, 300, 530, 356, 790, 360, 840, 298, 1010, 290, 1180, 294, 1225, 354, 1540, 358, 1590, 296, 1760, 284, 1990, 278, 2120, 276, 2240, 278, 2380, 254)
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 490,
+"type": 1
+}, {
+"from": 835,
+"to": 1190,
+"type": 1
+}, {
+"from": 1585,
+"to": 2010,
+"type": 1
+}, {
+"from": 2010,
+"to": 2230,
+"type": 2
+}]
+water_spans = [{
+"from": 495,
+"level": 325.0,
+"to": 830
+}, {
+"from": 1195,
+"level": 322.0,
+"to": 1580
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 320.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 320.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 950.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 950.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1110.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1110.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1700.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1700.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1870.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1870.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2310.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 2310.0
+}]
+obstacles = [{
+"kind": "lily",
+"width": 62.0,
+"x": 600.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 725.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 1290.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 1395.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 1500.0
+}, {
+"from": 1270.0,
+"kind": "frog",
+"speed": 55.0,
+"start": 1395.0,
+"to": 1520.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 1010.0
+}, {
+"kind": "coin",
+"x": 345.0,
+"y": 250.0
+}, {
+"kind": "coin",
+"x": 575.0,
+"y": 270.0
+}, {
+"kind": "coin",
+"x": 805.0,
+"y": 263.0
+}, {
+"kind": "coin",
+"x": 1035.0,
+"y": 220.0
+}, {
+"kind": "coin",
+"x": 1265.0,
+"y": 246.0
+}, {
+"kind": "coin",
+"x": 1495.0,
+"y": 269.0
+}, {
+"kind": "coin",
+"x": 1725.0,
+"y": 224.0
+}, {
+"kind": "coin",
+"x": 1955.0,
+"y": 212.0
+}]
+title = "STEPPING PADS"

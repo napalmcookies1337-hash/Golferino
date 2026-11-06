@@ -1,0 +1,111 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_i6aec"]
+
+[resource]
+script = ExtResource("1_i6aec")
+display_name = "HOLE 1"
+biome = "swamp"
+cup_x = 1342.0
+points = PackedVector2Array(0, 296, 60, 300, 130, 302, 370, 298, 598, 304, 706, 318, 898, 316, 1030, 300, 1186, 292, 1342, 290, 1486, 292, 1654, 268)
+surface_spans = [{
+"from": 60.0,
+"to": 130.0,
+"type": 4
+}, {
+"from": 130.0,
+"to": 628.0,
+"type": 1
+}, {
+"from": 628.0,
+"to": 952.0,
+"type": 6
+}, {
+"from": 952.0,
+"to": 1210.0,
+"type": 1
+}, {
+"from": 1210.0,
+"to": 1474.0,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 40.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 40.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 334.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 334.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 538.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 538.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1006.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1006.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1558.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 1558.0
+}]
+obstacles = [{
+"kind": "coin",
+"x": 296.0,
+"y": 251.0
+}, {
+"kind": "coin",
+"x": 429.0,
+"y": 243.0
+}, {
+"kind": "coin",
+"x": 562.0,
+"y": 240.0
+}, {
+"kind": "coin",
+"x": 695.0,
+"y": 248.0
+}, {
+"kind": "coin",
+"x": 827.0,
+"y": 243.0
+}, {
+"kind": "coin",
+"x": 960.0,
+"y": 256.0
+}, {
+"kind": "coin",
+"x": 1093.0,
+"y": 236.0
+}, {
+"kind": "coin",
+"x": 1226.0,
+"y": 224.0
+}]
+title = "SOGGY START"

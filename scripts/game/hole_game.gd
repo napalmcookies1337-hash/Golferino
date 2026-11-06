@@ -70,7 +70,12 @@ var stroke_limit: int = 0
 var free_penalties: int = 0
 ## Floating Isles: losing the ball sends it back to the tee. That costs no extra stroke, and
 ## the strokes taken so far still count.
-var falls_return_to_tee: bool = false
+var falls_return_to_tee: bool = false:
+	set(value):
+		falls_return_to_tee = value
+		# The first shot was set up before this was known, and these rules offer a different club.
+		if phase == Phase.AIM:
+			_begin_aim()
 var falls: int = 0
 ## Once true, a fall returns the ball to the checkpoint instead of the tee.
 var checkpoint_reached: bool = false
@@ -398,20 +403,28 @@ func _reset_aim() -> void:
 # Offers a sensible club so most shots need no menu input. The player can change it.
 func _pick_club_for_lie() -> void:
 	var wanted: String = "iron"
+	# Floating Isles is about accuracy, so it always offers the Iron until the ball's on the green.
+	if falls_return_to_tee:
+		_select_club_by_id("putter" if lie_surface() == Surface.Type.GREEN else "iron")
+		return
 	if lie_surface() == Surface.Type.GREEN:
 		wanted = "putter"
 	elif lie_surface() != Surface.Type.SAND and distance_to_cup() > _full_range_estimate("iron"):
 		# The driver's low loft can't clear a bunker wall, so sand always offers the iron.
 		wanted = "driver"
-	for i in clubs.size():
-		if clubs[i].id == wanted:
-			club_index = i
+	_select_club_by_id(wanted)
 	if current_club().is_putter or _club_has_safe_shot(club_index):
 		return
 	for i in clubs.size():
 		if not clubs[i].is_putter and _club_has_safe_shot(i):
 			club_index = i
 			return
+
+
+func _select_club_by_id(id: String) -> void:
+	for i in clubs.size():
+		if clubs[i].id == id:
+			club_index = i
 
 
 # A slope can tilt a low club straight into a hazard at every power.

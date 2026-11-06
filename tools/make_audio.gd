@@ -10,9 +10,14 @@ const PEAK := 0.82
 const NOTE_NAMES := { "C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11 }
 const CHORD_SHAPES := {
 	"": [0, 4, 7], "m": [0, 3, 7], "7": [0, 4, 7, 10], "m7": [0, 3, 7, 10], "maj7": [0, 4, 7, 11],
+	"6": [0, 4, 7, 9],
 }
 
-enum Wave { PULSE, TRIANGLE, NOISE }
+## How loud the biome tracks sit on average, so they match the other music. Bass needs a little
+## more than the rest to sound as loud.
+const TARGET_RMS := { "music_grassy": 0.19, "music_isles": 0.17, "music_swamp": 0.24, "music_swamp_boss": 0.26 }
+
+enum Wave { PULSE, TRIANGLE, NOISE, SAW, SINE, KEYS }
 
 var _rng := RandomNumberGenerator.new()
 var _report: Array[String] = []
@@ -24,6 +29,8 @@ func _initialize() -> void:
 	_make_music()
 	_make_jingles()
 	_make_sfx()
+	# Written last, so the noise in everything above comes out the same as it always has.
+	_make_biome_music()
 	for line in _report:
 		print(line)
 	print("audio finished")
@@ -34,13 +41,492 @@ func _initialize() -> void:
 
 
 func _make_music() -> void:
-	_save("music_course", _song_course(), MUSIC_RATE, true)
+	_save("music_title", _song_title(), MUSIC_RATE, true)
 	_save("music_shop", _song_shop(), MUSIC_RATE, true)
 	_save("music_boss", _song_boss(), MUSIC_RATE, true)
 
 
-# A breezy shuffle in F major.
-func _song_course() -> PackedFloat32Array:
+func _make_biome_music() -> void:
+	_save("music_grassy", _song_grassy(), MUSIC_RATE, true)
+	_save("music_swamp", _song_swamp(), MUSIC_RATE, true)
+	_save("music_swamp_boss", _song_swamp_boss(), MUSIC_RATE, true)
+	_save("music_isles", _song_isles(), MUSIC_RATE, true)
+	_sfx("bounce_mud", _layer([_blip(120.0, 70.0, 0.09, Wave.TRIANGLE, 0.8), _noise_hit(0.08, 0.45, 0.2, 0.05)]))
+	_sfx("frog", _croak())
+	_sfx("vent", _whoosh(0.5, 0.55, 0.25, 0.5))
+	# A snap of jaws over a low growl.
+	_sfx("gator", _layer([_blip(95.0, 50.0, 0.3, Wave.TRIANGLE, 0.9), _noise_hit(0.05, 0.8, 0.9, 0.3), _blip(620.0, 240.0, 0.05, Wave.PULSE, 0.45)]))
+	_save("ambience_swamp", _swamp_ambience(), MUSIC_RATE, true)
+
+
+# Three quick, rough pulses, falling in pitch.
+func _croak() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(int(0.32 * float(SFX_RATE)))
+	for start: float in [0.0, 0.1, 0.2]:
+		var count: int = int(0.08 * float(SFX_RATE))
+		var phase: float = 0.0
+		for i in count:
+			var u: float = float(i) / float(count)
+			var step: float = lerpf(210.0 - start * 120.0, 150.0 - start * 90.0, u) / float(SFX_RATE)
+			phase = fmod(phase + step, 1.0)
+			out[int(start * float(SFX_RATE)) + i] += _pulse(phase, 0.18, step) * sin(u * PI) * 0.5
+	return out
+
+
+# A warm, buzzing night: low air, crickets pulsing, and frogs answering each other. It all
+# wraps, so the loop has no seam.
+func _swamp_ambience() -> PackedFloat32Array:
+	var count: int = 14 * MUSIC_RATE
+	var out := PackedFloat32Array()
+	out.resize(count)
+	# Runs on past the end, and the start fades in from that overrun, so the loop has no seam.
+	var overlap: int = MUSIC_RATE
+	var air := PackedFloat32Array()
+	air.resize(count + overlap)
+	var low: float = 0.0
+	for i in air.size():
+		low = lerpf(low, _rng.randf_range(-1.0, 1.0), 0.02)
+		air[i] = low
+	for i in count:
+		var u: float = float(i) / float(count)
+		var value: float = air[i]
+		if i < overlap:
+			value = lerpf(air[count + i], air[i], float(i) / float(overlap))
+		out[i] = value * (0.75 + 0.25 * sin(u * TAU * 2.0)) * 0.9
+	var song: Dictionary = { "buffer": out, "rate": MUSIC_RATE }
+	# Crickets: fast pulses, in bursts.
+	for start: float in [0.4, 3.1, 5.7, 8.2, 11.0]:
+		for j in 14:
+			_note(song, start + float(j) * 0.055, 0.03, 3100.0, Wave.SINE, 0.018, 0.5, 0.004, 0.01, 0.7, 0.01, 0.0)
+	# Frogs, far off.
+	for croak: Array in [[1.5, 150.0], [1.72, 138.0], [6.4, 190.0], [6.62, 176.0], [6.84, 164.0], [10.2, 140.0], [12.5, 170.0], [12.72, 155.0]]:
+		_note(song, float(croak[0]), 0.13, float(croak[1]), Wave.PULSE, 0.07, 0.18, 0.015, 0.05, 0.6, 0.04, 0.0)
+	return song["buffer"]
+
+
+# Grassy Greens: an upbeat small-group swing in Bb, played as a head and then a solo chorus.
+func _song_grassy() -> PackedFloat32Array:
+	var open_a := "D5/1 F5/1 G5/2 F5/1 D5/3|Bb4/1 D5/1 G5/3 F5/1 D5/2|Eb5/1 G5/1 Bb5/2 A5/1 G5/1 Eb5/2|F5/3 Eb5/1 C5/2 A4/2|D5/1 F5/1 A5/2 G5/1 F5/1 B4/2|C5/1 Eb5/1 G5/2 A5/1 F5/1 Eb5/2"
+	var a_one := open_a + "|D5/1 F5/1 Bb5/2 B4/1 D5/1 F5/2|Eb5/1 C5/1 G4/2 A4/1 C5/1 Eb5/2"
+	var a_two := open_a + "|D5/3 F5/1 Bb5/4|Ab5/1 F5/1 D5/1 Bb4/1 Ab4/2 R/2"
+	var bridge := "G5/2 Bb5/1 G5/1 D5/2 Eb5/2|C5/1 Eb5/1 Gb5/2 F5/1 Eb5/1 C5/2|F5/2 A5/1 F5/1 D5/2 C5/2|B4/1 D5/1 F5/1 A5/1 G5/3 R/1|Eb5/2 G5/1 Eb5/1 C5/2 Bb4/2|A4/1 C5/1 Eb5/1 G5/1 F5/3 R/1|G5/1 F5/1 Eb5/1 D5/1 C5/2 Eb5/2|F5/1 A5/1 C6/2 A5/1 F5/1 Eb5/2"
+	var solo_a := "F5/1 G5/1 A5/1 Bb5/1 D6/2 Bb5/2|G5/1 A5/1 Bb5/1 D6/1 C6/2 Bb5/2|G5/1 Bb5/1 Eb6/2 D6/1 C6/1 Bb5/2|A5/1 C6/1 F6/2 Eb6/1 C6/1 A5/2|F5/1 A5/1 C6/1 A5/1 B5/1 G5/1 F5/1 D5/1|Eb5/1 G5/1 C6/1 G5/1 F5/1 A5/1 C6/1 Eb6/1|D6/2 Bb5/1 F5/1 G5/1 B5/1 D6/1 F6/1|Eb6/1 C6/1 G5/1 Eb5/1 C6/1 A5/1 F5/1 Eb5/1"
+	var chords_one := "Bbmaj7 Gm7 Cm7 F7 Dm7/G7 Cm7/F7 Bb6/G7 Cm7/F7"
+	var chords_two := "Bbmaj7 Gm7 Cm7 F7 Dm7/G7 Cm7/F7 Bbmaj7 Bb7"
+	var chords_bridge := "Ebmaj7 Ab7 Dm7 G7 Cm7 F7 Cm7 F7"
+	var chords: String = " ".join([chords_one, chords_two, chords_bridge, chords_one, chords_one, chords_bridge])
+	var song := _new_song(chords, 168.0, 0.3)
+	var horns: Dictionary = _stem(song)
+	var head: String = "|".join([a_one, a_two, bridge, a_one])
+	var horn_shape: Array = [0.012, 0.07, 0.72, 0.05]
+	_line(horns, head, 0, Wave.SAW, 0.34, 0.5, 0.86, horn_shape, 0.004)
+	# A second horn an octave down fills out the head.
+	_line(horns, head, 0, Wave.SAW, 0.13, 0.5, 0.86, horn_shape, 0.0, 0.5)
+	# The solo chorus's bridge goes to the horn, with the piano answering it on the A.
+	_line(horns, bridge, 40, Wave.SAW, 0.3, 0.5, 0.8, horn_shape, 0.004)
+	_lowpass(horns["buffer"], 0.42)
+	_mix(song, horns, 1.0)
+	_line(song, solo_a, 32, Wave.KEYS, 0.27, 0.5, 0.8, [0.003, 0.14, 0.45, 0.07])
+	_add_jazz_bass(song, 0.5)
+	_add_jazz_comp(song, 0.085)
+	_add_jazz_drums(song)
+	_soft_clip(song["buffer"], 1.1)
+	return _finish_song(song)
+
+
+# Swampy Shores: a slow, heavy head-nod in E, all dirty bass and booming kick.
+func _song_swamp() -> PackedFloat32Array:
+	var first := "E2/1.5 E2/0.5 R/1 G2/1 E2/1.5 D2/0.5 R/2"
+	var second := "E2/1.5 E2/0.5 R/1 Bb2/1 A2/1 G2/1 E2/2"
+	var last := "E2/1.5 E2/0.5 R/1 G2/0.5 A2/0.5 Bb2/1 A2/0.5 G2/0.5 F2/1 D2/1"
+	var riff: String = "|".join([first, second, first, last])
+	var turn := "C2/1.5 C2/0.5 R/1 E2/1 C2/1.5 Bb1/0.5 R/2|A1/1.5 A1/0.5 R/1 C2/1 A1/1.5 G1/0.5 R/2|C2/1.5 C2/0.5 R/1 E2/1 C2/1.5 Bb1/0.5 R/2|Bb1/1.5 Bb1/0.5 R/1 D2/0.5 F2/0.5 Bb2/1 F2/1 D2/1 B1/1"
+	var bass_line: String = "|".join([riff, riff, riff, turn, riff, riff])
+	var chords: String = " ".join(["Em Em Em Em", "Em Em Em Em", "Em Em Em Em", "C Am C Bb", "Em Em Em Em", "Em Em Em Em"])
+	var song := _new_song(chords, 92.0, 0.0)
+	var bars: int = song["chords"].size()
+	var kick_steps: Array[float] = [0.0, 1.5, 3.5, 4.5]
+	var kicks: Array[float] = []
+
+	var drums: Dictionary = _stem(song)
+	for bar in bars:
+		for step: float in kick_steps:
+			# The first four bars hold back, so the full beat lands as an arrival.
+			if bar >= 2 or step == 0.0 or step == 4.5:
+				var at: float = _step_time(song, float(bar * 8) + step)
+				_boom(drums, at, 0.85, 0.34, 125.0, 44.0)
+				kicks.append(at)
+		for step: float in [2.0, 6.0]:
+			_snare(drums, _step_time(song, float(bar * 8) + step), 0.42, 0.17, 0.55)
+		for i in 16:
+			# A gap every so often keeps the hats from ticking like a clock.
+			if bar >= 2 and i % 8 != 7:
+				var strong: float = 1.0 if i % 2 == 0 else 0.55
+				_hat(drums, _step_time(song, float(bar * 8) + float(i) * 0.5), 0.05 * strong, 0.028)
+		if bar >= 2 and bar % 2 == 1:
+			_hat(drums, _step_time(song, float(bar * 8) + 7.5), 0.09, 0.16)
+	_drive(drums["buffer"], 1.5)
+
+	var grit: Dictionary = _stem(song)
+	var bass_shape: Array = [0.006, 0.08, 0.8, 0.03]
+	_line(grit, bass_line, 0, Wave.SAW, 0.5, 0.5, 0.92, bass_shape)
+	_line(grit, bass_line, 0, Wave.SAW, 0.5, 0.5, 0.92, bass_shape, 0.0, 1.007)
+	_drive(grit["buffer"], 3.2)
+	_lowpass(grit["buffer"], 0.16)
+	_sidechain(grit, kicks, 0.3, 0.16)
+	var sub: Dictionary = _stem(song)
+	_line(sub, bass_line, 0, Wave.SINE, 0.55, 0.5, 0.92, bass_shape, 0.0, 0.5)
+	_sidechain(sub, kicks, 0.55, 0.12)
+
+	# Dub stabs from down the tunnel, only once the beat has landed.
+	var stabs: Dictionary = _stem(song)
+	for bar in range(4, bars):
+		if bar % 2 == 0:
+			for step: float in [3.5, 7.0]:
+				var token: String = str(song["chords"][bar])
+				for freq in _chord_freqs(token, 3):
+					_note(stabs, _step_time(song, float(bar * 8) + step), 0.09, freq, Wave.SAW, 0.12, 0.5, 0.003, 0.06, 0.3, 0.05, 0.0)
+	_lowpass(stabs["buffer"], 0.14)
+	_echo(stabs, song, 3.0, 0.5, 4)
+
+	# A sour little hook over the last stretch.
+	var hook: Dictionary = _stem(song)
+	var hook_text := "E4/3 G4/1 Bb4/2 A4/2|G4/4 E4/2 R/2|E4/3 G4/1 B4/2 C5/2|Bb4/2 A4/2 G4/2 F4/2|E4/3 G4/1 Bb4/2 A4/2|G4/4 E4/2 R/2|D5/2 C5/2 Bb4/2 G4/2|F4/2 E4/4 R/2"
+	_line(hook, hook_text, 16, Wave.PULSE, 0.17, 0.14, 0.82, [0.01, 0.1, 0.6, 0.08], 0.006)
+	_lowpass(hook["buffer"], 0.3)
+	_echo(hook, song, 1.5, 0.3, 2)
+
+	_add_crackle(song, 90, 0.05)
+	_add_ribbit(song, _step_time(song, 7.0 * 8.0 + 4.0), 0.1)
+	_add_ribbit(song, _step_time(song, 15.0 * 8.0 + 4.5), 0.1)
+	_add_ribbit(song, _step_time(song, 23.0 * 8.0 + 2.0), 0.1)
+	_mix(song, sub, 0.9)
+	_mix(song, grit, 0.72)
+	_mix(song, drums, 0.85)
+	_mix(song, stabs, 0.7)
+	_mix(song, hook, 0.8)
+	_soft_clip(song["buffer"], 0.8)
+	return _finish_song(song)
+
+
+# The swamp's rival: the same dirt at nearly double the speed, with nowhere to breathe.
+func _song_swamp_boss() -> PackedFloat32Array:
+	var run_one: String = _sixteenths("E2 E2 E3 E2 G2 E2 Bb2 E2 A2 E2 G2 E2 F2 E2 D2 E2")
+	var run_two: String = _sixteenths("E2 E2 E3 E2 G2 E2 Bb2 A2 G2 E2 D2 E2 F2 F2 G2 Bb2")
+	var run_up: String = _sixteenths("E2 F2 G2 Bb2 E2 F2 G2 Bb2 E3 D3 C3 Bb2 G2 F2 E2 D2")
+	var on_c: String = _sixteenths("C2 C2 C3 C2 Eb2 C2 G2 C2 F2 C2 Eb2 C2 D2 C2 B1 C2")
+	var on_bb: String = _sixteenths("Bb1 Bb1 Bb2 Bb1 D2 Bb1 F2 Bb1 Eb2 Bb1 D2 Bb1 C2 Bb1 A1 Bb1")
+	var on_b: String = _sixteenths("B1 B1 B2 B1 D#2 B1 F#2 B1 A2 B1 F#2 B1 D#2 B1 C2 D2")
+	var verse: String = "|".join([run_one, run_two, run_one, run_two, run_one, run_two, run_one, run_up])
+	var middle: String = "|".join([on_c, on_c, on_bb, on_bb, on_c, on_c, on_b, on_b])
+	var bass_line: String = "|".join([verse, middle, verse, middle])
+	var chords_verse := "Em Em Em Em Em Em Em Em"
+	var chords_middle := "C C Bb Bb C C B7 B7"
+	var chords: String = " ".join([chords_verse, chords_middle, chords_verse, chords_middle])
+	var song := _new_song(chords, 172.0, 0.0)
+	var bars: int = song["chords"].size()
+	var kicks: Array[float] = []
+
+	var drums: Dictionary = _stem(song)
+	for bar in bars:
+		var fill: bool = bar % 8 == 7
+		for step: float in [0.0, 1.5, 3.5, 5.0]:
+			var at: float = _step_time(song, float(bar * 8) + step)
+			_boom(drums, at, 0.85, 0.16, 170.0, 52.0)
+			kicks.append(at)
+		for step: float in [2.0, 6.0]:
+			_snare(drums, _step_time(song, float(bar * 8) + step), 0.46, 0.11, 0.65)
+		for step: float in [4.5, 7.5]:
+			_snare(drums, _step_time(song, float(bar * 8) + step), 0.13, 0.05, 0.7)
+		for i in 16:
+			var strong: float = 1.0 if i % 2 == 0 else 0.6
+			_hat(drums, _step_time(song, float(bar * 8) + float(i) * 0.5), 0.05 * strong, 0.022)
+		if fill:
+			for i in 8:
+				_snare(drums, _step_time(song, float(bar * 8) + 4.0 + float(i) * 0.5), 0.14 + 0.035 * float(i), 0.05, 0.7)
+	_drive(drums["buffer"], 1.8)
+
+	var grit: Dictionary = _stem(song)
+	var bass_shape: Array = [0.003, 0.05, 0.75, 0.015]
+	_line(grit, bass_line, 0, Wave.SAW, 0.5, 0.5, 0.9, bass_shape)
+	_line(grit, bass_line, 0, Wave.SAW, 0.5, 0.5, 0.9, bass_shape, 0.0, 1.009)
+	_drive(grit["buffer"], 4.5)
+	_lowpass(grit["buffer"], 0.2)
+	_sidechain(grit, kicks, 0.5, 0.08)
+	var sub: Dictionary = _stem(song)
+	_line(sub, bass_line, 0, Wave.SINE, 0.45, 0.5, 0.9, bass_shape, 0.0, 0.5)
+
+	# An alarm of a lead that never settles: two notes a half step apart, then a scramble.
+	var alarm: Dictionary = _stem(song)
+	var alarm_one: String = _sixteenths("E5 F5 E5 F5 E5 F5 G5 F5 E5 F5 E5 F5 Bb5 A5 G5 F5")
+	var alarm_two: String = _sixteenths("E5 G5 Bb5 E6 Bb5 G5 E5 G5 F5 A5 C6 F6 C6 A5 F5 D5")
+	var alarm_c: String = _sixteenths("C5 Eb5 G5 C6 G5 Eb5 C5 Eb5 D5 F5 Bb5 D6 Bb5 F5 D5 B4")
+	var alarm_verse: String = "|".join([alarm_one, alarm_one, alarm_two, alarm_one, alarm_one, alarm_one, alarm_two, alarm_two])
+	var alarm_middle: String = "|".join([alarm_c, alarm_c, alarm_c, alarm_c, alarm_c, alarm_c, alarm_c, alarm_c])
+	_line(alarm, alarm_verse, 16, Wave.PULSE, 0.13, 0.3, 0.75, [0.002, 0.03, 0.55, 0.015])
+	_line(alarm, alarm_middle, 8, Wave.PULSE, 0.09, 0.3, 0.75, [0.002, 0.03, 0.55, 0.015])
+	_line(alarm, alarm_middle, 24, Wave.PULSE, 0.13, 0.3, 0.75, [0.002, 0.03, 0.55, 0.015])
+	_drive(alarm["buffer"], 2.0)
+	_lowpass(alarm["buffer"], 0.38)
+
+	_add_crackle(song, 80, 0.04)
+	_mix(song, sub, 0.85)
+	_mix(song, grit, 0.72)
+	_mix(song, drums, 0.85)
+	_mix(song, alarm, 0.65)
+	_soft_clip(song["buffer"], 0.7)
+	return _finish_song(song)
+
+
+# Floating Isles: slow bells and soft air in D, with no drums at all.
+func _song_isles() -> PackedFloat32Array:
+	var a := "F#5/3 A5/1 D6/4|B5/3 A5/1 F#5/4|D5/2 F#5/2 B5/4|A5/3 G5/1 D5/4|E5/2 G5/2 B5/4|A5/3 C#6/1 E6/4|F#6/4 D6/2 A5/2|E6/3 C#6/1 A5/4"
+	var b := "D6/3 B5/1 G5/4|C#6/3 A5/1 F#5/4|B5/2 G5/2 E5/4|C#5/2 E5/2 A5/4|D6/3 F#6/1 B5/4|G5/2 B5/2 D6/4|E6/3 D6/1 B5/4|A5/3 G5/1 E5/4"
+	var chords_a := "Dmaj7 Gmaj7 Bm7 Gmaj7 Em7 A7 Dmaj7 A7"
+	var chords_b := "Gmaj7 F#m7 Em7 A7 Bm7 Gmaj7 Em7 A7"
+	var song := _new_song(" ".join([chords_a, chords_b, chords_a]), 84.0, 0.0)
+	var bars: int = song["chords"].size()
+
+	var pad: Dictionary = _stem(song)
+	var bar_time: float = float(song["eighth"]) * 8.0
+	for bar in bars:
+		var start: float = _step_time(song, float(bar * 8))
+		var chord: String = song["chords"][bar]
+		for freq in _chord_freqs(chord, 3):
+			_note(pad, start, bar_time, freq, Wave.SINE, 0.16, 0.5, 0.75, 0.2, 0.9, 0.8, 0.0)
+			_note(pad, start, bar_time, freq * 2.006, Wave.SINE, 0.05, 0.5, 0.9, 0.2, 0.9, 0.8, 0.0)
+		_note(pad, start, bar_time * 0.85, _chord_freqs(chord, 2)[0], Wave.SINE, 0.2, 0.5, 0.25, 0.4, 0.7, 0.6, 0.0)
+
+	var bells: Dictionary = _stem(song)
+	var bell_shape: Array = [0.004, 0.7, 0.12, 0.5]
+	_line(bells, "|".join([a, b, a]), 0, Wave.KEYS, 0.3, 0.5, 1.0, bell_shape)
+	# High, quiet notes drifting through the middle.
+	for bar in range(8, 16):
+		var tones: Array[float] = _chord_freqs(song["chords"][bar], 5)
+		for i in 4:
+			var at: float = _step_time(song, float(bar * 8) + 1.0 + float(i) * 2.0)
+			_note(bells, at, 0.3, tones[(bar + i) % tones.size()], Wave.KEYS, 0.07, 0.5, 0.004, 0.4, 0.08, 0.4, 0.0)
+	_echo(bells, song, 3.0, 0.42, 4)
+
+	_mix(song, pad, 1.0)
+	_mix(song, bells, 0.9)
+	_add_air(song, 0.1)
+	_soft_clip(song["buffer"], 1.05)
+	return _finish_song(song)
+
+
+# --- Tools for the biome music ---
+
+
+# An empty buffer with the song's timing, to be treated on its own and then mixed in.
+func _stem(song: Dictionary) -> Dictionary:
+	var stem: Dictionary = song.duplicate()
+	var buffer := PackedFloat32Array()
+	buffer.resize(song["buffer"].size())
+	stem["buffer"] = buffer
+	return stem
+
+
+func _mix(song: Dictionary, stem: Dictionary, gain: float) -> void:
+	var into: PackedFloat32Array = song["buffer"]
+	var from: PackedFloat32Array = stem["buffer"]
+	for i in from.size():
+		into[i] += from[i] * gain
+	song["buffer"] = into
+
+
+# Plays a written line from a given bar. Notes last their written length times the gate, and a
+# ratio other than 1 retunes the line: 0.5 is an octave down, and a hair over 1 thickens it.
+func _line(song: Dictionary, text: String, from_bar: int, wave: int, volume: float, duty: float, gate: float, shape: Array, vibrato: float = 0.0, ratio: float = 1.0) -> void:
+	var bars: PackedStringArray = text.split("|")
+	if from_bar + bars.size() > song["chords"].size():
+		push_error("a line runs to bar %d of a %d bar song" % [from_bar + bars.size(), song["chords"].size()])
+	for b in bars.size():
+		var steps: float = 0.0
+		for token: String in bars[b].split(" ", false):
+			var parts: PackedStringArray = token.split("/")
+			var length: float = float(parts[1])
+			if parts[0] != "R":
+				var at: float = float((from_bar + b) * 8) + steps
+				var start: float = _step_time(song, at)
+				var span: float = _step_time(song, at + length) - start
+				_note(song, start, span * gate, _freq(parts[0]) * ratio, wave, volume, duty, float(shape[0]), float(shape[1]), float(shape[2]), float(shape[3]), vibrato)
+			steps += length
+		if not is_equal_approx(steps, 8.0):
+			push_error("bar %d of a line lasts %s eighths" % [b + 1, steps])
+
+
+func _sixteenths(names: String) -> String:
+	var tokens: PackedStringArray = PackedStringArray()
+	for note_name: String in names.split(" ", false):
+		tokens.append(note_name + "/0.5")
+	if tokens.size() != 16:
+		push_error("expected 16 notes in: %s" % names)
+	return " ".join(tokens)
+
+
+# A walking bass. A bar can hold two chords, written "Cm7/F7", and each beat steps toward the
+# next chord's root.
+func _add_jazz_bass(song: Dictionary, volume: float) -> void:
+	var chords: PackedStringArray = song["chords"]
+	for bar in chords.size():
+		var parts: PackedStringArray = chords[bar].split("/")
+		var next_root: float = _chord_freqs(chords[(bar + 1) % chords.size()].split("/")[0], 2)[0]
+		var tones: Array[float] = _chord_freqs(parts[0], 2)
+		var line: Array[float] = []
+		if parts.size() > 1:
+			var second: Array[float] = _chord_freqs(parts[1], 2)
+			line = [tones[0], tones[2], second[0], _approach(next_root, second[0])]
+		elif bar % 2 == 0:
+			line = [tones[0], tones[1], tones[2], _approach(next_root, tones[2])]
+		else:
+			line = [tones[0], tones[2], tones[1], _approach(next_root, tones[1])]
+		for beat in 4:
+			var start: float = _step_time(song, float(bar * 8 + beat * 2))
+			_note(song, start, float(song["eighth"]) * 1.75, line[beat], Wave.KEYS, volume, 0.5, 0.004, 0.14, 0.5, 0.04, 0.0)
+
+
+func _approach(target: float, from: float) -> float:
+	var half_step: float = pow(2.0, 1.0 / 12.0)
+	return target * half_step if target < from else target / half_step
+
+
+# Piano stabs on the first beat and the "and" of two. Leaving out the root, which the bass has.
+func _add_jazz_comp(song: Dictionary, volume: float) -> void:
+	var chords: PackedStringArray = song["chords"]
+	for bar in chords.size():
+		var parts: PackedStringArray = chords[bar].split("/")
+		var hits: Array = [[0, parts[0]], [3, parts[parts.size() - 1]]]
+		if bar % 4 == 3:
+			hits.append([5, parts[parts.size() - 1]])
+		for hit: Array in hits:
+			var start: float = _step_time(song, float(bar * 8 + int(hit[0])))
+			var tones: Array[float] = _chord_freqs(str(hit[1]), 3)
+			for i in range(1, tones.size()):
+				_note(song, start, float(song["eighth"]) * 0.8, tones[i] * 2.0 if i == 1 else tones[i], Wave.KEYS, volume, 0.5, 0.003, 0.12, 0.3, 0.05, 0.0)
+
+
+# Ride cymbal on the swing pattern, the hi-hat closing on two and four, and a light kick.
+func _add_jazz_drums(song: Dictionary) -> void:
+	var bars: int = song["chords"].size()
+	var buffer: PackedFloat32Array = song["buffer"]
+	var rate: int = song["rate"]
+	for bar in bars:
+		for step: int in [0, 2, 3, 4, 6, 7]:
+			var strong: float = 1.0 if step == 2 or step == 6 else 0.6
+			_burst(buffer, rate, _step_time(song, float(bar * 8 + step)), 0.1, 0.075 * strong, 1.0, 0.85)
+		for step: int in [2, 6]:
+			_burst(buffer, rate, _step_time(song, float(bar * 8 + step)), 0.035, 0.055, 0.9, 0.5)
+		for step: int in [0, 4]:
+			_boom(song, _step_time(song, float(bar * 8 + step)), 0.16, 0.1, 110.0, 60.0)
+		# A little snare chatter leading into each new eight bars.
+		if bar % 8 == 7:
+			for step: int in [3, 5, 6, 7]:
+				_snare(song, _step_time(song, float(bar * 8 + step)), 0.13, 0.07, 0.55)
+		elif bar % 2 == 1:
+			_snare(song, _step_time(song, float(bar * 8 + 5)), 0.05, 0.05, 0.5)
+
+
+# A long, low kick that slides down in pitch.
+func _boom(song: Dictionary, start: float, volume: float, length: float, from_freq: float, to_freq: float) -> void:
+	var buffer: PackedFloat32Array = song["buffer"]
+	var rate: int = song["rate"]
+	var first: int = int(start * float(rate))
+	var count: int = int(length * float(rate))
+	var phase: float = 0.0
+	for i in count:
+		var t: float = float(i) / float(rate)
+		phase += lerpf(from_freq, to_freq, minf(t / 0.05, 1.0)) / float(rate)
+		var u: float = float(i) / float(count)
+		var attack: float = minf(float(i) / 12.0, 1.0)
+		buffer[posmod(first + i, buffer.size())] += sin(phase * TAU) * pow(1.0 - u, 1.6) * attack * volume
+	song["buffer"] = buffer
+
+
+func _snare(song: Dictionary, start: float, volume: float, length: float, open: float) -> void:
+	_burst(song["buffer"], int(song["rate"]), start, length, volume, open, open * 0.5)
+	_note(song, start, length * 0.5, 185.0, Wave.SINE, volume * 0.55, 0.5, 0.001, 0.04, 0.2, 0.03, 0.0)
+
+
+func _hat(song: Dictionary, start: float, volume: float, length: float) -> void:
+	_burst(song["buffer"], int(song["rate"]), start, length, volume, 1.0, 1.0)
+
+
+# Saturation: loud parts flatten and grow harmonics, which is where bass grit comes from.
+func _drive(buffer: PackedFloat32Array, amount: float) -> void:
+	for i in buffer.size():
+		buffer[i] = tanh(buffer[i] * amount)
+
+
+# The same, gentle enough to hold a finished mix together.
+func _soft_clip(buffer: PackedFloat32Array, amount: float) -> void:
+	_drive(buffer, amount)
+
+
+# Takes the top off. The first pass only settles the filter, so the loop's seam matches.
+func _lowpass(buffer: PackedFloat32Array, open: float) -> void:
+	var low: float = 0.0
+	for sample in buffer:
+		low += (sample - low) * open
+	for i in buffer.size():
+		low += (buffer[i] - low) * open
+		buffer[i] = low
+
+
+# Dips a stem at each kick, then lets it swell back. That pumping is half of the bump.
+func _sidechain(stem: Dictionary, times: Array[float], floor_gain: float, recover: float) -> void:
+	var buffer: PackedFloat32Array = stem["buffer"]
+	var rate: int = stem["rate"]
+	var count: int = int(recover * float(rate))
+	for time in times:
+		var first: int = int(time * float(rate))
+		for i in count:
+			buffer[posmod(first + i, buffer.size())] *= lerpf(floor_gain, 1.0, float(i) / float(count))
+	stem["buffer"] = buffer
+
+
+# Repeats fading away. They wrap round, so the tail of the last bar falls into the first.
+func _echo(stem: Dictionary, song: Dictionary, steps: float, feedback: float, repeats: int) -> void:
+	var buffer: PackedFloat32Array = stem["buffer"]
+	var dry: PackedFloat32Array = buffer.duplicate()
+	var gap: int = int(steps * float(song["eighth"]) * float(song["rate"]))
+	var size: int = buffer.size()
+	for r in range(1, repeats + 1):
+		var gain: float = pow(feedback, float(r))
+		for i in size:
+			buffer[(i + gap * r) % size] += dry[i] * gain
+	stem["buffer"] = buffer
+
+
+func _add_crackle(song: Dictionary, count: int, volume: float) -> void:
+	var length: float = float(song["buffer"].size()) / float(song["rate"])
+	for _i in count:
+		_burst(song["buffer"], int(song["rate"]), _rng.randf_range(0.0, length), 0.004, volume * _rng.randf_range(0.4, 1.0), 1.0, 1.0)
+
+
+# A frog, off in the dark.
+func _add_ribbit(song: Dictionary, start: float, volume: float) -> void:
+	for i in 3:
+		_note(song, start + float(i) * 0.07, 0.04, 190.0 - float(i) * 12.0, Wave.PULSE, volume, 0.15, 0.003, 0.02, 0.6, 0.015, 0.0)
+
+
+# Slow-moving air under the whole song. Its first pass settles the filter, so it has no seam.
+func _add_air(song: Dictionary, volume: float) -> void:
+	var buffer: PackedFloat32Array = song["buffer"]
+	var count: int = buffer.size()
+	var low: float = 0.0
+	for i in count * 2:
+		low = lerpf(low, _rng.randf_range(-1.0, 1.0), 0.05)
+		if i >= count:
+			var u: float = float(i - count) / float(count)
+			var swell: float = 0.6 + 0.25 * sin(u * TAU * 4.0) + 0.15 * sin(u * TAU * 7.0 + 2.0)
+			buffer[i - count] += low * swell * volume
+	song["buffer"] = buffer
+
+
+# A breezy shuffle in F major. Now the title screen's own tune.
+func _song_title() -> PackedFloat32Array:
 	var a_start := "A4/2 C5/1 D5/1 C5/2 A4/2|F5/3 E5/1 D5/2 A4/2|Bb4/2 D5/1 F5/1 E5/2 D5/2|C5/3 Bb4/1 G4/2 E4/2"
 	var a_one := a_start + "|F4/1 A4/1 C5/1 F5/1 E5/1 F5/1 G5/2|E5/2 C5/1 A4/1 E5/2 R/2|D5/2 F5/1 D5/1 Bb4/2 D5/2|C5/2 E5/1 G5/1 E5/2 C5/2"
 	var a_two := a_start + "|D5/1 F5/1 Bb5/2 A5/1 G5/1 F5/2|E5/1 G5/1 C6/2 Bb5/1 G5/1 E5/2|F5/3 C5/1 A4/2 C5/2|F5/4 R/4"
@@ -250,7 +736,18 @@ func _note(song: Dictionary, start: float, length: float, freq: float, wave: int
 		var step: float = freq * vib / float(rate)
 		phase = fmod(phase + step, 1.0)
 		var env: float = _envelope(t, length, attack, decay, sustain, release)
-		var sample: float = _pulse(phase, duty, step) if wave == Wave.PULSE else _triangle(phase)
+		var sample: float = 0.0
+		match wave:
+			Wave.PULSE:
+				sample = _pulse(phase, duty, step)
+			Wave.SAW:
+				sample = _saw(phase, step)
+			Wave.SINE:
+				sample = sin(phase * TAU)
+			Wave.KEYS:
+				sample = _keys(phase, t)
+			_:
+				sample = _triangle(phase)
 		var at: int = posmod(first + i, size)
 		buffer[at] += sample * env * volume
 	song["buffer"] = buffer
@@ -315,6 +812,17 @@ func _edge(t: float, step: float) -> float:
 		var x: float = (t - 1.0) / step
 		return x * x + x + x + 1.0
 	return 0.0
+
+
+# A rising ramp, its jump smoothed like the pulse wave's edges.
+func _saw(phase: float, step: float) -> float:
+	return 2.0 * phase - 1.0 - _edge(phase, step)
+
+
+# A struck tone: bright harmonics at the start, fading to something rounder.
+func _keys(phase: float, t: float) -> float:
+	var bright: float = exp(-t * 7.0)
+	return sin(phase * TAU) + sin(phase * TAU * 2.0) * (0.12 + 0.3 * bright) + sin(phase * TAU * 4.0) * 0.14 * bright
 
 
 # Stepped into 16 levels, like an old sound chip.
@@ -555,6 +1063,11 @@ func _save(file_name: String, samples: PackedFloat32Array, rate: int, loops: boo
 		gain = minf(gain, 0.5)
 	elif file_name.begins_with("sfx_"):
 		gain = minf(gain, 1.0)
+	elif TARGET_RMS.has(file_name):
+		var energy: float = 0.0
+		for s in samples:
+			energy += s * s
+		gain = minf(gain, float(TARGET_RMS[file_name]) / sqrt(energy / float(samples.size())))
 	var data := PackedByteArray()
 	data.resize(samples.size() * 2)
 	for i in samples.size():
@@ -573,4 +1086,20 @@ func _save(file_name: String, samples: PackedFloat32Array, rate: int, loops: boo
 	if error != OK:
 		push_error("couldn't save %s: %d" % [path, error])
 	var seam: float = absf(samples[0] - samples[samples.size() - 1]) * gain if loops else 0.0
-	_report.append("%-20s %6.2fs  raw peak %.2f%s" % [file_name, float(samples.size()) / float(rate), peak, "  seam jump %.3f" % seam if loops else ""])
+	var level_text: String = _level_text(samples, gain) if file_name.begins_with("music_") else ""
+	_report.append("%-20s %6.2fs  raw peak %.2f%s%s" % [file_name, float(samples.size()) / float(rate), peak, "  seam jump %.3f" % seam if loops else "", level_text])
+
+
+# How loud a song is on average, and how much of that is under roughly 150 Hz. Nobody here can
+# hear the songs while writing them, so these keep the mix honest.
+func _level_text(samples: PackedFloat32Array, gain: float) -> String:
+	var low: float = 0.0
+	var total_energy: float = 0.0
+	var low_energy: float = 0.0
+	for sample in samples:
+		var value: float = sample * gain
+		low += (value - low) * 0.04
+		total_energy += value * value
+		low_energy += low * low
+	var rms: float = sqrt(total_energy / float(samples.size()))
+	return "  rms %.3f  bass share %.0f%%" % [rms, 100.0 * low_energy / maxf(total_energy, 0.000001)]

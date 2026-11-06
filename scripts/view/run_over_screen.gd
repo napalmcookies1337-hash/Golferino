@@ -113,7 +113,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _headline() -> Array:
 	match run.ending:
 		RunState.Ending.BEAT_RIVAL:
-			return ["YOU BEAT THE RIVAL!", GOOD]
+			return ["YOU BEAT BOTH RIVALS!" if run.set_number > 1 else "YOU BEAT THE RIVAL!", GOOD]
 		RunState.Ending.LOST_TO_RIVAL:
 			return ["THE RIVAL WINS", BAD]
 		RunState.Ending.OUT_OF_STROKES:

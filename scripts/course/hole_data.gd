@@ -2,7 +2,13 @@ class_name HoleData
 extends Resource
 ## One hole, described entirely as data. New holes need no new code.
 
+const BIOME_GRASSY := "grassy"
+const BIOME_SWAMP := "swamp"
+
 @export var display_name: String = "HOLE"
+## Which world the hole belongs to. Sets how it looks and sounds, not how it plays: everything
+## that changes play is in its surfaces and obstacles.
+@export var biome: String = BIOME_GRASSY
 @export var par: int = 4
 @export var tee_x: float = 90.0
 @export var cup_x: float = 1000.0

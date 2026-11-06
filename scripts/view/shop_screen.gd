@@ -26,6 +26,7 @@ const CARDS_TOP := 34.0
 const CARD_HEIGHT := 100.0
 const CARD_GAP := 8.0
 const LEAVE_BUTTON := Rect2(250, 140, 140, 18)
+const REROLL_BUTTON := Rect2(398, 140, 140, 18)
 const BAG_LEFT := 22.0
 const BAG_TOP := 186.0
 const BAG_ROW_HEIGHT := 22.0
@@ -45,7 +46,7 @@ var run: RunState
 var stock: Array[Dictionary] = []
 var sold: Dictionary = {}
 var mode: int = Mode.BROWSE
-## The selected card. One past the last card is the button to leave.
+## The selected card. One past the last card is the button to leave, then the reroll button.
 var cursor: int = 0
 var club_cursor: int = 0
 var slot_cursor: int = 0
@@ -61,13 +62,15 @@ var _flashes: Dictionary = {}
 
 func setup(p_run: RunState) -> void:
 	run = p_run
+	run.begin_shop()
 	stock = run.roll_stock()
 	var next_index: int = run.course.hole_index + 1
 	if next_index < run.course.hole_count():
 		var next: HoleData = run.course.hole_at(next_index)
 		_next_hole_text = "NEXT: %s  PAR %d" % [next.display_name, next.par]
 	else:
-		_next_hole_text = "NEXT: SET %d" % run.set_number
+		var biome_name: String = "SWAMPY SHORES" if HoleGenerator.biome_for_set(run.set_number) == HoleData.BIOME_SWAMP else "GRASSY GREENS"
+		_next_hole_text = "NEXT: SET %d, %s" % [run.set_number, biome_name] if run.infinite else "NEXT: %s" % biome_name
 
 
 func _ready() -> void:
@@ -128,13 +131,13 @@ func _move(step: Vector2i) -> void:
 	match mode:
 		Mode.BROWSE:
 			if step.x != 0:
-				cursor = posmod(cursor + step.x, stock.size() + 1)
-			elif step.y > 0 and cursor == stock.size():
+				cursor = posmod(cursor + step.x, stock.size() + 2)
+			elif step.y > 0 and cursor >= stock.size():
 				ball_cursor = maxi(run.balls.find(run.ball_id), 0)
 				mode = Mode.BALLS
 			elif step.y > 0:
 				cursor = stock.size()
-			elif step.y < 0 and cursor == stock.size():
+			elif step.y < 0 and cursor >= stock.size():
 				cursor = 0
 		Mode.PICK_CLUB:
 			if step.y != 0:
@@ -164,9 +167,11 @@ func _step_club(direction: int) -> void:
 func _confirm() -> void:
 	match mode:
 		Mode.BROWSE:
-			if cursor >= stock.size():
+			if cursor == stock.size():
 				Sound.sfx("menu_ok")
 				done.emit()
+			elif cursor > stock.size():
+				_try_reroll()
 			else:
 				_try_buy()
 		Mode.PICK_CLUB:
@@ -211,6 +216,23 @@ func _try_buy() -> void:
 		Sound.sfx("menu_ok")
 	elif run.buy(item):
 		_mark_sold()
+
+
+# New items on every shelf, so anything already bought from comes back in stock too. The
+# selection stays on the button, ready for another go.
+func _try_reroll() -> void:
+	if not run.can_reroll():
+		Sound.sfx("denied")
+		return
+	stock = run.reroll_stock(stock)
+	sold.clear()
+	_flashes.clear()
+	cursor = stock.size() + 1
+	Sound.sfx("buy")
+	for i in stock.size():
+		_flashes[i] = BUY_FLASH_TIME
+	if _fx != null:
+		_fx.burst(REROLL_BUTTON.get_center(), ACCENT, 14, 70.0)
 
 
 func _finish_sticker(club_id: String, slot: int) -> void:
@@ -259,6 +281,9 @@ func _hover(at: Vector2) -> void:
 			if LEAVE_BUTTON.has_point(at):
 				cursor = stock.size()
 				mode = Mode.BROWSE
+			if REROLL_BUTTON.has_point(at):
+				cursor = stock.size() + 1
+				mode = Mode.BROWSE
 			for slot in run.balls.size():
 				if _ball_rect(slot).has_point(at):
 					ball_cursor = slot
@@ -284,7 +309,7 @@ func _row_rect(row: int) -> Rect2:
 func _is_over_choice(at: Vector2) -> bool:
 	match mode:
 		Mode.BROWSE:
-			if LEAVE_BUTTON.has_point(at):
+			if LEAVE_BUTTON.has_point(at) or REROLL_BUTTON.has_point(at):
 				return true
 			for i in stock.size():
 				if _card_rect(i).has_point(at):
@@ -309,6 +334,7 @@ func _draw() -> void:
 	for i in stock.size():
 		_draw_card(i)
 	_draw_leave_button()
+	_draw_reroll_button()
 	_draw_bag()
 	_draw_balls()
 	_draw_perks()
@@ -370,15 +396,23 @@ func _draw_card(index: int) -> void:
 
 
 func _draw_leave_button() -> void:
-	var is_selected: bool = mode == Mode.BROWSE and cursor >= stock.size()
+	var is_selected: bool = mode == Mode.BROWSE and cursor == stock.size()
 	draw_rect(LEAVE_BUTTON, PANEL)
 	draw_rect(LEAVE_BUTTON, ACCENT if is_selected else DIM, false, 1.0)
 	var label: String = "NEXT HOLE >"
 	if run.course.hole_index + 2 == run.course.hole_count():
 		label = "TO THE DUEL >"
 	elif run.course.is_last_hole():
-		label = "NEXT SET >"
+		label = "NEXT SET >" if run.infinite else "TO THE SWAMP >"
 	PixelFont.draw_centered(self, label, LEAVE_BUTTON.get_center().x, LEAVE_BUTTON.position.y + 6.0, ACCENT if is_selected else TEXT)
+
+
+func _draw_reroll_button() -> void:
+	var is_selected: bool = mode == Mode.BROWSE and cursor > stock.size()
+	draw_rect(REROLL_BUTTON, PANEL)
+	draw_rect(REROLL_BUTTON, ACCENT if is_selected else DIM, false, 1.0)
+	var color: Color = BAD if not run.can_reroll() else (ACCENT if is_selected else TEXT)
+	PixelFont.draw_centered(self, "REROLL: %d COINS" % run.reroll_price(), REROLL_BUTTON.get_center().x, REROLL_BUTTON.position.y + 6.0, color)
 
 
 func _draw_bag() -> void:
@@ -452,7 +486,13 @@ func _draw_prompt() -> void:
 	match mode:
 		Mode.BROWSE:
 			var item: Dictionary = _selected_item()
-			if item.is_empty():
+			if cursor > stock.size():
+				text = "SPACE TO REROLL   DOWN TO SWAP BALLS   UP TO GO BACK   TAB SCORECARD"
+				if run.can_reroll():
+					PixelFont.draw_centered(self, "NEW ITEMS ON EVERY SHELF. THE PRICE DOUBLES EACH TIME", 320.0, 330.0, ACCENT)
+				else:
+					PixelFont.draw_centered(self, "NOT ENOUGH COINS", 320.0, 330.0, BAD)
+			elif item.is_empty():
 				text = "SPACE TO LEAVE   DOWN TO SWAP BALLS   UP TO GO BACK   TAB SCORECARD"
 			elif not sold.has(cursor):
 				if not run.can_afford(item):

@@ -69,6 +69,15 @@ lose a duel. Beating a boss cashes in your spare strokes for coins and puts them
 your coins and gear, and raises the difficulty one step, up to 10. It has its own page of high
 scores.
 
+## Swampy Shores
+
+Beat the rival on Grassy Greens and your run carries on into a second course, with your coins,
+gear and spare strokes just as they were. Mud stops the ball dead and is heavy to hit out of,
+lily pads are safe spots to land on in the murky water, frogs knock your ball away, gas vents
+bubble as a warning before they throw it into the air, and a gator will eat any ball that lands
+too close, for a penalty stroke, before it flashes and disappears. Watch for the rotting windmills.
+The rival is waiting at the end, better than before, though it still only cheats twice.
+
 ## Floating Isles
 
 An accuracy mode, open from the start, on the title menu. Choose a course of 1000, 2000 or 4000

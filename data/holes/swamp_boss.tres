@@ -1,0 +1,212 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_07n3r"]
+
+[resource]
+script = ExtResource("1_07n3r")
+display_name = "BOSS HOLE"
+biome = "swamp"
+par = 7
+cup_x = 3040.0
+points = PackedVector2Array(0, 300, 60, 304, 130, 306, 340, 304, 520, 298, 690, 302, 860, 292, 1020, 296, 1180, 292, 1230, 354, 1540, 358, 1590, 296, 1760, 300, 1930, 306, 2110, 296, 2280, 290, 2450, 284, 2640, 276, 2800, 272, 2920, 268, 3040, 266, 3160, 268, 3300, 242)
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 700,
+"type": 1
+}, {
+"from": 700,
+"to": 860,
+"type": 6
+}, {
+"from": 860,
+"to": 1190,
+"type": 1
+}, {
+"from": 1590,
+"to": 1740,
+"type": 1
+}, {
+"from": 1740,
+"to": 1960,
+"type": 6
+}, {
+"from": 1960,
+"to": 2460,
+"type": 1
+}, {
+"from": 2460,
+"to": 2610,
+"type": 6
+}, {
+"from": 2610,
+"to": 2930,
+"type": 1
+}, {
+"from": 2930,
+"to": 3150,
+"type": 2
+}]
+water_spans = [{
+"from": 1195,
+"level": 326.0,
+"to": 1580
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 240.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 240.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 780.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 780.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1650.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1650.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2010.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 2010.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2590.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 2590.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 3230.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 3230.0
+}]
+obstacles = [{
+"from": 320.0,
+"kind": "frog",
+"speed": 75.0,
+"start": 490.0,
+"to": 660.0
+}, {
+"burst_time": 1.1,
+"height": 85.0,
+"kind": "vent",
+"offset": 0.0,
+"quiet_time": 2.6,
+"x": 960.0
+}, {
+"kind": "pad",
+"rotation": -22.0,
+"x": 1100.0
+}, {
+"kind": "lily",
+"width": 60.0,
+"x": 1300.0
+}, {
+"kind": "lily",
+"width": 60.0,
+"x": 1400.0
+}, {
+"kind": "lily",
+"width": 60.0,
+"x": 1500.0
+}, {
+"kind": "windmill",
+"rotation": 0.0,
+"turn_speed": 1.2,
+"x": 1680.0
+}, {
+"burst_time": 1.1,
+"height": 85.0,
+"kind": "vent",
+"offset": 1.4,
+"quiet_time": 2.6,
+"x": 2080.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 2300.0
+}, {
+"from": 2130.0,
+"kind": "frog",
+"speed": 80.0,
+"start": 2275.0,
+"to": 2420.0
+}, {
+"kind": "pad",
+"rotation": 18.0,
+"x": 2530.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 2710.0
+}, {
+"burst_time": 1.1,
+"height": 95.0,
+"kind": "vent",
+"offset": 2.4,
+"quiet_time": 2.6,
+"x": 2850.0
+}, {
+"kind": "coin",
+"x": 403.0,
+"y": 254.0
+}, {
+"kind": "coin",
+"x": 748.0,
+"y": 244.0
+}, {
+"kind": "coin",
+"x": 1093.0,
+"y": 227.0
+}, {
+"kind": "coin",
+"x": 1438.0,
+"y": 257.0
+}, {
+"kind": "coin",
+"x": 1783.0,
+"y": 225.0
+}, {
+"kind": "coin",
+"x": 2128.0,
+"y": 242.0
+}, {
+"kind": "coin",
+"x": 2473.0,
+"y": 223.0
+}, {
+"kind": "coin",
+"x": 2818.0,
+"y": 204.0
+}]
+title = "THE DEEP MIRE"

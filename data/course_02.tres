@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CourseData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/course_data.gd" id="1_75kyc"]
+
+[resource]
+script = ExtResource("1_75kyc")
+display_name = "SWAMPY SHORES"
+hole_paths = PackedStringArray("res://data/holes/swamp_01.tres", "res://data/holes/swamp_02.tres", "res://data/holes/swamp_03.tres", "res://data/holes/swamp_04.tres", "res://data/holes/swamp_05.tres", "res://data/holes/swamp_06.tres", "res://data/holes/swamp_07.tres", "res://data/holes/swamp_08.tres", "res://data/holes/swamp_09.tres", "res://data/holes/swamp_boss.tres")

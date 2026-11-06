@@ -147,16 +147,16 @@ func _finish_pose() -> void:
 		_follow_through(_phase_timer)
 
 
-# Jogs over to the cup, in from off screen if the shot was a long one, then jumps for joy.
+# Jogs over to the cup, in from off screen if the shot was a long one, then jumps for joy. On a
+# floating hole there's only sky to run across, so the golfer just appears beside the cup.
 func _celebrate() -> void:
 	var delta: float = get_process_delta_time()
 	var cup_x: float = game.hole.cup_x
 	if _celebrate_side == 0:
 		var from_x: float = position.x
 		_celebrate_side = -1 if from_x < cup_x else 1
-		# On a floating hole, the golfer can't run in across the sky.
-		var run_in: float = IslesGenerator.CUP_ISLAND_RUN_IN if game.terrain.is_floating() else RUN_IN_DISTANCE
-		position.x = cup_x + float(_celebrate_side) * minf(absf(from_x - cup_x), run_in)
+		var run_in: float = CELEBRATE_GAP if game.terrain.is_floating() else minf(absf(from_x - cup_x), RUN_IN_DISTANCE)
+		position.x = cup_x + float(_celebrate_side) * run_in
 	var target_x: float = cup_x + float(_celebrate_side) * CELEBRATE_GAP
 	_face_override = -_celebrate_side
 	_lean_scale = 0.0

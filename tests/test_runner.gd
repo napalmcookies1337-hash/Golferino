@@ -55,6 +55,7 @@ func _ready() -> void:
 	_test_putting_is_two_presses()
 	_test_aim_line_is_for_full_swings()
 	_test_tree_pieces()
+	_test_leaves_cover_trunks()
 	_test_bounce_pads()
 	_test_pads_never_fire_into_water()
 	_test_rotated_hazards()
@@ -71,8 +72,10 @@ func _ready() -> void:
 	_test_coin_pickups()
 	_test_trick_shots()
 	_test_stickers()
+	_test_overdrive()
 	_test_special_balls()
 	_test_shop_stock()
+	_test_shop_reroll()
 	_test_prices_climb()
 	_test_buying()
 	_test_perks()
@@ -1027,6 +1030,53 @@ func _test_putting_is_two_presses() -> void:
 	_check(again.meter.stage == SwingMeter.Stage.IDLE, "the next putt waits for its first press")
 
 
+# Every tree the game makes hides the top of its trunk, whichever pixel things round to.
+func _test_leaves_cover_trunks() -> void:
+	var holes: Array[HoleData] = []
+	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
+	for i in run.hole_count():
+		holes.append(run.hole_at(i))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	for level: int in [0, 5, 10]:
+		holes.append_array(HoleGenerator.generate_set(rng, level))
+	for yards: int in IslesGenerator.COURSE_YARDS:
+		holes.append(IslesGenerator.generate(rng, yards))
+	var checked: int = 0
+	var bad: int = 0
+	for hole in holes:
+		var terrain := Terrain.new(hole)
+		var trunks: Array[Dictionary] = []
+		for piece: Dictionary in hole.scenery:
+			if str(piece["kind"]) == "trunk":
+				trunks.append(piece)
+		for trunk in trunks:
+			var leaves: Dictionary = {}
+			for piece: Dictionary in hole.scenery:
+				if str(piece["kind"]) == "leaves" and is_equal_approx(float(piece["x"]), float(trunk["x"])):
+					leaves = piece
+			checked += 1
+			if leaves.is_empty() or not TreeView.leaves_cover_trunk(trunk, leaves, terrain):
+				bad += 1
+	_check(checked > 100, "plenty of trees to look at (%d)" % checked)
+	_check(bad == 0, "leaves always hide at least 5 rows of a tree's trunk (%d bad of %d)" % [bad, checked])
+	# All the fractional spots and slopes a whole tree can land on.
+	var slope := HoleData.new()
+	slope.points = PackedVector2Array([Vector2(0, 300), Vector2(400, 260), Vector2(800, 340)])
+	var on_slope := Terrain.new(slope)
+	var tries: int = 0
+	var missed: int = 0
+	for variant in HoleIO.LEAF_VARIANTS:
+		var x: float = 40.0
+		while x < 760.0:
+			var pieces: Array = HoleIO.tree_pieces(x, variant)
+			tries += 1
+			if not TreeView.leaves_cover_trunk(pieces[0], pieces[1], on_slope):
+				missed += 1
+			x += 37.3
+	_check(missed == 0, "and wherever a tree lands on a slope (%d of %d missed)" % [missed, tries])
+
+
 func _test_tree_pieces() -> void:
 	# Every original tree has come apart into its two pieces.
 	var run := CourseRun.new(load(COURSE_PATH) as CourseData)
@@ -1394,8 +1444,11 @@ func _clean_library() -> MapLibrary:
 func _test_map_library() -> void:
 	var library: MapLibrary = _clean_library()
 	var ids: Array[String] = library.list_ids()
-	_check(ids.size() == 10 and ids[0] == "hole_01" and ids[9] == "hole_boss", "the originals are all listed")
-	_check(library.course_order() == ids, "the course starts as the originals in order")
+	_check(ids.size() == 20 and ids[0] == "hole_01" and ids[9] == "hole_boss" and ids[19] == "swamp_boss", "the originals are all listed")
+	_check(library.course_order() == ids.slice(0, 10), "the course starts as the originals in order")
+	_check(library.course_order(HoleData.BIOME_SWAMP) == ids.slice(10, 20), "and so does the swamp")
+	var swamp_holes: Array[HoleData] = library.load_course(HoleData.BIOME_SWAMP)
+	_check(swamp_holes.size() == 10 and swamp_holes[9].display_name == "BOSS HOLE" and swamp_holes[0].biome == HoleData.BIOME_SWAMP, "the swamp loads as a course of its own")
 	_check(library.kind_of("hole_03") == MapLibrary.Kind.ORIGINAL, "an untouched hole is an original")
 
 	# Editing an original saves a copy, and restoring brings the original back.
@@ -2295,6 +2348,94 @@ func _test_stickers() -> void:
 	_check(meter.time_scale == 0.5, "a meter reset keeps its speed")
 
 
+# Each one really hits 15% farther and runs the meter 20% faster, measured from the shot itself.
+func _test_overdrive() -> void:
+	var item: Dictionary = Items.by_id("overdrive")
+	_check(not item.is_empty() and not item.has("unlock"), "Overdrive is on sale from the start")
+	_check(item["clubs"] == Items.SWING_CLUBS, "it fits the Driver and Iron only")
+	for club_id: String in ["driver", "iron"]:
+		var plain: float = _flat_carry(_club(club_id))
+		for count: int in [1, 2, 3]:
+			var ids: Array = []
+			ids.resize(count)
+			ids.fill("overdrive")
+			var club: ClubData = Items.club_with_stickers(_club(club_id), ids)
+			var gain: float = _flat_carry(club) / plain
+			_check(absf(gain - (1.0 + 0.15 * float(count))) < 0.02, "%d on the %s carries %.0f%% farther (%.3f)" % [count, club_id, 15.0 * float(count), gain])
+			_check(is_equal_approx(club.meter_speed, 1.0 + 0.2 * float(count)), "and runs the meter %.0f%% faster" % (20.0 * float(count)))
+	var state: RunState = _new_run_state()
+	state.coins = 100
+	var slot_count: int = 0
+	for _i in RunState.MAX_STACK:
+		_check(state.buy_sticker(item, "iron"), "it can be stacked")
+		slot_count = state.sticker_slots("iron").size()
+	_check(slot_count == 1 and not state.buy_sticker(item, "iron"), "up to 3 in one slot")
+	var hole: HoleData = _flat_hole({ "cup_x": 3000.0 })
+	var game := HoleGame.new(hole, state.clubs())
+	game.select_club(1)
+	_check(is_equal_approx(game.meter.time_scale, 1.6), "the game's meter gets the speed")
+
+
+# How far a full-power, flush shot flies before its first bounce on level ground.
+func _flat_carry(club: ClubData) -> float:
+	var hole: HoleData = _flat_hole({ "cup_x": 7000.0 })
+	var terrain := Terrain.new(hole)
+	var sim := BallSim.new(terrain)
+	sim.place(100.0)
+	var shot: Dictionary = ShotCalc.compute(club, 0.99, 0.0, 0, 1, 1.0, club.loft_deg)
+	sim.launch(shot["velocity"], float(shot["spin"]))
+	var steps: int = 0
+	while sim.is_moving() and sim.bounce_count == 0 and steps < 6000:
+		sim.step(1.0 / 240.0)
+		steps += 1
+	return sim.pos.x - 100.0
+
+
+func _test_shop_reroll() -> void:
+	var state: RunState = _new_run_state()
+	state.coins = 100
+	state.begin_shop()
+	var stock: Array[Dictionary] = state.roll_stock()
+	var expected_coins: int = 100
+	for price: int in [3, 6, 12, 24]:
+		_check(state.reroll_price() == price, "the reroll costs %d" % price)
+		var before: Array[Dictionary] = stock
+		stock = state.reroll_stock(stock)
+		expected_coins -= price
+		_check(state.coins == expected_coins, "and that's what's paid")
+		_check(stock.size() == RunState.SHOP_SHELVES, "every shelf is filled again")
+		var repeats: int = 0
+		for item in stock:
+			if before.has(item):
+				repeats += 1
+		_check(repeats == 0, "with all new items while there are others to show")
+	state.begin_shop()
+	_check(state.reroll_price() == 3, "the next shop goes back to 3")
+	state.perks.append("coupon")
+	state.level = Difficulty.MAX_LEVEL
+	_check(state.reroll_price() == 3, "discounts and difficulty don't change it")
+	state.coins = 2
+	var kept: Array[Dictionary] = state.reroll_stock(stock)
+	_check(kept.is_empty() and state.coins == 2 and state.shop_rerolls == 0, "too few coins means no reroll and no charge")
+
+	# The screen: everything's for sale again, including what was bought.
+	var run_state: RunState = _new_run_state()
+	run_state.coins = 50
+	var screen := ShopScreen.new()
+	screen.setup(run_state)
+	screen.sold[0] = true
+	screen.cursor = screen.stock.size() + 1
+	screen._confirm()
+	_check(screen.sold.is_empty(), "a reroll restocks sold shelves")
+	_check(run_state.coins == 47 and run_state.reroll_price() == 6, "and the button charges and doubles")
+	_check(screen.cursor == screen.stock.size() + 1, "the selection stays on it")
+	var next_screen := ShopScreen.new()
+	next_screen.setup(run_state)
+	_check(run_state.reroll_price() == 3, "a new shop screen resets the price")
+	screen.free()
+	next_screen.free()
+
+
 func _test_special_balls() -> void:
 	# Lands the same shot with each ball, to see what it changes.
 	var plain_x: float = _landing_with_ball("")
@@ -2781,6 +2922,488 @@ func _test_collection() -> void:
 	DirAccess.remove_absolute(path)
 	_test_infinite_mode()
 	_test_floating_isles()
+	_test_swampy_shores()
+
+
+func _test_swampy_shores() -> void:
+	_test_swamp_course_files()
+	_test_mud()
+	_test_lily_pads()
+	_test_frogs()
+	_test_vents()
+	_test_gators()
+	_test_swamp_windmill()
+	_test_swamp_rival()
+	_test_second_course_run()
+	_test_swamp_generator()
+	_test_swamp_saving_and_editing()
+
+
+func _swamp_run() -> CourseRun:
+	return CourseRun.new(load(MapLibrary.SWAMP_COURSE_PATH) as CourseData)
+
+
+func _test_swamp_course_files() -> void:
+	var run: CourseRun = _swamp_run()
+	_check(run.hole_count() == 10 and run.hole_at(9).display_name == "BOSS HOLE", "the swamp has 9 holes and a boss")
+	var kinds: Dictionary = {}
+	for i in run.hole_count():
+		var hole: HoleData = run.hole_at(i)
+		var terrain := Terrain.new(hole)
+		_check(hole.biome == HoleData.BIOME_SWAMP, "%s is in the swamp" % hole.title)
+		_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "%s has its cup on the green" % hole.title)
+		_check(terrain.surface_at(hole.tee_x) == Surface.Type.TEE, "%s has a tee" % hole.title)
+		for entry: Dictionary in hole.obstacles:
+			kinds[str(entry["kind"])] = true
+			if str(entry["kind"]) == "lily":
+				_check(terrain.surface_at(float(entry["x"])) == Surface.Type.LILY, "%s's pads sit on water" % hole.title)
+			if ["vent", "gator", "windmill"].has(str(entry["kind"])):
+				_check(not terrain.is_wet(float(entry["x"])), "%s's %s stands on land" % [hole.title, entry["kind"]])
+		for x: int in range(0, terrain.length, 25):
+			if terrain.surface_at(float(x)) == Surface.Type.MUD:
+				kinds["mud"] = true
+		var copy: HoleData = HoleIO.from_dict(HoleIO.to_dict(hole))
+		_check(copy != null and copy.obstacles.size() == hole.obstacles.size() and copy.biome == hole.biome, "%s survives being saved" % hole.title)
+		# Trees here keep the same rule: no gap between trunk and leaves.
+		for piece: Dictionary in hole.scenery:
+			if str(piece["kind"]) == "trunk":
+				var leaves: Dictionary = (hole.scenery.filter(func(other: Dictionary) -> bool: return str(other["kind"]) == "leaves" and is_equal_approx(float(other["x"]), float(piece["x"]))) as Array)[0]
+				_check(TreeView.leaves_cover_trunk(piece, leaves, terrain), "%s's tree at %d is whole" % [hole.title, int(piece["x"])])
+	for wanted: String in ["frog", "vent", "gator", "windmill", "lily", "mud"]:
+		_check(kinds.has(wanted), "the swamp course uses %s" % wanted)
+	for kind: String in ["cart", "sprinkler", "goose", "roots"]:
+		_check(not kinds.has(kind), "and has no %s" % kind)
+	var boss_kinds: Array = run.hole_at(9).obstacles.map(func(entry: Dictionary) -> String: return str(entry["kind"]))
+	for wanted: String in ["frog", "vent", "gator", "windmill", "lily", "pad"]:
+		_check(boss_kinds.has(wanted), "the swamp's boss hole has %s" % wanted)
+	var traps: Array[String] = []
+	for i in run.hole_count():
+		var game := HoleGame.new(run.hole_at(i), _clubs())
+		for x in range(5, game.terrain.length - 5, 20):
+			if game.terrain.surface_at(float(x)) == Surface.Type.WATER or game.terrain.in_cup(float(x)):
+				continue
+			game.ball.place(float(x))
+			game._begin_aim()
+			if not _can_get_out(game):
+				traps.append("%s %d" % [run.hole_at(i).title, x])
+	_check(traps.is_empty(), "no spot in the swamp is a trap (%s)" % str(traps))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2030
+	for i in run.hole_count():
+		_check(_play_round(run.hole_at(i), rng, 0.0, 0.0, true) > 0, "%s can be finished" % run.hole_at(i).title)
+		_check(_play_round(run.hole_at(i), rng, 0.06, 0.05, true) > 0, "%s can be finished by an average player" % run.hole_at(i).title)
+
+
+func _test_mud() -> void:
+	var finish := func(type: int) -> float:
+		var hole: HoleData = _flat_hole({ "spans": [{ "from": 0, "to": 1000, "type": type }] })
+		var sim := BallSim.new(Terrain.new(hole))
+		sim.place(100.0)
+		sim.launch(Vector2(120.0, -120.0), 0.0)
+		_settle(sim)
+		return sim.pos.x
+	var on_mud: float = finish.call(Surface.Type.MUD)
+	_check(on_mud < float(finish.call(Surface.Type.FAIRWAY)), "a ball runs on less in mud than on fairway")
+	_check(on_mud < float(finish.call(Surface.Type.ROUGH)), "and less than in rough")
+	var mud_lie: Dictionary = Surface.props(Surface.Type.MUD)
+	_check(float(mud_lie["lie_power"]) < 1.0 and float(mud_lie["lie_window"]) < 1.0, "a shot out of mud loses range and shrinks the sweet spot")
+	_check(float(mud_lie["lie_power"]) > float(Surface.props(Surface.Type.SAND)["lie_power"]), "but not as much as out of a bunker")
+
+
+func _pond_hole() -> HoleData:
+	var hole: HoleData = _flat_hole({
+		"cup_x": 900.0,
+		"water": [{ "from": 300, "to": 600, "level": 300.0 }],
+	})
+	hole.points = PackedVector2Array([Vector2(0, 280), Vector2(290, 280), Vector2(310, 330), Vector2(590, 330), Vector2(610, 280), Vector2(1000, 280)])
+	hole.obstacles = [{ "kind": "lily", "x": 450.0, "width": 60.0 }]
+	return hole
+
+
+func _test_lily_pads() -> void:
+	var hole: HoleData = _pond_hole()
+	var terrain := Terrain.new(hole)
+	_check(terrain.surface_at(450.0) == Surface.Type.LILY, "a pad covers the water")
+	_check(terrain.surface_at(350.0) == Surface.Type.WATER, "the rest is still water")
+	_check(terrain.is_wet(450.0) and terrain.is_wet(350.0) and not terrain.is_wet(200.0), "water still lies under it")
+	var drop := func(x: float) -> int:
+		var sim := BallSim.new(terrain)
+		sim.pos = Vector2(x, 250.0)
+		sim.launch(Vector2(0.0, 10.0), 0.0)
+		_settle(sim)
+		return sim.state
+	_check(drop.call(450.0) == BallSim.State.RESTING, "a ball can land on a pad")
+	_check(drop.call(350.0) == BallSim.State.IN_WATER, "and goes in beside it")
+	var rolling := BallSim.new(terrain)
+	rolling.place(470.0)
+	rolling.launch(Vector2(90.0, 0.0), 0.0)
+	_settle(rolling)
+	_check(rolling.state == BallSim.State.IN_WATER, "a ball rolling off the edge goes in")
+	var game := HoleGame.new(hole, _clubs())
+	game.start_from(450.0)
+	_check(game.phase == HoleGame.Phase.AIM and _has_safe_shot(game), "a ball on a pad can be played from it")
+	_check(game.lie_power() < 1.0 and game.lie_power() > 0.8, "with a slightly wobbly lie")
+	# Water penalties still send it back to where it was, the pad included.
+	game.select_club(1)
+	game.aim_angle = 60.0
+	game.strike_with(0.05, 0.0)
+	var steps: int = 0
+	while game.phase != HoleGame.Phase.AIM and steps < 3000:
+		game.tick(DT)
+		steps += 1
+	_check(game.terrain.surface_at(game.ball.pos.x) != Surface.Type.WATER, "the ball never ends up resting in water")
+
+
+func _test_frogs() -> void:
+	var hole: HoleData = _flat_hole()
+	var terrain := Terrain.new(hole)
+	var frog := FrogObstacle.new(terrain, { "from": 400.0, "to": 500.0, "start": 450.0, "speed": 60.0 })
+	var lowest: float = -INF
+	var highest: float = INF
+	var turned: bool = false
+	for _i in 1200:
+		frog.tick(DT)
+		lowest = maxf(lowest, frog.center().y)
+		highest = minf(highest, frog.center().y)
+		turned = turned or frog.x >= 500.0
+		_check(frog.x >= 400.0 and frog.x <= 500.0, "a frog stays on its route")
+	_check(turned, "it turns back at the ends")
+	_check(lowest > highest + 8.0 and lowest >= terrain.ground_y(450.0) - FrogObstacle.RADIUS - 0.01, "it hops off the ground and lands on it")
+	var sim := BallSim.new(terrain)
+	# Sitting still on the ground, between hops.
+	var sitting := FrogObstacle.new(terrain, { "from": 500.0, "to": 501.0, "speed": 0.0 })
+	sitting.clock = FrogObstacle.HOP_TIME
+	sim.obstacles = [sitting] as Array[Obstacle]
+	var hits: Array[String] = []
+	sim.obstacle_hit.connect(func(_at: Vector2, kind: String) -> void: hits.append(kind))
+	sim.place(300.0)
+	sim.launch(Vector2(250.0, 0.0), 0.0)
+	_settle(sim)
+	_check(hits.has("frog"), "a rolling ball hits a frog")
+	_check(sim.pos.x < 500.0, "and gets knocked back from it (%.0f)" % sim.pos.x)
+	_check(hits.count("frog") == 1, "only once in the shot")
+	var preview := BallSim.new(terrain)
+	preview.obstacles = sim.obstacles
+	preview.ignore_moving = true
+	preview.place(300.0)
+	preview.launch(Vector2(250.0, 0.0), 0.0)
+	_settle(preview)
+	_check(preview.pos.x > 500.0, "the aim guide ignores frogs, like every moving hazard")
+
+
+func _test_vents() -> void:
+	var terrain := Terrain.new(_flat_hole())
+	var vent := VentObstacle.new(terrain, { "x": 500.0, "height": 80.0, "quiet_time": 2.0, "burst_time": 1.0 })
+	_check(vent.stage() == VentObstacle.Stage.QUIET, "a vent starts quiet")
+	vent.tick(2.1)
+	_check(vent.stage() == VentObstacle.Stage.WARNING, "then bubbles a warning")
+	vent.tick(VentObstacle.WARNING_TIME)
+	_check(vent.stage() == VentObstacle.Stage.BURST, "then bursts")
+	var make_ball := func(y: float) -> BallSim:
+		var sim := BallSim.new(terrain)
+		sim.state = BallSim.State.AIRBORNE
+		sim.launch_x = 100.0
+		sim.pos = Vector2(500.0, y)
+		sim.vel = Vector2(80.0, 40.0)
+		return sim
+	var thrown: BallSim = make_ball.call(270.0)
+	_check(vent.interact(thrown, DT), "a ball in the burst is caught")
+	_check(thrown.vel.y < -100.0, "and thrown upward")
+	var first_vel: Vector2 = thrown.vel
+	vent.interact(thrown, DT)
+	_check(thrown.vel == first_vel, "only once per burst")
+	var above: BallSim = make_ball.call(150.0)
+	_check(not vent.interact(above, DT), "a ball over the top of it passes")
+	var preview: BallSim = make_ball.call(270.0)
+	preview.ignore_moving = true
+	_check(not vent.interact(preview, DT), "the aim guide ignores it")
+	var drifts: Dictionary = {}
+	for _i in VentObstacle.DRIFTS.size():
+		drifts[vent.drift()] = true
+		vent.tick(vent.quiet_time + VentObstacle.WARNING_TIME + vent.burst_time)
+	_check(drifts.size() == VentObstacle.DRIFTS.size(), "each burst throws a different way")
+	for drift: float in VentObstacle.DRIFTS:
+		_check(absf(drift) <= 70.0, "none of them far")
+	vent.tick(0.0)
+	while vent.stage() != VentObstacle.Stage.QUIET:
+		vent.tick(0.1)
+	_check(not vent.interact(make_ball.call(270.0), DT), "a quiet vent does nothing")
+	var beside: BallSim = make_ball.call(270.0)
+	beside.launch_x = 498.0
+	while vent.stage() != VentObstacle.Stage.BURST:
+		vent.tick(0.1)
+	_check(not vent.interact(beside, DT), "a ball struck from right beside it isn't caught")
+
+
+# A hole with a gator on the fairway and nothing else, played through the real rules.
+func _gator_game() -> HoleGame:
+	var hole: HoleData = _flat_hole({ "cup_x": 950.0 })
+	hole.obstacles = [{ "kind": "gator", "x": 500.0, "side": -1.0 }]
+	return HoleGame.new(hole, _clubs())
+
+
+func _test_gators() -> void:
+	var game: HoleGame = _gator_game()
+	var gator: GatorObstacle = game.obstacles[0]
+	var terrain: Terrain = game.terrain
+	_check(gator.jaw == 0.0 and not gator.eaten, "a gator lies with its mouth shut")
+	game.ball.place(350.0)
+	var kinds: Array[String] = []
+	game.penalty_taken.connect(func(kind: String) -> void: kinds.append(kind))
+	game.ball.launch(Vector2(240.0, 0.0), 0.0)
+	game._last_spot_x = 350.0
+	game.strokes = 1
+	game._set_phase(HoleGame.Phase.BALL_MOVING)
+	var widest: float = 0.0
+	var steps: int = 0
+	while game.ball.is_moving() and steps < 2000:
+		game.tick(DT)
+		widest = maxf(widest, gator.jaw)
+		steps += 1
+	_check(widest > 0.5, "it opens its jaws as a ball comes near (%.2f)" % widest)
+	_check(game.ball.state == BallSim.State.EATEN, "a ball rolling up to it gets eaten")
+	_check(kinds.size() == 1 and kinds[0] == "gator", "that's a penalty")
+	_check(game.strokes == 2, "costing a stroke, like water")
+	_check(game.phase == HoleGame.Phase.PENALTY, "with the same wait")
+	_check(gator.eaten and not gator.is_gone(), "the gator flashes first")
+	for _i in int(GatorObstacle.FLASH_TIME / DT) + 2:
+		gator.tick(DT)
+	_check(gator.is_gone(), "then it's gone")
+	while game.phase == HoleGame.Phase.PENALTY:
+		game.tick(DT)
+	_check(is_equal_approx(game.ball.pos.x, 350.0) and game.ball.state == BallSim.State.RESTING, "the ball goes back to its last spot")
+	game.ball.launch(Vector2(240.0, 0.0), 0.0)
+	game._set_phase(HoleGame.Phase.BALL_MOVING)
+	steps = 0
+	while game.ball.is_moving() and steps < 2000:
+		game.tick(DT)
+		steps += 1
+	_check(game.ball.state == BallSim.State.RESTING and game.ball.pos.x > 500.0, "with the gator gone, the same shot runs straight past (%.0f)" % game.ball.pos.x)
+	game.restart()
+	_check(not gator.eaten and gator.jaw == 0.0, "restarting a hole brings it back")
+
+	var mulligan: HoleGame = _gator_game()
+	mulligan.free_penalties = 1
+	mulligan.ball.place(350.0)
+	mulligan.ball.launch(Vector2(240.0, 0.0), 0.0)
+	mulligan._last_spot_x = 350.0
+	mulligan._set_phase(HoleGame.Phase.BALL_MOVING)
+	while mulligan.phase == HoleGame.Phase.BALL_MOVING:
+		mulligan.tick(DT)
+	_check(mulligan.strokes == 0 and mulligan.free_penalties == 0, "a Mulligan covers it like any other penalty")
+
+	# High over it is safe, and only a real ball feeds it.
+	var play := func(velocity: Vector2, from_x: float, is_preview: bool) -> BallSim:
+		var fresh: HoleGame = _gator_game()
+		var sim := BallSim.new(terrain)
+		sim.obstacles = fresh.obstacles
+		sim.ignore_moving = is_preview
+		sim.place(from_x)
+		sim.launch(velocity, 0.0)
+		_settle(sim)
+		return sim
+	var over: BallSim = play.call(Vector2(130.0, -130.0), 350.0, false)
+	_check(over.state == BallSim.State.RESTING and over.pos.x > 530.0, "a ball flying over isn't eaten (%.0f)" % over.pos.x)
+	var planned: BallSim = play.call(Vector2(240.0, 0.0), 350.0, true)
+	_check(planned.state == BallSim.State.EATEN, "the game's own planning knows it would be eaten")
+	var planning: HoleGame = _gator_game()
+	var plan_sim: BallSim = planning.new_preview_sim()
+	plan_sim.place(350.0)
+	plan_sim.launch(Vector2(240.0, 0.0), 0.0)
+	_settle(plan_sim)
+	_check(not (planning.obstacles[0] as GatorObstacle).eaten, "and planning a shot doesn't use up the gator")
+	var beside: BallSim = play.call(Vector2(-200.0, 0.0), 490.0, false)
+	_check(beside.state == BallSim.State.RESTING, "a ball hit from right beside it can always get away")
+
+	# The rival's ball gets eaten too, and takes its penalty.
+	var duel: HoleGame = _gator_game()
+	var rival := Rival.new(duel, _clubs(), 3)
+	duel.start_duel(rival)
+	rival._free_drop_used = true
+	rival.ball.place(350.0)
+	rival.ball.launch(Vector2(240.0, 0.0), 0.0)
+	rival.stage = Rival.Stage.MOVING
+	var rival_strokes: int = rival.strokes
+	steps = 0
+	while rival.ball.is_moving() and steps < 2000:
+		rival.ball.step(DT)
+		steps += 1
+	_check(rival.ball.state == BallSim.State.EATEN and rival.strokes == rival_strokes + 1, "the rival's ball can be eaten too")
+	_check((duel.obstacles[0] as GatorObstacle).eaten, "which feeds that gator")
+	duel.end_duel()
+
+	var saved: HoleData = HoleIO.from_dict(HoleIO.to_dict(game.hole))
+	_check(saved.obstacles.size() == 1 and str(saved.obstacles[0]["kind"]) == "gator", "a map remembers its gators")
+	var old_map: HoleData = HoleIO.from_dict({ "points": [[0, 300], [500, 300]], "obstacles": [{ "kind": "roots", "x": 100.0 }] })
+	_check(old_map.obstacles.is_empty(), "a saved map's old roots are simply dropped")
+
+
+# Swamp windmills are the same object as any other, and only drawn differently.
+func _test_swamp_windmill() -> void:
+	var run: CourseRun = _swamp_run()
+	var found: int = 0
+	for i in run.hole_count():
+		for entry: Dictionary in run.hole_at(i).obstacles:
+			if str(entry["kind"]) == "windmill":
+				found += 1
+	_check(found >= 3, "the swamp has windmills (%d)" % found)
+	var settings: Dictionary = { "x": 500.0, "rotation": 0.0, "turn_speed": 1.2 }
+	var finish := func(biome: String) -> Vector2:
+		var hole: HoleData = _flat_hole({ "cup_x": 950.0 })
+		hole.biome = biome
+		var terrain := Terrain.new(hole)
+		var sim := BallSim.new(terrain)
+		sim.obstacles = [WindmillObstacle.new(terrain, settings)] as Array[Obstacle]
+		sim.place(300.0)
+		sim.launch(Vector2(100.0, -90.0), 0.0)
+		for _step in 3000:
+			sim.obstacles[0].tick(DT)
+			sim.step(DT)
+		return sim.pos
+	_check(finish.call(HoleData.BIOME_SWAMP) == finish.call(HoleData.BIOME_GRASSY), "a swamp windmill plays exactly like the normal one")
+
+
+func _test_swamp_rival() -> void:
+	var game := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	var level: int = Difficulty.swamp_rival_level(0)
+	var rival := Rival.new(game, _clubs(), 3, level)
+	_check(rival._miss_chance < Rival.MISS_CHANCE, "the swamp's rival mishits less")
+	_check(rival._power_steps > Rival.POWER_STEPS, "and plans more finely")
+	rival.limit_cheats(Rival.CHEATS_PER_HOLE)
+	_check(rival._cheats_left == 2, "but still cheats only twice")
+	var late := Rival.new(game, _clubs(), 3, Difficulty.swamp_rival_level(Difficulty.MAX_LEVEL))
+	_check(late._cheats_left > 2, "without a limit it would cheat more at the top difficulty")
+	late.limit_cheats(Rival.CHEATS_PER_HOLE)
+	_check(late._cheats_left == 2, "the limit holds there too")
+	_check(Difficulty.swamp_rival_level(Difficulty.MAX_LEVEL) == Difficulty.MAX_LEVEL, "its level stops at the top")
+	# Two cheats means two, with a free drop counted.
+	var tally: Array[String] = []
+	var duel := HoleGame.new(_flat_hole({ "cup_x": 990.0 }), _clubs())
+	var capped := Rival.new(duel, _clubs(), 3, Difficulty.MAX_LEVEL)
+	capped.limit_cheats(Rival.CHEATS_PER_HOLE)
+	duel.start_duel(capped)
+	capped.announced.connect(func(text: String) -> void: tally.append(text))
+	capped.strokes = 5
+	capped.ball.place(300.0)
+	capped._on_ball_hazard(Vector2.ZERO, "water")
+	capped._turns = 2
+	for _i in 6:
+		capped._end_shot()
+	_check(tally.size() == 2, "a free drop and one trick use up both (%s)" % str(tally))
+	duel.end_duel()
+
+
+func _test_second_course_run() -> void:
+	var state: RunState = _new_run_state()
+	state.coins = 40
+	state.spare = 11
+	state.stickers["iron"] = ["power_stripe"]
+	state.perks.append("mulligan")
+	state.beat_first_rival()
+	_check(state.coins == 40 and state.spare == 11, "coins and spare strokes carry over exactly")
+	_check(state.stickers["iron"] == ["power_stripe"] and state.perks.has("mulligan"), "and so does the gear")
+	_check(state.set_number == 2 and state.bosses_beaten == 1 and state.ending == RunState.Ending.NONE, "the run goes on to the second course")
+	_check(state.rival_beaten_with_more_to_come, "with more to come")
+	_check(state.level == 0, "at the same difficulty, since only infinite mode has levels")
+	var points: int = 0
+	for row: Dictionary in state.final_score()["rows"]:
+		if str(row["label"]).contains("RIVAL"):
+			points += int(row["points"])
+	_check(points == RunState.SCORE_RIVAL_BEATEN, "the first rival is worth its points even if the run ends there")
+	state.ending = RunState.Ending.BEAT_RIVAL
+	points = 0
+	for row: Dictionary in state.final_score()["rows"]:
+		if str(row["label"]).contains("RIVAL"):
+			points += int(row["points"])
+	_check(points == RunState.SCORE_RIVAL_BEATEN * 2, "and beating both is worth both")
+	_check(state.is_finished_run(), "it counts as finished")
+	state.begin_hole()
+	_check(not state.rival_beaten_with_more_to_come, "that flag only lasts for the hole")
+	var other: RunState = _new_run_state()
+	var perk: Dictionary = Items.by_id("mulligan")
+	other.beat_first_rival()
+	_check(other.price_of(perk) == int(perk["price"]), "the second course's shops charge full price")
+	_check(other.hole_payout(0, 4, 4) == RunState.PAYOUT_LATE, "and its holes all pay in full")
+	_check(HoleGenerator.biome_for_set(1) == HoleData.BIOME_GRASSY and HoleGenerator.biome_for_set(2) == HoleData.BIOME_SWAMP and HoleGenerator.biome_for_set(3) == HoleData.BIOME_GRASSY, "infinite sets take turns")
+
+
+func _test_swamp_generator() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 909
+	var kinds: Dictionary = {}
+	for level: int in [0, 4, 10]:
+		for hole: HoleData in HoleGenerator.generate_set(rng, level, HoleData.BIOME_SWAMP):
+			_check(hole.biome == HoleData.BIOME_SWAMP, "generated holes can be swamp")
+			var terrain := Terrain.new(hole)
+			_check(terrain.surface_at(hole.cup_x) == Surface.Type.GREEN, "with the cup on the green")
+			for entry: Dictionary in hole.obstacles:
+				kinds[str(entry["kind"])] = true
+			for span: Dictionary in hole.surface_spans:
+				_check(int(span["type"]) != Surface.Type.SAND, "with mud in place of sand")
+			for piece: Dictionary in hole.scenery:
+				if str(piece["kind"]) == "trunk":
+					var leaves: Dictionary = (hole.scenery.filter(func(other: Dictionary) -> bool: return str(other["kind"]) == "leaves" and is_equal_approx(float(other["x"]), float(piece["x"]))) as Array)[0]
+					_check(TreeView.leaves_cover_trunk(piece, leaves, terrain), "and whole trees")
+	for wanted: String in ["frog", "vent", "gator", "windmill", "lily"]:
+		_check(kinds.has(wanted), "generated swamp holes use %s" % wanted)
+	for kind: String in ["cart", "sprinkler", "goose", "roots"]:
+		_check(not kinds.has(kind), "and never %s" % kind)
+	# Grassy sets come out exactly as they always have.
+	var one := RandomNumberGenerator.new()
+	one.seed = 55
+	var plain: Array[HoleData] = HoleGenerator.generate_set(one, 3)
+	_check(plain[0].biome == HoleData.BIOME_GRASSY, "the default set is grassy")
+	for hole: HoleData in plain:
+		for entry: Dictionary in hole.obstacles:
+			_check(not ["frog", "vent", "gator", "lily"].has(str(entry["kind"])), "with none of the swamp's hazards")
+
+
+func _test_swamp_saving_and_editing() -> void:
+	var hole: HoleData = _pond_hole()
+	hole.biome = HoleData.BIOME_SWAMP
+	hole.surface_spans = [{ "from": 700, "to": 800, "type": Surface.Type.MUD }]
+	var copy: HoleData = HoleIO.from_dict(HoleIO.to_dict(hole))
+	_check(copy.biome == HoleData.BIOME_SWAMP, "a map remembers its biome")
+	_check(copy.surface_spans.size() == 1 and int(copy.surface_spans[0]["type"]) == Surface.Type.MUD, "and its mud")
+	_check(Terrain.new(copy).surface_at(450.0) == Surface.Type.LILY, "and its pads")
+	var old: HoleData = HoleIO.from_dict({ "points": [[0, 300], [500, 300]], "biome": "lava" })
+	_check(old.biome == HoleData.BIOME_GRASSY, "an unknown biome is grassy")
+	var old_save: HoleData = HoleIO.from_dict({ "points": [[0, 300], [500, 300]] })
+	_check(old_save.biome == HoleData.BIOME_GRASSY, "and so is a map from before biomes")
+	var damaged: HoleData = HoleIO.from_dict({ "points": [[0, 300], [500, 300]], "surface_spans": [{ "from": 0, "to": 10, "type": 77 }], "obstacles": [{ "kind": "frog" }, { "kind": "vent" }] })
+	_check(damaged.surface_spans.is_empty() and damaged.obstacles.is_empty(), "damaged entries are dropped")
+
+	var doc := EditorDoc.new(_pond_hole())
+	var lily_count: int = doc.hole.obstacles.size()
+	for kind: String in ["frog", "vent", "gator", "lily"]:
+		doc.checkpoint()
+		var selection: Dictionary = doc.add_object(kind, Vector2(400.0, 250.0))
+		_check(str(doc.entry_of(selection)["kind"]) == kind, "the editor can place a %s" % kind)
+		_check(not doc.properties(selection).is_empty(), "with settings for it")
+		_check(doc.pick(doc.selection_center(selection), 4.0) == selection, "and pick it again")
+		doc.move_selection(selection, Vector2(380.0, 250.0))
+	_check(doc.terrain.surface_at(380.0) == Surface.Type.LILY, "moving a pad moves it for the ball too")
+	_check(doc.hole.obstacles.size() == lily_count + 4, "everything was added")
+	var frog_selection: Dictionary = { "type": "obstacle", "index": lily_count }
+	_check(doc.route_ends(frog_selection).size() == 2, "a frog's route has two ends")
+	doc.undo()
+	_check(doc.hole.obstacles.size() == lily_count + 3, "undo takes the last one away")
+	doc.toggle_biome()
+	_check(doc.hole.biome == HoleData.BIOME_SWAMP and doc.terrain.biome == HoleData.BIOME_SWAMP, "the editor changes a map's biome")
+	doc.paint_surface(700.0, 750.0, Surface.Type.MUD)
+	_check(doc.terrain.surface_at(725.0) == Surface.Type.MUD, "and paints mud")
+
+	var library: MapLibrary = _clean_library()
+	var id: String = library.new_custom_id()
+	library.save_hole(id, hole)
+	var order: Array[String] = library.course_order(HoleData.BIOME_SWAMP)
+	order.append(id)
+	library.save_course_order(order, HoleData.BIOME_SWAMP)
+	_check(library.course_order(HoleData.BIOME_SWAMP).has(id), "a custom map can join the swamp's course")
+	_check(not library.course_order().has(id), "without joining the other one")
+	_check(not library.list_ids().has("swamp_order"), "the order file isn't listed as a map")
+	library.delete_map(id)
+	_check(not library.course_order(HoleData.BIOME_SWAMP).has(id), "deleting it takes it out")
 
 
 # Island 100-299 and island 500-699, with sky everywhere else.
@@ -2806,6 +3429,51 @@ func _test_floating_isles() -> void:
 	_test_isles_physics()
 	_test_isles_falls()
 	_test_isles_leaderboard()
+	_test_isles_club_and_finish()
+
+
+# The Iron comes up for every shot off the green, and the golfer doesn't jog over open sky.
+func _test_isles_club_and_finish() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var hole: HoleData = IslesGenerator.generate(rng, 1000)
+	var game := HoleGame.new(hole, _clubs() as Array[ClubData])
+	game.falls_return_to_tee = true
+	_check(game.current_club().id == "iron", "Floating Isles starts on the Iron")
+	var terrain: Terrain = game.terrain
+	var island_spots: int = 0
+	var wrong: int = 0
+	var x: float = hole.tee_x
+	while x < hole.cup_x:
+		if not terrain.is_void(x):
+			game.start_from(x)
+			island_spots += 1
+			var wanted: String = "putter" if terrain.surface_at(x) == Surface.Type.GREEN else "iron"
+			if game.current_club().id != wanted:
+				wrong += 1
+		x += 40.0
+	_check(island_spots > 5 and wrong == 0, "the Iron off the green and the Putter on it, everywhere (%d wrong of %d)" % [wrong, island_spots])
+	game.start_from(hole.tee_x)
+	game.select_club(0)
+	game.strike_with(0.1, 0.0)
+	var steps: int = 0
+	while game.phase != HoleGame.Phase.AIM and steps < 6000:
+		game.tick(1.0 / 60.0)
+		steps += 1
+	_check(game.current_club().id == "iron", "and it comes back after using the Driver")
+	var plain := HoleGame.new(_flat_hole({ "cup_x": 2500.0 }), _clubs() as Array[ClubData])
+	_check(plain.current_club().id == "driver", "the other modes still offer the Driver from far out")
+
+	var view := GolferView.new()
+	view.setup(game)
+	add_child(view)
+	game.ball.state = BallSim.State.HOLED
+	game.phase = HoleGame.Phase.COMPLETE
+	view.position.x = hole.tee_x
+	view._update_pose()
+	_check(is_equal_approx(absf(view.position.x - hole.cup_x), GolferView.CELEBRATE_GAP), "the golfer appears right beside the cup")
+	_check(not terrain.is_void(view.position.x), "standing on the island")
+	view.free()
 
 
 func _test_isles_generator() -> void:

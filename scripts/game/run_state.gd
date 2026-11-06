@@ -12,6 +12,8 @@ const MAX_STACK := 3
 const SHOP_SHELVES := 4
 ## What everything costs in the first shop.
 const START_PRICE := 3
+## A shop's first reroll costs this, and each one after it costs double. Nothing discounts it.
+const REROLL_START_PRICE := 3
 
 ## Coins for completing a hole, whatever the score. They rise from this hole number on.
 const PAYOUT_EARLY := 3
@@ -48,9 +50,13 @@ var set_number: int = 1
 ## How hard the run is now, from 0 up to Difficulty.MAX_LEVEL. The main game stays at 0.
 var level: int = 0
 var bosses_beaten: int = 0
+## True once a rival's been beaten with more of the run still to come.
+var rival_beaten_with_more_to_come: bool = false
 ## This hole's coins so far, for its summary.
 var hole_pickups: int = 0
 var hole_tricks: int = 0
+## Rerolls used in the shop that's open.
+var shop_rerolls: int = 0
 
 var _base_clubs: Array[ClubData] = []
 var _unlocked: Array[String] = []
@@ -88,6 +94,7 @@ func stroke_limit(par: int) -> int:
 func begin_hole() -> void:
 	hole_pickups = 0
 	hole_tricks = 0
+	rival_beaten_with_more_to_come = false
 
 
 func perk_number(key: String, fallback: float) -> float:
@@ -168,6 +175,15 @@ func beat_boss() -> Dictionary:
 	return { "banked": banked, "coins": paid }
 
 
+## The main game: beating the Grassy Greens rival leads on to Swampy Shores. Coins, gear and
+## spare strokes all carry over exactly as they are. Full prices and payouts from here, like
+## any later set.
+func beat_first_rival() -> void:
+	bosses_beaten += 1
+	set_number += 1
+	rival_beaten_with_more_to_come = true
+
+
 ## Uses the Safety Net if there's one left, returning the strokes it gives back.
 func use_safety_net() -> int:
 	var amount: int = int(perk_number("safety_net", 0.0))
@@ -195,8 +211,32 @@ func can_afford(item: Dictionary) -> bool:
 	return coins >= price_of(item)
 
 
+## A new shop's reroll goes back to its starting price.
+func begin_shop() -> void:
+	shop_rerolls = 0
+
+
+func reroll_price() -> int:
+	return REROLL_START_PRICE << shop_rerolls
+
+
+func can_reroll() -> bool:
+	return coins >= reroll_price()
+
+
+## Pays for a reroll and returns all new shelves, avoiding what's on them now where the items
+## allow it. Returns an empty list if it can't be paid for.
+func reroll_stock(current: Array[Dictionary]) -> Array[Dictionary]:
+	if not can_reroll():
+		return []
+	coins -= reroll_price()
+	shop_rerolls += 1
+	return roll_stock(current)
+
+
 ## A fresh, random, mixed stock: two stickers, then one ball, perk or strokes, then anything.
-func roll_stock() -> Array[Dictionary]:
+## Items in avoid are only used if nothing else is left for a shelf.
+func roll_stock(avoid: Array[Dictionary] = []) -> Array[Dictionary]:
 	var stock: Array[Dictionary] = []
 	var slots: Array = [
 		[Items.KIND_STICKER],
@@ -207,17 +247,22 @@ func roll_stock() -> Array[Dictionary]:
 	while slots.size() < total:
 		slots.append([Items.KIND_STICKER, Items.KIND_BALL, Items.KIND_PERK, Items.KIND_STROKES])
 	for kinds: Array in slots:
-		var item: Dictionary = _random_item(kinds, stock)
+		var item: Dictionary = _random_item(kinds, stock, avoid)
 		if not item.is_empty():
 			stock.append(item)
 	return stock
 
 
-func _random_item(kinds: Array, taken: Array[Dictionary]) -> Dictionary:
+func _random_item(kinds: Array, taken: Array[Dictionary], avoid: Array[Dictionary]) -> Dictionary:
 	var pool: Array[Dictionary] = []
+	var fresh: Array[Dictionary] = []
 	for item: Dictionary in Items.CATALOG:
 		if kinds.has(item["kind"]) and _is_for_sale(item) and not taken.has(item):
 			pool.append(item)
+			if not avoid.has(item):
+				fresh.append(item)
+	if not fresh.is_empty():
+		pool = fresh
 	if pool.is_empty():
 		return {}
 	return pool[rng.randi_range(0, pool.size() - 1)]
@@ -336,10 +381,11 @@ func final_score() -> Dictionary:
 		{ "label": "SPARE STROKES %d" % left_over, "points": left_over * SCORE_PER_SPARE },
 		{ "label": "COINS LEFT %d" % coins, "points": coins * SCORE_PER_COIN },
 	]
-	if ending == Ending.BEAT_RIVAL:
-		rows.append({ "label": "BEAT THE RIVAL", "points": SCORE_RIVAL_BEATEN })
 	if bosses_beaten > 0:
-		rows.append({ "label": "BOSSES BEATEN %d" % bosses_beaten, "points": bosses_beaten * SCORE_RIVAL_BEATEN })
+		var beaten_label: String = "BOSSES BEATEN %d" % bosses_beaten if infinite else "BEAT THE GRASSY RIVAL"
+		rows.append({ "label": beaten_label, "points": bosses_beaten * SCORE_RIVAL_BEATEN })
+	if ending == Ending.BEAT_RIVAL:
+		rows.append({ "label": "BEAT THE SWAMP RIVAL" if set_number > 1 else "BEAT THE RIVAL", "points": SCORE_RIVAL_BEATEN })
 	var total: int = 0
 	for row in rows:
 		total += int(row["points"])

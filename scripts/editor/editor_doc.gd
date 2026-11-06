@@ -233,10 +233,26 @@ func add_object(kind: String, at: Vector2) -> Dictionary:
 			entry["height"] = maxf(terrain.ground_y(x - 100.0) - at.y, 20.0)
 		"coin":
 			entry.merge({ "x": x, "y": at.y })
+		"frog":
+			entry.merge({ "from": x - 80.0, "to": x + 80.0, "start": x, "speed": 70.0 })
+		"vent":
+			entry.merge({ "x": x, "height": 85.0, "quiet_time": 2.6, "burst_time": 1.1, "offset": 0.0 })
+		"gator":
+			entry.merge({ "x": x, "side": -1.0 })
+		"lily":
+			entry.merge({ "x": x, "width": LilyObstacle.DEFAULT_WIDTH })
 	var obstacles: Array = hole.obstacles
 	obstacles.append(entry)
 	hole.obstacles = obstacles
+	if kind == "lily":
+		rebake()
 	return { "type": "obstacle", "index": obstacles.size() - 1 }
+
+
+## Grassy Greens or Swampy Shores. Only changes how the map looks and sounds.
+func toggle_biome() -> void:
+	hole.biome = HoleData.BIOME_GRASSY if hole.biome == HoleData.BIOME_SWAMP else HoleData.BIOME_SWAMP
+	rebake()
 
 
 func _add_scenery(kind: String, x: float, y: float) -> Dictionary:
@@ -281,6 +297,7 @@ func delete_selection(selection: Dictionary) -> void:
 			var obstacles: Array = hole.obstacles
 			obstacles.remove_at(int(selection["index"]))
 			hole.obstacles = obstacles
+			rebake()
 		"scenery":
 			var scenery: Array = hole.scenery
 			scenery.remove_at(int(selection["index"]))
@@ -335,6 +352,9 @@ func _object_center(entry: Dictionary) -> Vector2:
 		"cart":
 			var mid: float = (float(entry["from"]) + float(entry["to"])) / 2.0
 			return Vector2(mid, terrain.ground_y(mid) - CartObstacle.RIDE_HEIGHT)
+		"frog":
+			var frog_mid: float = (float(entry["from"]) + float(entry["to"])) / 2.0
+			return Vector2(frog_mid, terrain.ground_y(frog_mid) - FrogObstacle.RADIUS)
 		"goose":
 			var goose := GooseObstacle.new(terrain, entry)
 			return Vector2((goose.from_x + goose.to_x) / 2.0, goose.base_y)
@@ -348,13 +368,16 @@ func _object_center(entry: Dictionary) -> Vector2:
 func route_ends(selection: Dictionary) -> Array[Vector2]:
 	var entry: Dictionary = entry_of(selection)
 	var ends: Array[Vector2] = []
-	if entry.is_empty() or not ["cart", "goose"].has(str(entry["kind"])):
+	if entry.is_empty() or not ["cart", "goose", "frog"].has(str(entry["kind"])):
 		return ends
 	var from_x: float = float(entry["from"])
 	var to_x: float = float(entry["to"])
 	if str(entry["kind"]) == "cart":
 		ends.append(Vector2(from_x, terrain.ground_y(from_x) - CartObstacle.RIDE_HEIGHT))
 		ends.append(Vector2(to_x, terrain.ground_y(to_x) - CartObstacle.RIDE_HEIGHT))
+	elif str(entry["kind"]) == "frog":
+		ends.append(Vector2(from_x, terrain.ground_y(from_x) - FrogObstacle.RADIUS))
+		ends.append(Vector2(to_x, terrain.ground_y(to_x) - FrogObstacle.RADIUS))
 	else:
 		var y: float = GooseObstacle.new(terrain, entry).base_y
 		ends.append(Vector2(from_x, y))
@@ -373,6 +396,8 @@ func move_route_end(selection: Dictionary, end: int, x: float) -> void:
 		entry["from"] = clampf(x, 0.0, to_x - MIN_ROUTE)
 	else:
 		entry["to"] = clampf(x, from_x + MIN_ROUTE, length())
+	if str(entry["kind"]) == "frog":
+		entry["start"] = clampf(float(entry["start"]), float(entry["from"]), float(entry["to"]))
 	if str(entry["kind"]) == "goose":
 		# A goose's height is measured from its route's start. Keep it flying at the same level.
 		entry["height"] = terrain.ground_y(float(entry["from"])) - old_y
@@ -417,6 +442,15 @@ func _move_object(entry: Dictionary, at: Vector2, x: float) -> void:
 			var mid: float = clampf(x, half, length() - half)
 			entry["from"] = mid - half
 			entry["to"] = mid + half
+		"frog":
+			var half: float = (float(entry["to"]) - float(entry["from"])) / 2.0
+			var mid: float = clampf(x, half, length() - half)
+			entry["start"] = float(entry["start"]) + mid - (float(entry["from"]) + float(entry["to"])) / 2.0
+			entry["from"] = mid - half
+			entry["to"] = mid + half
+		"lily":
+			entry["x"] = x
+			rebake()
 		"goose":
 			var half: float = (float(entry["to"]) - float(entry["from"])) / 2.0
 			var mid: float = clampf(x, half, length() - half)
@@ -555,6 +589,19 @@ func _object_rows(entry: Dictionary, rows: Array[Dictionary]) -> void:
 			rows.append(_row("HEIGHT", "height", float(entry.get("height", 80.0)), 5.0, 10.0, 350.0))
 			rows.append(_row("FROM X", "from", float(entry["from"]), 10.0, 0.0, length()))
 			rows.append(_row("TO X", "to", float(entry["to"]), 10.0, 0.0, length()))
+		"frog":
+			rows.append(_row("SPEED", "speed", float(entry.get("speed", 70.0)), 5.0, 5.0, 200.0))
+			rows.append(_row("FROM X", "from", float(entry["from"]), 10.0, 0.0, length()))
+			rows.append(_row("TO X", "to", float(entry["to"]), 10.0, 0.0, length()))
+		"vent":
+			rows.append(_row("HEIGHT", "height", float(entry.get("height", 85.0)), 5.0, 15.0, 250.0))
+			rows.append(_row("QUIET", "quiet_time", float(entry.get("quiet_time", 2.6)), 0.5, 0.5, 10.0))
+			rows.append(_row("BURST", "burst_time", float(entry.get("burst_time", 1.1)), 0.1, 0.2, 5.0))
+			rows.append(_row("OFFSET", "offset", float(entry.get("offset", 0.0)), 0.5, 0.0, 20.0))
+		"gator":
+			rows.append(_row("FACING", "side", float(entry.get("side", -1.0)), 2.0, -1.0, 1.0))
+		"lily":
+			rows.append(_row("WIDTH", "width", float(entry.get("width", LilyObstacle.DEFAULT_WIDTH)), 5.0, 20.0, 140.0))
 
 
 func _row(label: String, key: String, value: float, step: float, min_value: float, max_value: float) -> Dictionary:
@@ -578,6 +625,8 @@ func set_property(selection: Dictionary, key: String, value: float) -> void:
 				move_route_end(selection, 0 if key == "from" else 1, value)
 				return
 			entry_of(selection)[key] = value
+			if str(entry_of(selection)["kind"]) == "lily":
+				rebake()
 
 
 func _set_hole_property(key: String, value: float) -> void:

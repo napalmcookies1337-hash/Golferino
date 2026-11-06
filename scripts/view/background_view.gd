@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Sky and parallax layers, generated once as tiling images. The time of day moves on as the
 ## course goes along, from morning to the boss hole's dusk.
 
-enum Mood { MORNING, MIDDAY, AFTERNOON, DUSK }
+enum Mood { MORNING, MIDDAY, AFTERNOON, DUSK, MURK_EARLY, MURK_MIDDLE, MURK_LATE, MURK_BOSS }
 
 const WIDTH := 640
 const HEIGHT := 360
@@ -38,7 +38,31 @@ const MOODS := {
 		"hills": ["6d5688", "4b4372", "33405a"], "sun": [150, 196, 24, "ff6a4a", "ffb070"],
 		"tint": Color(0.84, 0.77, 0.86), "bird": "191830",
 	},
+	# Swampy Shores: hazy and green, getting darker hole by hole, with a sickly glow at the boss.
+	Mood.MURK_EARLY: {
+		"sky_top": "6f8a78", "sky_bottom": "c9cfa0", "cloud": "aab59a", "cloud_shade": "8f9c82",
+		"hills": ["8a9a80", "6c7f62", "4d6148"], "sun": [420, 70, 12, "e8e8b8", "f6f6d8"],
+		"tint": Color(0.96, 0.97, 0.9), "bird": "2a3028", "fog": "c9cfa0",
+	},
+	Mood.MURK_MIDDLE: {
+		"sky_top": "4e6a60", "sky_bottom": "a3ad84", "cloud": "83917c", "cloud_shade": "6a7a68",
+		"hills": ["6c7f70", "506454", "37493c"], "sun": [510, 56, 11, "cfd2a0", "e6e8c0"],
+		"tint": Color(0.88, 0.91, 0.84), "bird": "20261f", "fog": "a3ad84",
+	},
+	Mood.MURK_LATE: {
+		"sky_top": "2f4648", "sky_bottom": "76846a", "cloud": "56685f", "cloud_shade": "43544e",
+		"hills": ["4b5f58", "364a42", "26362f"], "sun": [120, 92, 12, "a8ae80", "c8cca0"],
+		"tint": Color(0.79, 0.83, 0.78), "bird": "151a18", "fog": "76846a",
+	},
+	Mood.MURK_BOSS: {
+		"sky_top": "151e2e", "sky_bottom": "45604a", "cloud": "2f3f42", "cloud_shade": "243238",
+		"hills": ["2c3d3c", "1f2e2c", "141f1e"], "sun": [320, 150, 26, "9de06a", "dcffa0"],
+		"tint": Color(0.68, 0.72, 0.74), "bird": "0a0f12", "fog": "567a50", "glow": 52,
+	},
 }
+## How thick the swamp's fog sits, down the picture.
+const FOG_TOP := 228
+const FOG_BOTTOM := 322
 ## A bird crosses now and then, this many seconds apart at most.
 const BIRD_GAP := 16.0
 
@@ -49,6 +73,7 @@ var above_the_clouds: bool = false
 var _sprites: Array[Sprite2D] = []
 var _speeds: Array[float] = []
 var _cloud_sprite: Sprite2D
+var _fog_sprite: Sprite2D
 var _cloud_drift: float = 0.0
 var _birds: Node2D
 var _flock: Array[Vector2] = []
@@ -70,6 +95,16 @@ static func mood_for(hole_index: int, hole_count: int, is_boss: bool) -> int:
 	if progress < 0.34:
 		return Mood.MORNING
 	return Mood.MIDDAY if progress < 0.67 else Mood.AFTERNOON
+
+
+## How murky Swampy Shores is at a place along the course.
+static func swamp_mood_for(hole_index: int, hole_count: int, is_boss: bool) -> int:
+	if is_boss:
+		return Mood.MURK_BOSS
+	var progress: float = float(hole_index) / float(maxi(hole_count - 1, 1))
+	if progress < 0.34:
+		return Mood.MURK_EARLY
+	return Mood.MURK_MIDDLE if progress < 0.67 else Mood.MURK_LATE
 
 
 ## What the course itself should be tinted to match the sky.
@@ -96,11 +131,15 @@ func _ready() -> void:
 		for i in HILLS.size():
 			var hill: Array = HILLS[i]
 			var image: Image = _make_hills(hill[1], hill[2], Color(colours[i]), hill[3])
-			if i == 1:
+			if style.has("fog"):
+				_paint_dead_trees(image, hill, Color(colours[i]), 70 + i)
+			elif i == 1:
 				_paint_clubhouse(image, hill, Color(colours[i]))
 			elif i == 2:
 				_paint_tree_line(image, hill, Color(colours[i]))
 			_add_layer(image, hill[0])
+		if style.has("fog"):
+			_fog_sprite = _add_layer(_make_fog(Color(style["fog"])), 0.4)
 
 	_birds = Node2D.new()
 	_birds.draw.connect(_draw_birds)
@@ -117,6 +156,8 @@ func _process(delta: float) -> void:
 		var offset: float = center_x * _speeds[i]
 		if sprite == _cloud_sprite:
 			offset += _cloud_drift
+		elif sprite == _fog_sprite:
+			offset += _cloud_drift * 1.5
 		sprite.region_rect.position.x = round(offset)
 	_update_birds(delta)
 
@@ -185,17 +226,17 @@ func _make_sky(style: Dictionary) -> Image:
 			var dither: float = 0.25 if (x + y) % 2 == 0 else 0.75
 			var step_band: int = band + (1 if fraction > dither else 0)
 			image.set_pixel(x, y, top.lerp(bottom, float(step_band) / float(bands)))
-	_paint_sun(image, style["sun"])
+	_paint_sun(image, style["sun"], int(style.get("glow", 6)))
 	return image
 
 
-func _paint_sun(image: Image, sun: Array) -> void:
+func _paint_sun(image: Image, sun: Array, glow_size: int = 6) -> void:
 	var cx: int = sun[0]
 	var cy: int = sun[1]
 	var radius: int = sun[2]
 	var edge := Color(sun[3])
 	var core := Color(sun[4])
-	var glow: int = radius + 6
+	var glow: int = radius + glow_size
 	for dy in range(-glow, glow + 1):
 		for dx in range(-glow, glow + 1):
 			var x: int = cx + dx
@@ -207,6 +248,11 @@ func _paint_sun(image: Image, sun: Array) -> void:
 				image.set_pixel(x, y, core)
 			elif far <= float(radius):
 				image.set_pixel(x, y, edge)
+			elif far <= float(glow) and glow_size > 6:
+				# A wide glow fades away in rings of dither, so it has no hard edge.
+				var fade: float = 1.0 - (far - float(radius)) / float(glow_size)
+				if (x + y) % 2 == 0 or fade > 0.6:
+					image.set_pixel(x, y, image.get_pixel(x, y).lerp(edge, 0.5 * fade * fade))
 			elif far <= float(glow) and (x + y) % 2 == 0:
 				image.set_pixel(x, y, image.get_pixel(x, y).lerp(edge, 0.35))
 
@@ -290,6 +336,38 @@ func _paint_clubhouse(image: Image, hill: Array, color: Color) -> void:
 	_fill(image, CLUBHOUSE_X + 20, base - 7, 3, 7, window)
 	_fill(image, CLUBHOUSE_X + 21, base - 30, 1, 9, roof)
 	_fill(image, CLUBHOUSE_X + 22, base - 30, 6, 3, Color("e8483f").lerp(color, 0.35))
+
+
+# Bare, crooked trees standing along a hill.
+func _paint_dead_trees(image: Image, hill: Array, color: Color, seed_value: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var dark: Color = color.darkened(0.22)
+	var x: int = rng.randi_range(0, 30)
+	while x < WIDTH - 10:
+		var ground: int = int(_hill_y(x, hill[1], hill[2], hill[3]))
+		var height: int = rng.randi_range(16, 34)
+		_fill(image, x, ground - height, 2, height + 2, dark)
+		for _branch in rng.randi_range(2, 4):
+			var y: int = ground - rng.randi_range(height / 2, height)
+			var side: int = 1 if rng.randf() < 0.5 else -1
+			for step in rng.randi_range(4, 9):
+				_fill(image, x + side * step, y - step / 2, 1, 1, dark)
+		x += rng.randi_range(30, 95)
+
+
+# A thin layer of mist that drifts along, thickest in the middle. Dithered, for the pixel look.
+func _make_fog(color: Color) -> Image:
+	var image := Image.create(WIDTH, HEIGHT, false, Image.FORMAT_RGBA8)
+	for y in range(FOG_TOP, FOG_BOTTOM):
+		var depth: float = sin(float(y - FOG_TOP) / float(FOG_BOTTOM - FOG_TOP) * PI)
+		for x in WIDTH:
+			var drift: float = 0.5 + 0.5 * sin(float(x) / float(WIDTH) * TAU * 3.0 + float(y) * 0.05)
+			var thickness: float = depth * (0.45 + 0.55 * drift)
+			var solid: bool = (x + y) % 2 == 0 and thickness > 0.25
+			if solid or thickness > 0.75:
+				image.set_pixel(x, y, Color(color, 0.42))
+	return image
 
 
 # A row of round trees along the nearest hill, in clumps.

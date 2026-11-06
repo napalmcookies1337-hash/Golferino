@@ -34,7 +34,7 @@ func _ready() -> void:
 		# The same order the real game asks for holes in, so the same holes come out.
 		var next_level: int = mini(set_index + 1, Difficulty.MAX_LEVEL)
 		main.run_state.level = next_level
-		main.run = main.run.next_set(HoleGenerator.generate_set(main._hole_rng, next_level))
+		main.run = main.run.next_set(HoleGenerator.generate_set(main._hole_rng, next_level, HoleGenerator.biome_for_set(set_index + 2)))
 		main.run_state.course = main.run
 	if FileAccess.file_exists(PROFILE_PATH):
 		DirAccess.remove_absolute(PROFILE_PATH)

@@ -78,7 +78,11 @@ const WIDTHS := {
 	"windmill": [140.0, 140.0],
 	"sprinkler": [130.0, 130.0],
 	"cart": [320.0, 320.0],
+	"gator": [130.0, 130.0],
 }
+## From this far through a set, swamp holes can have gators.
+const GATOR_FIRST_HOLE := 2
+const BOSS_GATOR_SLOT := 6
 ## The hole in a set where each kind can first appear, before difficulty brings it forward.
 const FIRST_HOLE := {
 	"bunker": 0,
@@ -95,9 +99,14 @@ const BOSS_FEATURES: Array[String] = ["cart", "pad", "geese", "windmill", "sprin
 const WIND_FROM_HOLE := 3
 
 
+## Sets take turns: Grassy Greens first, then Swampy Shores, and so on.
+static func biome_for_set(set_number: int) -> String:
+	return HoleData.BIOME_SWAMP if set_number % 2 == 0 else HoleData.BIOME_GRASSY
+
+
 ## A whole set: nine holes in a shuffled order, then the boss. Shapes are dealt like cards, so
 ## a set uses them all before any comes round again.
-static func generate_set(rng: RandomNumberGenerator, level: int) -> Array[HoleData]:
+static func generate_set(rng: RandomNumberGenerator, level: int, biome: String = HoleData.BIOME_GRASSY) -> Array[HoleData]:
 	var mix: Array = PAR_MIXES[rng.randi_range(0, PAR_MIXES.size() - 1)].duplicate()
 	var deck: Array[String] = []
 	var holes: Array[HoleData] = []
@@ -107,9 +116,9 @@ static func generate_set(rng: RandomNumberGenerator, level: int) -> Array[HoleDa
 			deck.assign(SHAPES)
 			_shuffle(rng, deck)
 		var gentle: bool = i < GENTLE_HOLES and level < GENTLE_UNTIL_LEVEL
-		holes.append(generate_hole(rng, level, i, int(mix[i]), false, _deal_shape(deck, gentle)))
+		holes.append(generate_hole(rng, level, i, int(mix[i]), false, _deal_shape(deck, gentle), biome))
 	var boss_shape: String = BOSS_SHAPES[rng.randi_range(0, BOSS_SHAPES.size() - 1)]
-	holes.append(generate_hole(rng, level, mix.size(), BOSS_PAR, true, boss_shape))
+	holes.append(generate_hole(rng, level, mix.size(), BOSS_PAR, true, boss_shape, biome))
 	return holes
 
 
@@ -123,7 +132,7 @@ static func _deal_shape(deck: Array[String], gentle: bool) -> String:
 	return GENTLE_SHAPES[0]
 
 
-static func generate_hole(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, shape_kind: String = "") -> HoleData:
+static func generate_hole(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, shape_kind: String = "", biome: String = HoleData.BIOME_GRASSY) -> HoleData:
 	if shape_kind == "":
 		shape_kind = SHAPES[rng.randi_range(0, SHAPES.size() - 1)]
 	var limits: Array = DISTANCES[par]
@@ -133,6 +142,7 @@ static func generate_hole(rng: RandomNumberGenerator, level: int, index: int, pa
 	var green_from: float = cup_x - green_half
 
 	var hole := HoleData.new()
+	hole.biome = biome
 	hole.par = par
 	hole.tee_x = TEE_X
 	hole.cup_x = cup_x
@@ -141,10 +151,12 @@ static func generate_hole(rng: RandomNumberGenerator, level: int, index: int, pa
 	hole.wind = _wind(rng, level, index, is_boss)
 
 	var shape: Dictionary = _make_shape(rng, shape_kind, green_from)
-	var layout: Array[Dictionary] = _lay_out(rng, level, index, par, is_boss, green_from, shape_kind)
+	var layout: Array[Dictionary] = _lay_out(rng, level, index, par, is_boss, green_from, shape_kind, biome)
 	_build_ground(rng, hole, level, layout, shape, green_from, green_half)
 	if shape_kind == "badlands":
 		_break_up_fairway(rng, hole)
+	if biome == HoleData.BIOME_SWAMP:
+		_turn_sand_to_mud(hole)
 	var terrain := Terrain.new(hole)
 	_float_some_pads(rng, hole, terrain)
 	_remove_pads_aimed_at_water(hole, terrain)
@@ -241,8 +253,8 @@ static func _shape_y(shape: Dictionary, x: float) -> float:
 
 # --- Choosing what goes on the hole ---
 
-static func _lay_out(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, green_from: float, shape_kind: String) -> Array[Dictionary]:
-	var wanted: Array[String] = _wanted_features(rng, level, index, par, is_boss, shape_kind)
+static func _lay_out(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, green_from: float, shape_kind: String, biome: String) -> Array[Dictionary]:
+	var wanted: Array[String] = _wanted_features(rng, level, index, par, is_boss, shape_kind, biome)
 	var first_gap: float = FIRST_GAP_SHORT if par == 3 else FIRST_GAP
 	var room: float = green_from - TEE_TO
 	var chosen: Array[Dictionary] = []
@@ -326,11 +338,14 @@ static func _width_of(rng: RandomNumberGenerator, kind: String, level: int, par:
 	return round(rng.randf_range(low, high))
 
 
-static func _wanted_features(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, shape_kind: String) -> Array[String]:
+static func _wanted_features(rng: RandomNumberGenerator, level: int, index: int, par: int, is_boss: bool, shape_kind: String, biome: String = HoleData.BIOME_GRASSY) -> Array[String]:
 	var wanted: Array[String] = []
+	var swamp: bool = biome == HoleData.BIOME_SWAMP
 	if is_boss:
 		# What every boss hole must have comes first, so extras can't crowd it out.
 		wanted.assign(BOSS_FEATURES)
+		if swamp:
+			wanted[BOSS_GATOR_SLOT] = "gator"
 		for _i in level / 3:
 			wanted.append(["pond", "bunker", "pad", "sprinkler"][rng.randi_range(0, 3)])
 		return wanted
@@ -340,6 +355,8 @@ static func _wanted_features(rng: RandomNumberGenerator, level: int, index: int,
 	for kind: String in FIRST_HOLE:
 		if int(FIRST_HOLE[kind]) <= reach:
 			pool.append(kind)
+	if swamp and reach >= GATOR_FIRST_HOLE:
+		pool.append("gator")
 	if shape_kind == "islands":
 		for _i in int(ISLAND_PONDS[par]):
 			wanted.append("pond")
@@ -398,13 +415,17 @@ static func _build_ground(rng: RandomNumberGenerator, hole: HoleData, level: int
 			"pond", "geese":
 				_add_fairway(hole, fairway_from, x)
 				y = _add_pond(rng, hole, points, x, width, y)
-				if kind == "geese":
+				if hole.biome == HoleData.BIOME_SWAMP:
+					_add_lilies(rng, hole, x, width)
+				elif kind == "geese":
 					_add_geese(rng, hole, level, x, width)
 				fairway_from = x + width + rng.randf_range(10.0, 50.0)
 			"rough":
 				_add_fairway(hole, fairway_from, x)
 				y = _roll_ground(rng, points, x, x + width, y, shape)
 				fairway_from = x + width
+				if hole.biome == HoleData.BIOME_SWAMP:
+					hole.surface_spans.append({ "from": int(x), "to": int(x + width), "type": Surface.Type.MUD })
 			"ridge":
 				y = _add_ridge(rng, points, x, width, y)
 			_:
@@ -512,6 +533,10 @@ static func _add_level_ground(rng: RandomNumberGenerator, points: PackedVector2A
 static func _add_level_hazard(rng: RandomNumberGenerator, hole: HoleData, level: int, kind: String, x: float, width: float) -> void:
 	var speed: float = Difficulty.hazard_speed(level)
 	var middle: float = round(x + width / 2.0)
+	# The swamp's windmill plays the same as any other, so it goes through as normal.
+	if hole.biome == HoleData.BIOME_SWAMP and kind != "pad" and kind != "windmill":
+		_add_swamp_hazard(rng, hole, kind, x, width, speed)
+		return
 	match kind:
 		"pad":
 			hole.obstacles.append({ "kind": "pad", "x": middle, "rotation": _pad_rotation(rng) })
@@ -533,6 +558,50 @@ static func _add_level_hazard(rng: RandomNumberGenerator, hole: HoleData, level:
 				"to": x + width - 20.0,
 				"speed": rng.randf_range(45.0, 60.0) * speed,
 			})
+
+
+# The swamp's own hazards fill the same places in a hole as the golf course's.
+static func _add_swamp_hazard(rng: RandomNumberGenerator, hole: HoleData, kind: String, x: float, width: float, speed: float) -> void:
+	var middle: float = round(x + width / 2.0)
+	match kind:
+		"cart":
+			for _i in 2:
+				hole.obstacles.append({
+					"kind": "frog",
+					"from": x + 20.0,
+					"to": x + width - 20.0,
+					"start": rng.randf_range(x + 20.0, x + width - 20.0),
+					"speed": rng.randf_range(60.0, 85.0) * speed,
+				})
+		"gator":
+			hole.obstacles.append({ "kind": "gator", "x": middle, "side": -1.0 })
+		"sprinkler":
+			hole.obstacles.append({
+				"kind": "vent",
+				"x": middle,
+				"height": rng.randf_range(70.0, 100.0),
+				"quiet_time": rng.randf_range(2.2, 3.0) / speed,
+				"burst_time": rng.randf_range(0.9, 1.2),
+				"offset": rng.randf_range(0.0, 2.0),
+			})
+
+
+# Stepping stones across a pond, spaced so a shot can land on one.
+static func _add_lilies(rng: RandomNumberGenerator, hole: HoleData, x: float, width: float) -> void:
+	var count: int = clampi(int(width / 110.0), 1, 3)
+	for i in count:
+		var center: float = x + width * (float(i) + 1.0) / float(count + 1)
+		hole.obstacles.append({
+			"kind": "lily",
+			"x": round(center + rng.randf_range(-12.0, 12.0)),
+			"width": round(rng.randf_range(44.0, 60.0)),
+		})
+
+
+static func _turn_sand_to_mud(hole: HoleData) -> void:
+	for span: Dictionary in hole.surface_spans:
+		if int(span["type"]) == Surface.Type.SAND:
+			span["type"] = Surface.Type.MUD
 
 
 # Usually faces away from the hole as a hazard, and sometimes toward it as a reward.
@@ -696,6 +765,8 @@ static func _mirror(hole: HoleData) -> void:
 			entry["start"] = length - float(entry["start"])
 		if entry.has("rotation"):
 			entry["rotation"] = -float(entry["rotation"])
+		if entry.has("side"):
+			entry["side"] = -float(entry["side"])
 
 
 static func _mirror_span(span: Dictionary, length: float) -> void:

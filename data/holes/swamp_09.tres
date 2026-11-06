@@ -1,0 +1,181 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_mbjif"]
+
+[resource]
+script = ExtResource("1_mbjif")
+display_name = "HOLE 9"
+biome = "swamp"
+par = 5
+cup_x = 2240.0
+points = PackedVector2Array(0, 340, 60, 344, 130, 346, 330, 340, 520, 332, 680, 336, 790, 332, 840, 384, 1030, 388, 1085, 328, 1260, 310, 1420, 306, 1620, 280, 1800, 262, 1980, 246, 2120, 236, 2240, 234, 2360, 236, 2490, 208)
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 520,
+"type": 1
+}, {
+"from": 520,
+"to": 620,
+"type": 6
+}, {
+"from": 620,
+"to": 790,
+"type": 1
+}, {
+"from": 1090,
+"to": 1300,
+"type": 1
+}, {
+"from": 1300,
+"to": 1480,
+"type": 6
+}, {
+"from": 1480,
+"to": 2130,
+"type": 1
+}, {
+"from": 2130,
+"to": 2350,
+"type": 2
+}]
+water_spans = [{
+"from": 795,
+"level": 358.0,
+"to": 1080
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 410.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 410.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 720.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 720.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1150.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1150.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1720.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1720.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2050.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 2050.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 2440.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 2440.0
+}]
+obstacles = [{
+"from": 240.0,
+"kind": "frog",
+"speed": 70.0,
+"start": 370.0,
+"to": 500.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 880.0
+}, {
+"kind": "lily",
+"width": 62.0,
+"x": 1000.0
+}, {
+"burst_time": 1.1,
+"height": 85.0,
+"kind": "vent",
+"offset": 0.5,
+"quiet_time": 2.6,
+"x": 1200.0
+}, {
+"kind": "windmill",
+"rotation": 0.0,
+"turn_speed": 1.2,
+"x": 1590.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 1720.0
+}, {
+"burst_time": 1.1,
+"height": 95.0,
+"kind": "vent",
+"offset": 2.0,
+"quiet_time": 2.6,
+"x": 1830.0
+}, {
+"from": 1880.0,
+"kind": "frog",
+"speed": 80.0,
+"start": 1990.0,
+"to": 2100.0
+}, {
+"kind": "coin",
+"x": 353.0,
+"y": 291.0
+}, {
+"kind": "coin",
+"x": 598.0,
+"y": 279.0
+}, {
+"kind": "coin",
+"x": 843.0,
+"y": 296.0
+}, {
+"kind": "coin",
+"x": 1088.0,
+"y": 258.0
+}, {
+"kind": "coin",
+"x": 1333.0,
+"y": 232.0
+}, {
+"kind": "coin",
+"x": 1578.0,
+"y": 232.0
+}, {
+"kind": "coin",
+"x": 1823.0,
+"y": 200.0
+}, {
+"kind": "coin",
+"x": 2068.0,
+"y": 172.0
+}]
+title = "SINKING FEELING"

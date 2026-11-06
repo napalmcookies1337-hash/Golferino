@@ -18,14 +18,14 @@ const DUCK_TIME := 0.15
 const MUSIC_BASE_DB := -3.0
 const AMBIENCE_DB := -6.0
 
-const MUSIC_NAMES := ["course", "shop", "boss"]
+const MUSIC_NAMES := ["title", "grassy", "swamp", "isles", "shop", "boss", "swamp_boss"]
 const JINGLE_NAMES := ["holed", "bogey", "birdie", "ace", "win", "lose", "game_over"]
 const SFX_NAMES := [
 	"swing", "hit_driver", "hit_iron", "hit_putt", "hit_perfect", "hit_full", "hit_miss",
 	"meter_press", "meter_tick", "bounce_grass", "bounce_sand", "bounce_green", "splash", "cup",
 	"pin", "coin", "pad", "cart", "goose", "windmill", "sprinkler", "door", "penalty", "mulligan",
 	"trick", "menu_move", "menu_ok", "menu_back", "denied", "buy", "equip", "rival_cheat",
-	"rival_turn", "score_tick",
+	"rival_turn", "score_tick", "bounce_mud", "frog", "vent", "gator",
 ]
 
 var music_level: int = DEFAULT_MUSIC_LEVEL
@@ -45,6 +45,8 @@ var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _jingle: AudioStreamPlayer
 var _ambience: AudioStreamPlayer
+var _meadow_ambience: AudioStream
+var _swamp_ambience: AudioStream
 var _duck: Tween
 var _fade: Tween
 var _jingle_serial: int = 0
@@ -64,7 +66,9 @@ func _ready() -> void:
 	_music_b = _make_player(MUSIC_BUS)
 	_jingle = _make_player(SFX_BUS)
 	_ambience = _make_player(SFX_BUS)
-	_ambience.stream = load("res://audio/ambience.res")
+	_meadow_ambience = load("res://audio/ambience.res")
+	_swamp_ambience = load("res://audio/ambience_swamp.res")
+	_ambience.stream = _meadow_ambience
 	_ambience.volume_db = AMBIENCE_DB
 	_load_settings()
 	_apply_levels()
@@ -140,9 +144,11 @@ func stop_jingle() -> void:
 	_jingle.stop()
 
 
-## The soft sound of being outdoors, under the music on the course.
-func set_outdoors(on: bool) -> void:
-	if on and not _ambience.playing:
+## The soft sound of being outdoors, under the music on the course: birdsong, or swamp noises.
+func set_outdoors(on: bool, swamp: bool = false) -> void:
+	var wanted: AudioStream = _swamp_ambience if swamp else _meadow_ambience
+	if on and (not _ambience.playing or _ambience.stream != wanted):
+		_ambience.stream = wanted
 		_ambience.play()
 	elif not on and _ambience.playing:
 		_ambience.stop()

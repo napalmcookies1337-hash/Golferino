@@ -19,6 +19,8 @@ var cup_x: float = 0.0
 var cup_half: float = CUP_HALF
 var cup_depth: float = CUP_DEPTH
 var rim_y: float = 0.0
+## Which world this hole's in, for the views.
+var biome: String = HoleData.BIOME_GRASSY
 
 var _heights := PackedFloat32Array()
 var _basin := PackedFloat32Array()
@@ -32,6 +34,7 @@ var _under := PackedFloat32Array()
 func _init(hole: HoleData) -> void:
 	length = int(hole.points[hole.points.size() - 1].x)
 	cup_x = hole.cup_x
+	biome = hole.biome
 	_bake_heights(hole.points)
 	_bake_surfaces(hole)
 	_flatten_cup_rim()
@@ -87,6 +90,12 @@ func surface_at(x: float) -> int:
 	return _surfaces[clampi(int(x), 0, length)]
 
 
+## True where water lies, even under a lily pad.
+func is_wet(x: float) -> bool:
+	var surface: int = surface_at(x)
+	return surface == Surface.Type.WATER or surface == Surface.Type.LILY
+
+
 func in_cup(x: float) -> bool:
 	return absf(x - cup_x) < cup_half
 
@@ -129,6 +138,14 @@ func _bake_surfaces(hole: HoleData) -> void:
 			if _heights[x] > level:
 				_heights[x] = level
 				_surfaces[x] = Surface.Type.WATER
+	# Water's height is already its surface, so a lily pad only has to stop it being water.
+	for entry: Dictionary in hole.obstacles:
+		if str(entry.get("kind", "")) == "lily":
+			var half: float = float(entry.get("width", LilyObstacle.DEFAULT_WIDTH)) / 2.0
+			var center: float = float(entry["x"])
+			for x in range(clampi(int(center - half), 0, length), clampi(int(center + half), 0, length + 1)):
+				if _surfaces[x] == Surface.Type.WATER:
+					_surfaces[x] = Surface.Type.LILY
 
 
 func _span_start(span: Dictionary) -> int:

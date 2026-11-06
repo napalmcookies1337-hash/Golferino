@@ -187,6 +187,7 @@ func _test_shop() -> void:
 	await _save("shop_04_after_buying")
 	await _test_sticker_stacking(shop, run_state)
 	await _test_shop_balls(shop, run_state)
+	await _test_shop_reroll(shop, run_state)
 
 	_press_key(KEY_TAB)
 	await _wait(0.1)
@@ -231,6 +232,35 @@ func _find_aim_view() -> AimView:
 		if child is AimView:
 			return child
 	return null
+
+
+# Rerolls with real key presses, then puts things back as the rest of the checks expect them.
+func _test_shop_reroll(shop: ShopScreen, run_state: RunState) -> void:
+	var held_stock: Array[Dictionary] = shop.stock.duplicate()
+	var held_coins: int = run_state.coins
+	run_state.coins = 20
+	shop.mode = ShopScreen.Mode.BROWSE
+	shop.cursor = shop.stock.size()
+	_press_key(KEY_RIGHT)
+	await _wait(0.05)
+	_expect(shop.cursor == shop.stock.size() + 1, "Right from the leave button reaches the reroll")
+	await _save("shop_08_reroll")
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_expect(run_state.coins == 17 and run_state.reroll_price() == 6, "Space rerolls for 3, and the next costs 6")
+	_expect(shop.sold.is_empty(), "and everything's in stock again")
+	await _save("shop_09_after_reroll")
+	run_state.coins = 2
+	_press_key(KEY_SPACE)
+	await _wait(0.1)
+	_expect(run_state.coins == 2, "a reroll needs the coins")
+	await _save("shop_10_cant_reroll")
+	shop.stock = held_stock
+	shop.sold.clear()
+	shop.cursor = 0
+	run_state.coins = held_coins
+	run_state.begin_shop()
+	await _wait(0.05)
 
 
 # Buys more of a sticker already on a full club, with real key presses.
@@ -421,7 +451,7 @@ func _test_reactions() -> void:
 	main.run.hole_index = 1
 	main.load_current_hole()
 	await _wait(0.6)
-	_expect(Sound.current_music == "course", "the course has its own music")
+	_expect(Sound.current_music == "grassy", "Grassy Greens has its own music")
 	var golfer: GolferView = _find_player_view()
 	game().ball.state = BallSim.State.IN_WATER
 	game()._on_ball_hazard(game().ball.pos, "water")
@@ -603,9 +633,115 @@ func _test_duel() -> void:
 	await _wait(0.4)
 	_expect(game().phase == HoleGame.Phase.COMPLETE, "the duel ends the hole")
 	await _save("duel_07_result")
+	await _test_swamp_course()
+
+
+# Rolls a real ball into a gator, through its open jaws, its flash and the penalty.
+func _shoot_gator() -> void:
+	main.run.hole_index = 6
+	main.load_current_hole()
+	var gator: GatorObstacle = null
+	for obstacle in game().obstacles:
+		if obstacle is GatorObstacle and gator == null:
+			gator = obstacle
+	var start_x: float = gator.x - 75.0
+	game().ball.place(start_x)
+	game()._begin_aim()
+	await _wait(1.0)
+	await _save("swamp_gator_shut")
+	var strokes_before: int = game().strokes
+	game()._last_spot_x = start_x
+	game().strokes += 1
+	game().ball.launch(Vector2(90.0, 0.0), 0.0)
+	game()._set_phase(HoleGame.Phase.BALL_MOVING)
+	while gator.jaw < 0.7 and not gator.eaten:
+		await get_tree().physics_frame
+	await _save("swamp_gator_open")
+	while not gator.eaten:
+		await get_tree().physics_frame
+	await _wait(0.04)
+	await _save("swamp_gator_flash")
+	_expect(game().strokes == strokes_before + 2, "a gator costs a penalty stroke")
+	_expect(game().ball.state == BallSim.State.EATEN, "and the ball's gone")
+	await _wait(GatorObstacle.FLASH_TIME)
+	_expect(gator.is_gone(), "then the gator's gone too")
+	await _save("swamp_gator_gone")
+
+
+# The win carries the run on into Swampy Shores, through to beating the second rival.
+func _test_swamp_course() -> void:
+	var run_state: RunState = main.run_state
 	_press_key(KEY_SPACE)
 	await _wait(0.5)
-	_expect(main.run_over != null, "the duel leads to the final score")
+	_expect(main.shop != null, "a shop follows the first rival")
+	_expect(main.run_over == null, "and not the final score")
+	await _save("swamp_00_shop")
+	var spare_before: int = run_state.spare
+	var coins_before: int = run_state.coins
+	var finished_before: int = main.run.finished_holes()
+	main.shop.done.emit()
+	await _wait(0.5)
+	_expect(game().hole.biome == HoleData.BIOME_SWAMP, "leaving it goes to Swampy Shores")
+	_expect(main.run.hole_index == 0 and main.run.hole_count() == 10, "from its first hole")
+	_expect(Sound.current_music == "swamp", "with its own music")
+	_expect(run_state.spare == spare_before and run_state.coins == coins_before, "and everything carried over")
+	_expect(main.run.finished_holes() == finished_before, "the totals carry on too")
+	await _save("swamp_01_welcome")
+	for i in main.run.hole_count():
+		await _shoot_hole(i, "swamp_hole_%02d" % (i + 1))
+
+	# The hazards, up close.
+	await _shoot_at(0, 760.0, "swamp_mud")
+	await _shoot_at(1, 290.0, "swamp_lily")
+	await _shoot_at(2, 500.0, "swamp_frog")
+	await _shoot_at(4, 430.0, "swamp_windmill")
+	await _shoot_gator()
+	main.run.hole_index = 3
+	main.load_current_hole()
+	var vent: VentObstacle = null
+	for obstacle in game().obstacles:
+		if obstacle is VentObstacle and vent == null:
+			vent = obstacle
+	game().ball.place(vent.x - 60.0)
+	game()._begin_aim()
+	await _wait(0.6)
+	while vent.stage() != VentObstacle.Stage.WARNING:
+		await get_tree().physics_frame
+	await _wait(0.5)
+	await _save("swamp_vent_warning")
+	while vent.stage() != VentObstacle.Stage.BURST:
+		await get_tree().physics_frame
+	await _wait(0.3)
+	await _save("swamp_vent_burst")
+
+	main.run.hole_index = main.run.hole_count() - 1
+	main.load_current_hole()
+	await _wait(0.5)
+	var rival: Rival = game().rival
+	_expect(rival != null, "the swamp ends on a duel")
+	_expect(Sound.current_music == "swamp_boss", "with its own frantic music")
+	_expect(rival._cheats_left == Rival.CHEATS_PER_HOLE, "the rival only gets two cheats")
+	_expect(rival._miss_chance < Rival.MISS_CHANCE, "but plays better than last time")
+	await _save("swamp_boss_tee")
+	game().select_club(1)
+	game().strike_with(0.5, 0.0)
+	while game().phase != HoleGame.Phase.RIVAL_TURN:
+		await get_tree().physics_frame
+	await _wait(0.6)
+	await _save("swamp_boss_rival")
+	while game().phase != HoleGame.Phase.AIM and game().phase != HoleGame.Phase.COMPLETE:
+		await get_tree().physics_frame
+	game().ball.state = BallSim.State.HOLED
+	game().player_holed = true
+	rival.holed = false
+	rival.strokes = 99
+	game()._settle_duel()
+	await _wait(0.4)
+	_expect(run_state.ending == RunState.Ending.BEAT_RIVAL, "beating it ends the run with a win")
+	await _save("swamp_boss_result")
+	_press_key(KEY_SPACE)
+	await _wait(0.5)
+	_expect(main.run_over != null, "the second duel leads to the final score")
 	await _wait(main.run_over.reveal_time() + 0.2)
 	_expect(main.run_over.is_revealed(), "the final score finishes reading itself out")
 	await _save("run_over_duel")
@@ -709,8 +845,16 @@ func _test_floating_isles() -> void:
 
 	var scores_before: int = profile.isles_table(4000).size()
 	var finished_strokes: int = game().strokes
+	game().ball.pos = Vector2(hole.cup_x, game().terrain.rim_y)
+	game().ball.state = BallSim.State.HOLED
 	game().ball.holed.emit()
-	await _wait(0.6)
+	await _wait(0.1)
+	var isles_golfer: GolferView = null
+	for child in main._world.get_children():
+		if child is GolferView and not child is RivalView:
+			isles_golfer = child
+	_expect(absf(absf(isles_golfer.position.x - hole.cup_x) - GolferView.CELEBRATE_GAP) < 1.0, "the golfer appears right beside the cup")
+	await _wait(0.5)
 	await _save("isles_09_holed")
 	await _wait(1.3)
 	_expect(main.isles_finish != null, "reaching the hole brings up the finish screen")

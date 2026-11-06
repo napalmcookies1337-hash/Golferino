@@ -346,9 +346,11 @@ func _draw_hint() -> void:
 		PixelFont.draw_centered(self, hint, SCREEN_WIDTH / 2.0, 346.0, TEXT)
 
 
-## True once an infinite run's boss is beaten: the run goes on to a shop and the next set.
+## True once a rival's beaten with more to come: the run goes on to a shop and the next course.
 func run_carries_on() -> bool:
-	return run_state != null and run_state.infinite and game.rival != null and game.duel_won
+	if run_state == null or game.rival == null or not game.duel_won:
+		return false
+	return run_state.infinite or run_state.rival_beaten_with_more_to_come
 
 
 func _draw_result() -> void:
@@ -376,7 +378,7 @@ func _draw_result() -> void:
 	y += 12.0
 	if not summary.is_empty():
 		# After a boss in infinite mode, the notes below say what became of the spare strokes.
-		if not run_carries_on():
+		if not (run_carries_on() and run_state.infinite):
 			var banked: int = int(summary["banked"])
 			var banked_text: String = "PAR: NO CHANGE TO SPARE STROKES"
 			if banked != 0:

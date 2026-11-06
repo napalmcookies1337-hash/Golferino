@@ -65,7 +65,7 @@ func _draw() -> void:
 		draw_rect(Rect2(point.x, point.y, 2, 2), trail_color)
 
 	var state: int = ball.state
-	if state == BallSim.State.HOLED or state == BallSim.State.IN_WATER:
+	if state == BallSim.State.HOLED or state == BallSim.State.IN_WATER or state == BallSim.State.EATEN:
 		return
 	var at: Vector2 = ball.pos.round()
 	_draw_shadow(at)

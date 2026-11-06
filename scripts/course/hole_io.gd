@@ -5,7 +5,7 @@ extends RefCounted
 
 const MIN_POINT_GAP := 2.0
 const MAX_LENGTH := 8000.0
-const KNOWN_KINDS := ["pad", "cart", "windmill", "sprinkler", "goose", "coin"]
+const KNOWN_KINDS := ["pad", "cart", "windmill", "sprinkler", "goose", "coin", "frog", "vent", "gator", "lily"]
 ## Maps saved before coins existed don't have this, so they get the original hole's coins.
 const COIN_VERSION_KEY := "coin_version"
 const LEAF_VARIANTS := 3
@@ -15,8 +15,13 @@ const LEAF_VARIANTS := 3
 static func tree_pieces(x: float, variant: int) -> Array:
 	return [
 		{ "kind": "trunk", "x": x, "height": 0.0 },
-		{ "kind": "leaves", "x": x, "height": 37.0 + 4.0 * float(variant), "variant": variant },
+		{ "kind": "leaves", "x": x, "height": leaves_height(variant), "variant": variant },
 	]
+
+
+## How high a whole tree's leaves sit above the ground.
+static func leaves_height(variant: int) -> float:
+	return 37.0 + 4.0 * float(variant)
 
 
 static func to_dict(hole: HoleData) -> Dictionary:
@@ -25,6 +30,7 @@ static func to_dict(hole: HoleData) -> Dictionary:
 		points.append([point.x, point.y])
 	return {
 		"title": hole.title,
+		"biome": hole.biome,
 		"par": hole.par,
 		"tee_x": hole.tee_x,
 		"cup_x": hole.cup_x,
@@ -50,6 +56,7 @@ static func from_dict(data: Variant) -> HoleData:
 	var hole := HoleData.new()
 	hole.points = points
 	hole.title = str(data.get("title", "UNTITLED"))
+	hole.biome = HoleData.BIOME_SWAMP if str(data.get("biome", "")) == HoleData.BIOME_SWAMP else HoleData.BIOME_GRASSY
 	hole.par = clampi(_number(data, "par", 4.0) as int, 1, 12)
 	hole.tee_x = clampf(_number(data, "tee_x", 90.0), 0.0, length)
 	hole.cup_x = clampf(_number(data, "cup_x", length - 100.0), 10.0, length - 10.0)
@@ -141,7 +148,7 @@ static func _read_spans(raw: Variant, extra_key: String) -> Array:
 		var span: Dictionary = { "from": int(entry["from"]), "to": int(entry["to"]) }
 		if extra_key == "type":
 			var type: int = int(entry["type"])
-			if type < 0 or type > Surface.Type.WATER:
+			if not Surface.PROPS.has(type) or type == Surface.Type.LILY:
 				continue
 			span["type"] = type
 		else:
@@ -162,7 +169,7 @@ static func _read_obstacles(raw: Variant) -> Array:
 
 static func _has_required_keys(entry: Dictionary) -> bool:
 	match str(entry["kind"]):
-		"cart", "goose":
+		"cart", "goose", "frog":
 			return _is_number(entry.get("from")) and _is_number(entry.get("to"))
 		"coin":
 			return _is_number(entry.get("x")) and _is_number(entry.get("y"))

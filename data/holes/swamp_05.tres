@@ -1,0 +1,95 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_c6e7g"]
+
+[resource]
+script = ExtResource("1_c6e7g")
+display_name = "HOLE 5"
+biome = "swamp"
+par = 3
+cup_x = 660.0
+points = PackedVector2Array(0, 296, 60, 292, 130, 290, 300, 286, 430, 292, 550, 288, 660, 284, 770, 286, 920, 258)
+surface_spans = [{
+"from": 60,
+"to": 130,
+"type": 4
+}, {
+"from": 130,
+"to": 460,
+"type": 1
+}, {
+"from": 460,
+"to": 560,
+"type": 6
+}, {
+"from": 560,
+"to": 770,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 40.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 40.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 210.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 210.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 830.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 830.0
+}]
+obstacles = [{
+"kind": "windmill",
+"rotation": 0.0,
+"turn_speed": 1.1,
+"x": 510.0
+}, {
+"kind": "coin",
+"x": 254.0,
+"y": 238.0
+}, {
+"kind": "coin",
+"x": 301.0,
+"y": 231.0
+}, {
+"kind": "coin",
+"x": 349.0,
+"y": 226.0
+}, {
+"kind": "coin",
+"x": 396.0,
+"y": 222.0
+}, {
+"kind": "coin",
+"x": 444.0,
+"y": 216.0
+}, {
+"kind": "coin",
+"x": 491.0,
+"y": 238.0
+}, {
+"kind": "coin",
+"x": 539.0,
+"y": 228.0
+}, {
+"kind": "coin",
+"x": 586.0,
+"y": 220.0
+}]
+title = "ROTTEN MILL"

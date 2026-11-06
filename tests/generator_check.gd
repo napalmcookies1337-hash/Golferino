@@ -3,7 +3,7 @@ extends "res://tests/test_runner.gd"
 ## any hole that can't be finished or is brutal. Much slower than the rules tests, so it runs
 ## on its own. Prints the seed of anything that fails, so that hole can be made again.
 ## Run with: Godot --headless --path . --quit-after 40000 res://tests/generator_check.tscn
-## After the scene, "-- seeds first_level last_level first_seed" narrows it, or spreads it
+## After the scene, "-- seeds first_level last_level first_seed swamp" narrows it, or spreads it
 ## over several processes at once. By default: 2 seeds of every level, about 12 minutes.
 
 const OVER_PAR_LIMIT := 6.0
@@ -15,6 +15,7 @@ func _ready() -> void:
 	var first_level: int = int(args[1]) if args.size() > 1 else 0
 	var last_level: int = int(args[2]) if args.size() > 2 else Difficulty.MAX_LEVEL
 	var first_seed: int = int(args[3]) if args.size() > 3 else 0
+	var biome: String = HoleData.BIOME_SWAMP if args.size() > 4 and args[4] == "swamp" else HoleData.BIOME_GRASSY
 	var started: int = Time.get_ticks_msec()
 	var holes: int = 0
 	var bad: int = 0
@@ -30,7 +31,7 @@ func _ready() -> void:
 			var seed_value: int = level * 1000 + first_seed + seed_index
 			var rng := RandomNumberGenerator.new()
 			rng.seed = seed_value
-			var set_holes: Array[HoleData] = HoleGenerator.generate_set(rng, level)
+			var set_holes: Array[HoleData] = HoleGenerator.generate_set(rng, level, biome)
 			for hole in set_holes:
 				holes += 1
 				var perfect: int = _play_round(hole, noise, 0.0, 0.0, true)

@@ -66,3 +66,9 @@ static func rival_power_steps(level: int) -> int:
 
 static func rival_cheats(level: int) -> int:
 	return Rival.CHEATS_PER_HOLE + level / 4
+
+
+## How good the rival plays in Swampy Shores: tougher than it would be elsewhere. It still only
+## cheats twice a hole there, whatever this says.
+static func swamp_rival_level(level: int) -> int:
+	return mini(level + 4, MAX_LEVEL)

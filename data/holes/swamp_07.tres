@@ -1,0 +1,113 @@
+[gd_resource type="Resource" script_class="HoleData" format=3]
+
+[ext_resource type="Script" path="res://scripts/course/hole_data.gd" id="1_uu4j7"]
+
+[resource]
+script = ExtResource("1_uu4j7")
+display_name = "HOLE 7"
+biome = "swamp"
+cup_x = 1586.0
+points = PackedVector2Array(0, 306, 60, 302, 130, 300, 365, 294, 567, 298, 791, 288, 970, 292, 1172, 282, 1340, 280, 1463, 276, 1586, 274, 1720, 276, 1866, 252)
+surface_spans = [{
+"from": 60.0,
+"to": 130.0,
+"type": 4
+}, {
+"from": 130.0,
+"to": 1463.0,
+"type": 1
+}, {
+"from": 1463.0,
+"to": 1709.0,
+"type": 2
+}]
+scenery = [{
+"height": 0.0,
+"kind": "trunk",
+"x": 287.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 287.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 724.0
+}, {
+"height": 41.0,
+"kind": "leaves",
+"variant": 1,
+"x": 724.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1138.0
+}, {
+"height": 45.0,
+"kind": "leaves",
+"variant": 2,
+"x": 1138.0
+}, {
+"height": 0.0,
+"kind": "trunk",
+"x": 1788.0
+}, {
+"height": 37.0,
+"kind": "leaves",
+"variant": 0,
+"x": 1788.0
+}]
+obstacles = [{
+"kind": "gator",
+"side": -1.0,
+"x": 533.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 925.0
+}, {
+"kind": "gator",
+"side": -1.0,
+"x": 1295.0
+}, {
+"from": 1026.0,
+"kind": "frog",
+"speed": 70.0,
+"start": 1132.0,
+"to": 1239.0
+}, {
+"kind": "coin",
+"x": 312.0,
+"y": 247.0
+}, {
+"kind": "coin",
+"x": 475.0,
+"y": 242.0
+}, {
+"kind": "coin",
+"x": 638.0,
+"y": 233.0
+}, {
+"kind": "coin",
+"x": 801.0,
+"y": 219.0
+}, {
+"kind": "coin",
+"x": 965.0,
+"y": 216.0
+}, {
+"kind": "coin",
+"x": 1128.0,
+"y": 231.0
+}, {
+"kind": "coin",
+"x": 1291.0,
+"y": 221.0
+}, {
+"kind": "coin",
+"x": 1454.0,
+"y": 209.0
+}]
+wind = -7.0
+title = "GATOR ALLEY"

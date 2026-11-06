@@ -12,8 +12,6 @@ const TEE_X := 90.0
 const TEE_ISLAND_FROM := 30.0
 const TEE_ISLAND_TO := 170.0
 const CUP_ISLAND_HALF := 130.0
-## The golfer's run in to celebrate starts no further from the cup than this, so it stays on the island.
-const CUP_ISLAND_RUN_IN := 110.0
 const WIDTH_MIN := 110.0
 const WIDTH_MAX := 210.0
 const GAP_MIN := 80.0

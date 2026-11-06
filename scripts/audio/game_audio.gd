@@ -169,6 +169,8 @@ func _on_bounced(_at: Vector2, surface: int, impact_speed: float) -> void:
 			Sound.sfx("bounce_sand", pitch, volume)
 		Surface.Type.GREEN:
 			Sound.sfx("bounce_green", pitch, volume)
+		Surface.Type.MUD:
+			Sound.sfx("bounce_mud", pitch, volume)
 		_:
 			Sound.sfx("bounce_grass", pitch, volume)
 
@@ -176,6 +178,8 @@ func _on_bounced(_at: Vector2, surface: int, impact_speed: float) -> void:
 func _on_hazard(_at: Vector2, kind: String) -> void:
 	if kind == "water":
 		Sound.sfx("splash")
+	elif kind == "gator":
+		Sound.sfx("gator")
 
 
 func _on_holed() -> void:
@@ -200,6 +204,10 @@ func _on_obstacle_hit(_at: Vector2, kind: String) -> void:
 			Sound.sfx("sprinkler")
 		"mill_door":
 			Sound.sfx("door")
+		"frog":
+			Sound.sfx("frog", randf_range(0.92, 1.08))
+		"vent":
+			Sound.sfx("vent")
 
 
 func _on_penalty_taken(_kind: String) -> void:

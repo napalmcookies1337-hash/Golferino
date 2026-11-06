@@ -24,6 +24,7 @@ const CATALOG: Array[Dictionary] = [
 	{ "id": "rough_rider", "kind": KIND_STICKER, "name": "ROUGH RIDER", "text": "HALF LIE PENALTY", "price": 14, "clubs": SWING_CLUBS, "effects": { "lie": 0.5 } },
 	{ "id": "wide_angle", "kind": KIND_STICKER, "name": "WIDE ANGLE", "text": "+10 ANGLE RANGE", "price": 10, "clubs": SWING_CLUBS, "effects": { "angle": 10.0 } },
 	{ "id": "steady_hand", "kind": KIND_STICKER, "name": "STEADY HAND", "text": "SLOWER METER", "price": 18, "clubs": ALL_CLUBS, "effects": { "meter": 0.85 } },
+	{ "id": "overdrive", "kind": KIND_STICKER, "name": "OVERDRIVE", "text": "+15% RANGE, FAST METER", "price": 18, "clubs": SWING_CLUBS, "effects": { "range": 1.15, "meter": 1.2 } },
 	{ "id": "long_roll", "kind": KIND_STICKER, "name": "LONG ROLL", "text": "+20% PUTT REACH", "price": 10, "clubs": ["putter"], "effects": { "speed": 1.1 } },
 	{ "id": "cup_magnet", "kind": KIND_STICKER, "name": "CUP MAGNET", "text": "FAST PUTTS DROP MORE", "price": 12, "clubs": ["putter"], "effects": { "cup_pull": 1.5 } },
 	{ "id": "forgiver", "kind": KIND_STICKER, "name": "FORGIVER", "text": "MISSES HURT LESS", "price": 16, "clubs": SWING_CLUBS, "effects": { "miss": 0.6 }, "unlock": 1 },
@@ -84,6 +85,8 @@ static func club_with_stickers(base: ClubData, sticker_ids: Array) -> ClubData:
 		var effects: Dictionary = by_id(id).get("effects", {})
 		var count: int = counts[id]
 		club.max_speed *= stacked(float(effects.get("speed", 1.0)), count)
+		# Range grows with speed squared, so this one's a true share of the distance.
+		club.max_speed *= sqrt(stacked(float(effects.get("range", 1.0)), count))
 		club.spin_strength *= stacked(float(effects.get("spin", 1.0)), count)
 		club.lie_sensitivity *= stacked(float(effects.get("lie", 1.0)), count)
 		club.window_scale *= stacked(float(effects.get("window", 1.0)), count)

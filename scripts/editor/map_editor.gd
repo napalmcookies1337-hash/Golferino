@@ -27,6 +27,7 @@ const PAINTS: Array[Dictionary] = [
 	{ "label": "SAND", "type": Surface.Type.SAND },
 	{ "label": "TEE", "type": Surface.Type.TEE },
 	{ "label": "WATER", "type": Surface.Type.WATER },
+	{ "label": "MUD", "type": Surface.Type.MUD },
 ]
 const OBJECTS: Array[Dictionary] = [
 	{ "label": "PAD", "kind": "pad" },
@@ -37,6 +38,10 @@ const OBJECTS: Array[Dictionary] = [
 	{ "label": "COIN", "kind": "coin" },
 	{ "label": "TRUNK", "kind": "trunk" },
 	{ "label": "LEAVES", "kind": "leaves" },
+	{ "label": "FROG", "kind": "frog" },
+	{ "label": "VENT", "kind": "vent" },
+	{ "label": "GATOR", "kind": "gator" },
+	{ "label": "LILY", "kind": "lily" },
 ]
 const HINTS := {
 	Tool.SELECT: "DRAG TO MOVE. Q/E OR THE RING ROTATES, HOLD SHIFT FOR 15 DEG. DEL REMOVES.",
@@ -77,6 +82,8 @@ var _toast_time: float = 0.0
 var _confirm: Dictionary = {}
 var _maps_scroll: int = 0
 var _course_scroll: int = 0
+## Which of the two courses the maps screen's list is showing.
+var _course_biome: String = HoleData.BIOME_GRASSY
 
 
 func setup(p_library: MapLibrary) -> void:
@@ -495,6 +502,7 @@ func _rebuild_world() -> void:
 		_world.remove_child(child)
 		child.queue_free()
 	doc.rebake()
+	_match_background()
 	var terrain_view := TerrainView.new()
 	terrain_view.setup(doc.terrain)
 	_world.add_child(terrain_view)
@@ -505,6 +513,26 @@ func _rebuild_world() -> void:
 	flag.setup(doc.terrain)
 	_world.add_child(flag)
 	_refresh_objects()
+
+
+# The sky follows the map's biome.
+func _match_background() -> void:
+	var wanted: int = BackgroundView.Mood.MURK_EARLY if doc.hole.biome == HoleData.BIOME_SWAMP else BackgroundView.Mood.MIDDAY
+	if _background.mood == wanted:
+		return
+	var at: int = _background.get_index()
+	remove_child(_background)
+	_background.queue_free()
+	_background = BackgroundView.new()
+	_background.setup(camera, wanted)
+	add_child(_background)
+	move_child(_background, at)
+
+
+func _toggle_biome() -> void:
+	doc.checkpoint()
+	doc.toggle_biome()
+	_rebuild_world()
 
 
 func _refresh_objects() -> void:
@@ -523,7 +551,11 @@ func _refresh_objects() -> void:
 		elif obstacle is GooseObstacle:
 			obstacle.x = (obstacle.from_x + obstacle.to_x) / 2.0
 			obstacle.clock = 0.0
-	_obstacle_view.setup(obstacles)
+		elif obstacle is FrogObstacle:
+			obstacle.x = (obstacle.from_x + obstacle.to_x) / 2.0
+			# Sitting still rather than mid hop.
+			obstacle.clock = FrogObstacle.HOP_TIME
+	_obstacle_view.setup(obstacles, doc.hole.biome == HoleData.BIOME_SWAMP)
 
 
 # --- Maps ---
@@ -634,26 +666,31 @@ func _ask_delete(id: String, title: String) -> void:
 
 
 func _add_to_course(id: String) -> void:
-	var order: Array[String] = library.course_order()
+	var order: Array[String] = library.course_order(_course_biome)
 	order.append(id)
-	library.save_course_order(order)
+	library.save_course_order(order, _course_biome)
 
 
 func _remove_from_course(index: int) -> void:
-	var order: Array[String] = library.course_order()
+	var order: Array[String] = library.course_order(_course_biome)
 	order.remove_at(index)
-	library.save_course_order(order)
+	library.save_course_order(order, _course_biome)
+
+
+func _switch_course() -> void:
+	_course_biome = HoleData.BIOME_GRASSY if _course_biome == HoleData.BIOME_SWAMP else HoleData.BIOME_SWAMP
+	_course_scroll = 0
 
 
 func _move_in_course(index: int, step: int) -> void:
-	var order: Array[String] = library.course_order()
+	var order: Array[String] = library.course_order(_course_biome)
 	var other: int = index + step
 	if other < 0 or other >= order.size():
 		return
 	var moved: String = order[index]
 	order[index] = order[other]
 	order[other] = moved
-	library.save_course_order(order)
+	library.save_course_order(order, _course_biome)
 
 
 # --- Drawing on the map ---
@@ -783,10 +820,15 @@ func _draw_bottom_bar(canvas: EditorUI) -> void:
 			canvas.button(Rect2(x, BOTTOM_Y + 2.0, width, 13), str(entry["label"]), func() -> void: paint_type = type, paint_type == type)
 			x += width + 2.0
 	elif tool == Tool.ADD:
+		# Runs on to a second row, beside the hint, once the first is full.
+		var row_y: float = BOTTOM_Y + 2.0
 		for entry in OBJECTS:
 			var kind: String = str(entry["kind"])
 			var width: float = float(PixelFont.text_width(str(entry["label"]))) + 8.0
-			canvas.button(Rect2(x, BOTTOM_Y + 2.0, width, 13), str(entry["label"]), func() -> void: add_kind = kind, add_kind == kind)
+			if x + width > 636.0:
+				x = 240.0
+				row_y += 15.0
+			canvas.button(Rect2(x, row_y, width, 13), str(entry["label"]), func() -> void: add_kind = kind, add_kind == kind)
 			x += width + 2.0
 	canvas.label(str(HINTS[tool]), Vector2(6, BOTTOM_Y + 18.0), EditorUI.DIM)
 
@@ -805,6 +847,9 @@ func _draw_side_panel(canvas: EditorUI) -> void:
 		y += 17.0
 		canvas.label("LENGTH %d YD" % int(doc.length() / 3.0), Vector2(x, y), EditorUI.DIM)
 		y += 12.0
+		var biome_text: String = "LOOK: SWAMPY" if doc.hole.biome == HoleData.BIOME_SWAMP else "LOOK: GRASSY"
+		canvas.button(Rect2(x - 2.0, y, 640.0 - PANEL_X - 8.0, 13), biome_text, _toggle_biome)
+		y += 17.0
 	else:
 		canvas.label(_selection_name(), Vector2(x, y), EditorUI.ACCENT)
 		y += 14.0
@@ -848,7 +893,7 @@ func _draw_property(canvas: EditorUI, row: Dictionary, x: float, y: float) -> fl
 func _selection_name() -> String:
 	var type: String = str(selection.get("type", ""))
 	if type == "obstacle":
-		var names := { "pad": "BOUNCE PAD", "cart": "GOLF CART", "windmill": "WINDMILL", "sprinkler": "SPRINKLER", "goose": "GOOSE", "coin": "COIN" }
+		var names := { "pad": "BOUNCE PAD", "cart": "GOLF CART", "windmill": "WINDMILL", "sprinkler": "SPRINKLER", "goose": "GOOSE", "coin": "COIN", "frog": "FROG", "vent": "GAS VENT", "gator": "GATOR", "lily": "LILY PAD" }
 		return str(names.get(str(doc.entry_of(selection)["kind"]), "OBJECT"))
 	if type == "scenery":
 		return "TRUNK (SCENERY)" if str(doc.piece_of(selection)["kind"]) == "trunk" else "LEAVES (SCENERY)"
@@ -860,7 +905,9 @@ func _draw_maps_screen(canvas: EditorUI) -> void:
 	canvas.draw_rect(Rect2(0, 0, 640, 360), Color(0.05, 0.07, 0.12))
 	canvas.label("MAPS", Vector2(10, 8), EditorUI.ACCENT)
 	canvas.label("OPEN ANY MAP TO EDIT IT. ORIGINALS CAN ALWAYS BE RESTORED.", Vector2(10, 22), EditorUI.DIM)
-	canvas.label("THE COURSE", Vector2(390, 8), EditorUI.ACCENT)
+	var showing_swamp: bool = _course_biome == HoleData.BIOME_SWAMP
+	canvas.label("SWAMPY SHORES" if showing_swamp else "GRASSY GREENS", Vector2(376, 8), EditorUI.ACCENT)
+	canvas.button(Rect2(470, 4, 96, 13), "SHOW GRASSY" if showing_swamp else "SHOW SWAMPY", _switch_course)
 	canvas.label("PLAYED IN THIS ORDER. THE LAST IS THE BOSS.", Vector2(376, 22), EditorUI.DIM)
 
 	var ids: Array[String] = library.list_ids()
@@ -868,7 +915,7 @@ func _draw_maps_screen(canvas: EditorUI) -> void:
 	for row in mini(LIST_ROWS, ids.size() - _maps_scroll):
 		_draw_map_row(canvas, ids[_maps_scroll + row], LIST_TOP + float(row) * ROW_H)
 
-	var order: Array[String] = library.course_order()
+	var order: Array[String] = library.course_order(_course_biome)
 	_course_scroll = clampi(_course_scroll, 0, maxi(order.size() - LIST_ROWS, 0))
 	for row in mini(LIST_ROWS, order.size() - _course_scroll):
 		_draw_course_row(canvas, order, _course_scroll + row, LIST_TOP + float(row) * ROW_H)

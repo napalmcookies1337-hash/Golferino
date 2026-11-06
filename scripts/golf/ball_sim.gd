@@ -10,7 +10,7 @@ signal hazard(at: Vector2, kind: String)
 signal pin_hit(at: Vector2)
 signal obstacle_hit(at: Vector2, kind: String)
 
-enum State { RESTING, AIRBORNE, ROLLING, HOLED, IN_WATER, OUT_OF_BOUNDS }
+enum State { RESTING, AIRBORNE, ROLLING, HOLED, IN_WATER, OUT_OF_BOUNDS, EATEN }
 
 const GRAVITY := 160.0
 const RADIUS := 2.0
@@ -150,6 +150,8 @@ func _step_air(dt: float) -> void:
 	var old_x: float = pos.x
 	pos += vel * dt
 	_interact_with_obstacles(dt)
+	if state != State.AIRBORNE:
+		return
 	_check_pin(old_x)
 
 	if _over_the_cup():
@@ -204,7 +206,16 @@ func _interact_with_obstacles(dt: float) -> bool:
 				_hit_this_shot[obstacle] = true
 		else:
 			_touching.erase(obstacle)
+		if not is_moving():
+			break
 	return touched_any
+
+
+## Something's eaten the ball. It counts as a penalty, the same as water.
+func swallow(kind: String) -> void:
+	vel = Vector2.ZERO
+	state = State.EATEN
+	hazard.emit(pos, kind)
 
 
 # A cart or goose hits once and then passes, or it would shove a slow ball along with
@@ -326,7 +337,7 @@ func _step_roll(dt: float) -> void:
 		return
 	pos = Vector2(new_x, ground - RADIUS)
 	# Anything that touches a rolling ball knocks it off its roll.
-	if _interact_with_obstacles(dt):
+	if _interact_with_obstacles(dt) and state == State.ROLLING:
 		state = State.AIRBORNE
 
 

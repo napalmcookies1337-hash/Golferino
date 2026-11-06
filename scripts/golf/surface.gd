@@ -3,7 +3,8 @@ extends RefCounted
 ## Ground types and how each one treats the ball. Add a surface here and
 ## every system picks it up.
 
-enum Type { ROUGH, FAIRWAY, GREEN, SAND, TEE, WATER }
+## New types go on the end: saved maps store these as numbers.
+enum Type { ROUGH, FAIRWAY, GREEN, SAND, TEE, WATER, MUD, LILY }
 
 ## restitution: bounce kept on impact. impact_grip: forward speed kept on impact.
 ## roll_friction: slowdown while rolling, px/s^2. spin_grip: how much spin bites on landing.
@@ -39,6 +40,18 @@ const PROPS := {
 		"name": "WATER", "restitution": 0.0, "impact_grip": 0.0,
 		"roll_friction": 1000.0, "spin_grip": 0.0,
 		"lie_power": 0.0, "lie_spin": 0.0, "lie_window": 1.0,
+	},
+	# Barely bounces or runs, and a shot out of it is heavy, though not as bad as a bunker.
+	Type.MUD: {
+		"name": "MUD", "restitution": 0.08, "impact_grip": 0.25,
+		"roll_friction": 420.0, "spin_grip": 0.1,
+		"lie_power": 0.72, "lie_spin": 0.5, "lie_window": 0.7,
+	},
+	# A lily pad on the water. Soft to land on, and a little wobbly to hit from.
+	Type.LILY: {
+		"name": "LILY PAD", "restitution": 0.2, "impact_grip": 0.55,
+		"roll_friction": 140.0, "spin_grip": 0.5,
+		"lie_power": 0.88, "lie_spin": 0.8, "lie_window": 0.85,
 	},
 }
 

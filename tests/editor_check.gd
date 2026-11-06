@@ -247,8 +247,8 @@ func _settings_panel() -> void:
 	await _wait(0.1)
 	await _save("editor_12_hole_settings")
 	var par: int = map_editor.doc.hole.par
-	# THIS MAP, the name, the length, then PAR's plus button.
-	await _click(Vector2(506 + 42 + 43 + 6, 25 + 12 + 17 + 12 + 6))
+	# THIS MAP, the name, the length, the look, then PAR's plus button.
+	await _click(Vector2(506 + 42 + 43 + 6, 25 + 12 + 17 + 12 + 17 + 6))
 	await _wait(0.1)
 	_expect(map_editor.doc.hole.par == par + 1, "the panel's + raises par (%d)" % map_editor.doc.hole.par)
 
@@ -387,9 +387,13 @@ func _course_order() -> void:
 	await _wait(0.1)
 
 	# ADD on the new map, the last row, then move it to the top.
+	# Originals fill the list now, so it takes a scroll of the wheel to reach it.
 	var row: int = map_editor.library.list_ids().size() - 1
-	await _click(Vector2(236, LIST_Y(row)))
+	map_editor._maps_scroll = row - MapEditor.LIST_ROWS + 1
 	await _wait(0.1)
+	await _click(Vector2(236, LIST_Y(MapEditor.LIST_ROWS - 1)))
+	await _wait(0.1)
+	map_editor._maps_scroll = 0
 	var order: Array[String] = map_editor.library.course_order()
 	_expect(order[order.size() - 1] == "map_001", "ADD puts the map in the course")
 	await _click(Vector2(530, LIST_Y(order.size() - 1)))
@@ -401,6 +405,14 @@ func _course_order() -> void:
 	_expect(not map_editor.library.course_order().has("map_001"), "REMOVE takes it out of the course")
 	_expect(map_editor.library.list_ids().has("map_001"), "but the map itself stays")
 	await _save("editor_19_course_list")
+	# The other course has its own list.
+	await _click(Vector2(518, 10))
+	await _wait(0.1)
+	_expect(map_editor._course_biome == HoleData.BIOME_SWAMP, "the button shows the swamp's course")
+	await _save("editor_19b_swamp_course")
+	await _click(Vector2(518, 10))
+	await _wait(0.1)
+	_expect(map_editor._course_biome == HoleData.BIOME_GRASSY, "and back")
 
 	# RESTORE on hole 3, with its confirmation.
 	await _click(Vector2(280, LIST_Y(2)))
@@ -454,15 +466,19 @@ func _play_edited_course() -> void:
 
 
 func _collection() -> void:
+	await _jukebox_menu()
 	await _click(Vector2(320, _title_row(TitleScreen.Item.COLLECTION)))
 	await _wait(0.3)
 	_expect(app._screen is CollectionScreen, "COLLECTION opens from the menu")
 	_expect(not app.profile.rival_beaten, "the check's new profile hasn't beaten the rival")
 	var screen: CollectionScreen = app._screen
 	_expect(screen.selected_item()["id"] == "power_stripe", "the collection starts on the first item")
+	for grid_row in screen.rows.size():
+		var last_cell: Rect2 = screen._cell_rect(grid_row, (screen.rows[grid_row] as Array).size() - 1)
+		_expect(last_cell.end.x <= CollectionScreen.DETAIL.end.x + 1.0, "collection row %d fits on the screen" % grid_row)
 	await _save("editor_24_collection_new")
 	# The first row's last cell, a locked sticker, picked by the mouse.
-	var cell: Vector2 = screen._cell_rect(0, 9).get_center()
+	var cell: Vector2 = screen._cell_rect(0, (screen.rows[0] as Array).size() - 1).get_center()
 	await _click(cell)
 	await _wait(0.1)
 	_expect(screen.selected_item()["id"] == "two_way_tape", "clicking an item selects it")
@@ -600,6 +616,31 @@ func _floating_isles_menu() -> void:
 	await _save("editor_34_isles_scores")
 	_press_key(KEY_SPACE)
 	await _wait(0.3)
+
+
+# Under the title menu's volume rows. Every track plays, and leaving goes back to the title's own.
+func _jukebox_menu() -> void:
+	await _click(Vector2(320, _title_row(TitleScreen.Item.JUKEBOX)))
+	await _wait(0.2)
+	_expect(app._screen is JukeboxScreen, "JUKEBOX opens from the menu")
+	_expect(Sound.current_music == "title", "starting on the title's own tune")
+	await _save("editor_23b_jukebox")
+	var heard: Array[String] = []
+	for _i in JukeboxScreen.TRACKS.size():
+		heard.append(Sound.current_music)
+		_press_key(KEY_DOWN)
+		await _wait(0.1)
+	for track: String in Sound.MUSIC_NAMES:
+		_expect(heard.has(track), "the keyboard reaches %s" % track)
+	_expect(Sound.current_music == "title", "the list wraps round")
+	await _click((app._screen as JukeboxScreen)._row_rect(3).get_center())
+	await _wait(0.1)
+	_expect(Sound.current_music == "swamp", "clicking a track plays it")
+	await _save("editor_23c_jukebox_swamp")
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_expect(app._screen is TitleScreen, "Esc goes back to the title")
+	_expect(Sound.current_music == "title", "and to its music")
 
 
 func _title_row(item: int) -> float:

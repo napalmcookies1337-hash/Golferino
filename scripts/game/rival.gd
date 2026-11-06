@@ -95,6 +95,11 @@ func current_club() -> ClubData:
 	return clubs[club_index]
 
 
+## Caps how many times it can cheat on this hole, free drops included.
+func limit_cheats(most: int) -> void:
+	_cheats_left = mini(_cheats_left, most)
+
+
 func begin_turn() -> void:
 	_turns += 1
 	_timer = 0.0
