@@ -89,6 +89,16 @@ to see your score and choose Try Again or Main Menu. There's no shop or stroke l
 fewest strokes top each length's own table on the high scores screen. Leaving early doesn't record
 a score.
 
+## Appearance
+
+Choose **Appearance** on the title menu to play as a male or female golfer and change their
+clothes. Each golfer has their own shirt, bottoms, shoes and hat in five colors, one color to a
+column. The golfer tries on whatever you point at. White is free, the next two colors are paid for
+with coins left over at the end of a run, Black unlocks by beating the rival and Gold by finishing
+the 4000-yard Floating Isles. Clothes don't affect play. They're listed in
+`scripts/game/wardrobe.gd`. `tests/appearance_check.tscn` tests the screen headless, and
+`tests/look_sheet.tscn` saves every color and pose to `tests/shots/look_sheet.png` (needs a window).
+
 ## Collection
 
 Choose **Collection** on the title menu to see everything the shop can sell. Items you haven't

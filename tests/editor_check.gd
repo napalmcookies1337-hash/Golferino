@@ -53,7 +53,7 @@ func _title_menu() -> void:
 	await _wait(0.4)
 	_expect(app._screen is TitleScreen, "the game opens on the title menu")
 	await _save("editor_01_title")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.EDITOR)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.EDITOR))
 	await _wait(0.3)
 	_expect(app._screen is MapEditor, "clicking MAP EDITOR opens the editor")
 
@@ -432,7 +432,7 @@ func _play_edited_course() -> void:
 	await _wait(0.1)
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "TITLE MENU goes back to the menu")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.PLAY)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.PLAY))
 	await _wait(0.5)
 	_expect(app._screen.get("game") != null, "PLAY starts the course")
 	_expect(app._screen.game.hole.title == "RENAMED", "a run plays the edited maps")
@@ -453,7 +453,7 @@ func _play_edited_course() -> void:
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "the final score goes back to the menu")
 	_expect(app.profile.high_scores.size() == 1, "an ended run is saved to the high scores")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.SCORES))
 	await _wait(0.3)
 	_expect(app._screen is HighScoresScreen, "HIGH SCORES opens from the menu")
 	await _save("editor_22_high_scores")
@@ -467,7 +467,8 @@ func _play_edited_course() -> void:
 
 func _collection() -> void:
 	await _jukebox_menu()
-	await _click(Vector2(320, _title_row(TitleScreen.Item.COLLECTION)))
+	await _appearance_menu()
+	await _click(TitleScreen.item_center(TitleScreen.Item.COLLECTION))
 	await _wait(0.3)
 	_expect(app._screen is CollectionScreen, "COLLECTION opens from the menu")
 	_expect(not app.profile.rival_beaten, "the check's new profile hasn't beaten the rival")
@@ -498,10 +499,7 @@ func _collection() -> void:
 	await _click(CollectionScreen.BACK_BUTTON.get_center())
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "BACK goes back to the menu")
-	_press_key(KEY_DOWN)
-	_press_key(KEY_DOWN)
-	_press_key(KEY_DOWN)
-	_press_key(KEY_DOWN)
+	_press_key(KEY_RIGHT)
 	_press_key(KEY_DOWN)
 	await _wait(0.1)
 	_press_key(KEY_SPACE)
@@ -518,14 +516,14 @@ func _infinite_menu() -> void:
 	(app._screen as TitleScreen)._selected = TitleScreen.Item.INFINITE
 	await _wait(0.1)
 	await _save("editor_28_infinite_locked")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.INFINITE)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.INFINITE))
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "infinite mode stays locked until the rival's beaten")
 
 	app.profile.rival_beaten = true
 	await _wait(0.1)
 	await _save("editor_29_infinite_open")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.INFINITE)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.INFINITE))
 	await _wait(0.6)
 	_expect(app._screen.get("infinite") == true, "the button starts an infinite run")
 	_expect(app._screen.run_state.infinite, "the run knows it's infinite")
@@ -547,7 +545,7 @@ func _infinite_menu() -> void:
 	_expect(app.profile.infinite_scores.size() == 1, "the run goes in infinite mode's own table")
 	_expect(app.profile.high_scores.size() == 1, "and not the main game's")
 
-	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.SCORES))
 	await _wait(0.3)
 	var scores: HighScoresScreen = app._screen
 	_expect(scores.page == HighScoresScreen.Page.MAIN, "high scores open on the main game")
@@ -563,7 +561,7 @@ func _infinite_menu() -> void:
 
 func _floating_isles_menu() -> void:
 	await _save("editor_33_title_with_isles")
-	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.ISLES))
 	await _wait(0.5)
 	_expect(app._screen is IslesMenuScreen, "FLOATING ISLES asks how far, with nothing to unlock first")
 	await _save("editor_33_isles_menu")
@@ -571,7 +569,7 @@ func _floating_isles_menu() -> void:
 	await _wait(0.3)
 	_expect(app._screen is TitleScreen, "Esc goes back from the choice of course")
 
-	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.ISLES))
 	await _wait(0.3)
 	_press_key(KEY_DOWN)
 	await _wait(0.1)
@@ -587,7 +585,7 @@ func _floating_isles_menu() -> void:
 	await _wait(0.4)
 	_expect(app._screen is TitleScreen, "MAIN MENU in its pause menu goes back")
 
-	await _click(Vector2(320, _title_row(TitleScreen.Item.ISLES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.ISLES))
 	await _wait(0.3)
 	await _click(Vector2(320, IslesMenuScreen.ITEM_TOP + 6.0))
 	await _wait(0.8)
@@ -607,7 +605,7 @@ func _floating_isles_menu() -> void:
 	app.profile.record_isles(4000, 44, 1)
 	app.profile.record_isles(1000, 9, 0)
 	app.profile.record_isles(1000, 11, 1)
-	await _click(Vector2(320, _title_row(TitleScreen.Item.SCORES)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.SCORES))
 	await _wait(0.3)
 	var scores: HighScoresScreen = app._screen
 	_press_key(KEY_LEFT)
@@ -618,9 +616,96 @@ func _floating_isles_menu() -> void:
 	await _wait(0.3)
 
 
+# Trying on and buying clothes with real clicks, and the two-column menu that leads there.
+func _appearance_menu() -> void:
+	var title: TitleScreen = app._screen
+	await _wait(1.0)
+	await _save("editor_23d_title_columns")
+	for i in TitleScreen.ITEMS.size():
+		_expect(title._item_at(TitleScreen.item_center(i)) == i, "%s can be clicked" % TitleScreen.ITEMS[i])
+	# Round each column by keyboard, through the jukebox and back to the top.
+	title._selected = TitleScreen.Item.PLAY
+	for i in TitleScreen.COLUMN_ROWS:
+		_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_expect(title._selected == TitleScreen.Item.JUKEBOX, "the jukebox is under the columns")
+	_press_key(KEY_DOWN)
+	await _wait(0.1)
+	_expect(title._selected == TitleScreen.Item.PLAY, "and leads back to the top")
+	_press_key(KEY_RIGHT)
+	await _wait(0.1)
+	_expect(title._selected == TitleScreen.Item.SCORES, "right changes column")
+	_press_key(KEY_LEFT)
+	await _wait(0.1)
+	_expect(title._selected == TitleScreen.Item.PLAY, "and left comes back")
+
+	await _click(TitleScreen.item_center(TitleScreen.Item.APPEARANCE))
+	await _wait(0.2)
+	_expect(app._screen is AppearanceScreen, "APPEARANCE opens from the menu")
+	var screen: AppearanceScreen = app._screen
+	var profile: Profile = app.profile
+	profile.wallet = 50
+	for cell: Dictionary in screen.cells:
+		var rect: Rect2 = cell["rect"]
+		_expect(Rect2(0, 0, 640, 360).encloses(rect), "every choice is on the screen")
+	await _save("editor_23e_appearance_male")
+
+	var red: Rect2 = screen.cells[screen.cell_of_item("male_shirt_red")]["rect"]
+	await _mouse_move(red.get_center())
+	_expect(screen._golfer.shirt == Color("e8584a"), "hovering a shirt tries it on")
+	_expect(str(profile.clothes[Wardrobe.MALE][Wardrobe.SHIRT]) == "male_shirt_white", "without buying it")
+	await _save("editor_23f_appearance_try_on")
+	await _click(red.get_center())
+	await _wait(0.1)
+	_expect(profile.wallet == 35 and str(profile.clothes[Wardrobe.MALE][Wardrobe.SHIRT]) == "male_shirt_red", "clicking buys it and puts it on")
+
+	# Black and gold stay locked until they're earned, and can't even be tried on.
+	profile.rival_beaten = false
+	var black: Rect2 = screen.cells[screen.cell_of_item("male_hat_black")]["rect"]
+	await _click(black.get_center())
+	await _wait(0.1)
+	_expect(screen._golfer.cap != Color("363640") and str(profile.clothes[Wardrobe.MALE][Wardrobe.HAT]) == "male_hat_white", "a locked color can't be worn")
+	_expect(screen._info_line().begins_with("LOCKED"), "and says how to unlock it")
+	await _save("editor_23g_appearance_locked")
+	profile.rival_beaten = true
+	await _click(black.get_center())
+	await _wait(0.1)
+	_expect(profile.wallet == 35 and str(profile.clothes[Wardrobe.MALE][Wardrobe.HAT]) == "male_hat_black", "beating the rival opens black, for free")
+	await _save("editor_23h_appearance_black")
+
+	var female: Rect2 = screen.cells[screen._model_cell(Wardrobe.FEMALE)]["rect"]
+	await _click(female.get_center())
+	await _wait(0.1)
+	_expect(profile.model == Wardrobe.FEMALE and screen._golfer.model == Wardrobe.FEMALE, "choosing FEMALE changes the golfer")
+	_expect(screen.cell_of_item("female_hat_coral") >= 0 and screen.cell_of_item("male_hat_red") < 0, "and shows that golfer's own clothes")
+	await _save("editor_23i_appearance_female")
+	profile.wallet = 100
+	for slot: String in Wardrobe.SLOTS:
+		await _click(screen.cells[screen.cell_of_item("female_%s_sky" % slot)]["rect"].get_center())
+		await _wait(0.05)
+	_expect(profile.wallet == 40 and str(profile.clothes[Wardrobe.FEMALE][Wardrobe.HAT]) == "female_hat_sky", "a column makes a matching outfit")
+	await _save("editor_23j_appearance_female_sky")
+
+	# Up, down and sideways all reach somewhere.
+	var from: int = screen.cursor
+	_press_key(KEY_UP)
+	await _wait(0.1)
+	_expect(screen.cursor != from, "the keyboard moves around the screen")
+	_press_key(KEY_LEFT)
+	await _wait(0.1)
+	_press_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_expect(app._screen is TitleScreen, "Esc goes back to the title")
+	await _wait(1.0)
+	await _save("editor_23k_title_female")
+	profile.model = Wardrobe.MALE
+	profile.clothes[Wardrobe.MALE] = Wardrobe.starting_clothes(Wardrobe.MALE)
+	profile.save()
+
+
 # Under the title menu's volume rows. Every track plays, and leaving goes back to the title's own.
 func _jukebox_menu() -> void:
-	await _click(Vector2(320, _title_row(TitleScreen.Item.JUKEBOX)))
+	await _click(TitleScreen.item_center(TitleScreen.Item.JUKEBOX))
 	await _wait(0.2)
 	_expect(app._screen is JukeboxScreen, "JUKEBOX opens from the menu")
 	_expect(Sound.current_music == "title", "starting on the title's own tune")
@@ -641,10 +726,6 @@ func _jukebox_menu() -> void:
 	await _wait(0.2)
 	_expect(app._screen is TitleScreen, "Esc goes back to the title")
 	_expect(Sound.current_music == "title", "and to its music")
-
-
-func _title_row(item: int) -> float:
-	return TitleScreen.ITEM_TOP + float(item) * TitleScreen.ITEM_GAP + 6.0
 
 
 func _test_main() -> Node:

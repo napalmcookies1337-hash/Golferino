@@ -161,6 +161,9 @@ func _draw() -> void:
 	if not unlocked.is_empty():
 		var names: PackedStringArray = PackedStringArray(unlocked)
 		PixelFont.draw_centered(self, "NOW IN THE SHOP: %s" % ", ".join(names), 320.0, 304.0, ACCENT)
+	var coins_saved: int = int(result.get("coins_saved", 0))
+	if coins_saved > 0:
+		PixelFont.draw_centered(self, "%d COINS SAVED FOR CLOTHES" % coins_saved, 320.0, 322.0, GOOD)
 	PixelFont.draw_centered(self, "SPACE TO CONTINUE", 320.0, 340.0, DIM)
 
 

@@ -48,6 +48,7 @@ func _show_title() -> void:
 	title.scores_chosen.connect(_show_scores, CONNECT_DEFERRED)
 	title.collection_chosen.connect(_show_collection, CONNECT_DEFERRED)
 	title.jukebox_chosen.connect(_show_jukebox, CONNECT_DEFERRED)
+	title.appearance_chosen.connect(_show_appearance, CONNECT_DEFERRED)
 	title.quit_chosen.connect(func() -> void: get_tree().quit())
 	_swap_screen(title)
 
@@ -65,6 +66,14 @@ func _show_jukebox() -> void:
 	jukebox.done.connect(_show_title, CONNECT_DEFERRED)
 	jukebox.done.connect(func() -> void: Sound.sfx("menu_back"))
 	_swap_screen(jukebox)
+
+
+func _show_appearance() -> void:
+	var appearance := AppearanceScreen.new()
+	appearance.setup(profile)
+	appearance.done.connect(_show_title, CONNECT_DEFERRED)
+	appearance.done.connect(func() -> void: Sound.sfx("menu_back"))
+	_swap_screen(appearance)
 
 
 func _show_scores() -> void:
@@ -130,6 +139,7 @@ func _start_test(hole: HoleData, start_x: float) -> void:
 	_editor.set_active(false)
 	var main: Node = MAIN_SCENE.instantiate()
 	main.embedded = true
+	main.profile = profile
 	main.setup_test(hole, start_x)
 	main.exit_requested.connect(_end_test.bind(main), CONNECT_DEFERRED)
 	add_child(main)

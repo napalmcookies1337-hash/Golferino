@@ -28,9 +28,11 @@ const STRIDE_RATE := 20.0
 const CELEBRATE_GAP := 18.0
 const JUMP_RATE := 7.0
 const JUMP_HEIGHT := 9.0
+const SKIRT_ROWS := 7
+const SKIRT_WAIST_HALF := 3.0
+const SKIRT_HEM_HALF := 5.0
 
 const OUTLINE := Color("20202e")
-const SHOE := Color("3a2f33")
 const SHAFT := Color("c7ccd6")
 const CLUB_HEAD := Color("8d97a8")
 
@@ -40,6 +42,10 @@ var shirt_dark := Color("b83d3f")
 var pants := Color("f2ead0")
 var pants_dark := Color("c9bd9e")
 var cap := Color("2b8c8c")
+var shoe := Color("3a2f33")
+var model: String = Wardrobe.MALE
+## Fully see-through for a golfer whose hair doesn't show, which is the rival.
+var hair := Color(0, 0, 0, 0)
 var game: HoleGame
 var _arm_angle: float = 0.0
 var _hinge: float = 0.0
@@ -61,6 +67,18 @@ var _foot_front: Vector2 = FOOT_FRONT
 
 func setup(p_game: HoleGame) -> void:
 	game = p_game
+
+
+## Dresses the golfer as the player chose.
+func wear(p_model: String, pieces: Dictionary) -> void:
+	model = p_model
+	hair = Wardrobe.HAIR[model]
+	shirt = pieces[Wardrobe.SHIRT]["main"]
+	shirt_dark = pieces[Wardrobe.SHIRT]["dark"]
+	pants = pieces[Wardrobe.BOTTOMS]["main"]
+	pants_dark = pieces[Wardrobe.BOTTOMS]["dark"]
+	shoe = pieces[Wardrobe.SHOES]["main"]
+	cap = pieces[Wardrobe.HAT]["main"]
 
 
 func _ready() -> void:
@@ -262,7 +280,23 @@ func _draw() -> void:
 	var club_dir := Vector2(sin(club_rad), cos(club_rad))
 	var club_head: Vector2 = hand + club_dir * _club_length()
 
-	# Outlines first, so every limb reads against the background.
+	if model == Wardrobe.FEMALE:
+		_draw_female_body(hip, shoulder, head)
+	else:
+		_draw_male_body(hip, shoulder, head)
+	_draw_face(head)
+
+	draw_line(hand, club_head, SHAFT, 1.0)
+	draw_rect(Rect2(club_head.x - 1.0, club_head.y - 1.0, 4, 2), CLUB_HEAD)
+
+	_draw_arm(shoulder, hand)
+	if _cheering:
+		_draw_arm(shoulder, shoulder + Vector2(-6, -7))
+
+
+# Straight up and down, with pants and a cap. Outlines first, so every limb reads against the
+# background.
+func _draw_male_body(hip: Vector2, shoulder: Vector2, head: Vector2) -> void:
 	_limb(_foot_back, hip + Vector2(-1, 0), 5.0, OUTLINE)
 	_limb(_foot_front, hip + Vector2(1, 0), 5.0, OUTLINE)
 	_limb(hip, shoulder, 8.0, OUTLINE)
@@ -270,28 +304,75 @@ func _draw() -> void:
 
 	_limb(_foot_back, hip + Vector2(-1, 0), 3.0, pants_dark)
 	_limb(_foot_front, hip + Vector2(1, 0), 3.0, pants)
-	draw_rect(Rect2(_foot_back.x - 3.0, _foot_back.y - 1.0, 5, 2), SHOE)
-	draw_rect(Rect2(_foot_front.x - 2.0, _foot_front.y - 1.0, 5, 2), SHOE)
+	_draw_shoes()
 
 	_limb(hip, shoulder, 6.0, shirt)
 	draw_rect(Rect2(hip.x - 3.0, hip.y - 1.0, 6, 2), shirt_dark)
 
 	draw_circle(head, 4.5, skin)
+	if hair.a > 0.0:
+		draw_rect(Rect2(head.x - 5.0, head.y - 1.0, 2, 3), hair)
 	draw_rect(Rect2(head.x - 5.0, head.y - 5.0, 10, 4), cap)
 	draw_rect(Rect2(head.x + 3.0, head.y - 2.0, 5, 1), cap)
-	_draw_face(head)
 
-	draw_line(hand, club_head, SHAFT, 1.0)
-	draw_rect(Rect2(club_head.x - 1.0, club_head.y - 1.0, 4, 2), CLUB_HEAD)
 
+# A narrower waist and thinner legs, with a skirt, a ponytail and a sun visor.
+func _draw_female_body(hip: Vector2, shoulder: Vector2, head: Vector2) -> void:
+	var waist: Vector2 = hip.lerp(shoulder, 0.45)
+	draw_rect(Rect2(head.x - 10.0, head.y - 4.0, 6, 4), OUTLINE)
+	draw_rect(Rect2(head.x - 10.0, head.y - 1.0, 4, 6), OUTLINE)
+	_limb(_foot_back, hip + Vector2(-1, 0), 4.0, OUTLINE)
+	_limb(_foot_front, hip + Vector2(1, 0), 4.0, OUTLINE)
+	_limb(hip, waist, 6.0, OUTLINE)
+	_limb(waist, shoulder, 7.0, OUTLINE)
+	draw_circle(head, 5.5, OUTLINE)
+
+	draw_rect(Rect2(head.x - 9.0, head.y - 3.0, 5, 2), hair)
+	draw_rect(Rect2(head.x - 9.0, head.y - 1.0, 2, 5), hair)
+
+	_limb(_foot_back, hip + Vector2(-1, 0), 2.0, skin.darkened(0.12))
+	_limb(_foot_front, hip + Vector2(1, 0), 2.0, skin)
+	_draw_shoes()
+
+	_limb(hip, waist, 4.0, shirt)
+	_limb(waist, shoulder, 5.0, shirt)
+	_draw_skirt(hip)
+
+	draw_circle(head, 4.5, skin)
+	draw_rect(Rect2(head.x - 4.0, head.y - 5.0, 8, 2), hair)
+	draw_rect(Rect2(head.x - 5.0, head.y - 1.0, 2, 3), hair)
+	draw_rect(Rect2(head.x - 5.0, head.y - 3.0, 10, 2), cap)
+	draw_rect(Rect2(head.x + 3.0, head.y - 2.0, 5, 1), cap)
+
+
+# Flares out toward the hem, and swings wider as the legs stride.
+func _draw_skirt(hip: Vector2) -> void:
+	var top: int = int(round(hip.y)) - 1
+	var hem: int = top + SKIRT_ROWS - 1
+	var hem_center: float = (_foot_back.x + _foot_front.x) / 2.0
+	var hem_half: float = maxf(SKIRT_HEM_HALF, absf(_foot_front.x - _foot_back.x) * 0.5)
+	for pass_number in 2:
+		for y in range(top, hem + 1):
+			var t: float = float(y - top) / float(SKIRT_ROWS - 1)
+			var half: float = round(lerpf(SKIRT_WAIST_HALF, hem_half, t))
+			var center: float = round(lerpf(hip.x, hem_center, t))
+			if pass_number == 0:
+				draw_rect(Rect2(center - half - 1.0, y, half * 2.0 + 2.0, 1), OUTLINE)
+			else:
+				draw_rect(Rect2(center - half, y, half * 2.0, 1), pants_dark if y == hem else pants)
+		if pass_number == 0:
+			draw_rect(Rect2(round(hem_center) - round(hem_half) - 1.0, hem + 1, round(hem_half) * 2.0 + 2.0, 1), OUTLINE)
+
+
+func _draw_shoes() -> void:
+	draw_rect(Rect2(_foot_back.x - 3.0, _foot_back.y - 1.0, 5, 2), shoe)
+	draw_rect(Rect2(_foot_front.x - 2.0, _foot_front.y - 1.0, 5, 2), shoe)
+
+
+func _draw_arm(shoulder: Vector2, hand: Vector2) -> void:
 	_limb(shoulder, hand, 4.0, OUTLINE)
 	_limb(shoulder, hand, 2.0, shirt_dark)
 	draw_rect(Rect2(hand.x - 1.0, hand.y - 1.0, 3, 3), skin)
-	if _cheering:
-		var free_hand: Vector2 = shoulder + Vector2(-6, -7)
-		_limb(shoulder, free_hand, 4.0, OUTLINE)
-		_limb(shoulder, free_hand, 2.0, shirt_dark)
-		draw_rect(Rect2(free_hand.x - 1.0, free_hand.y - 1.0, 3, 3), skin)
 
 
 func _draw_face(head: Vector2) -> void:

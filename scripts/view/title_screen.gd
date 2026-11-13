@@ -9,14 +9,19 @@ signal editor_chosen
 signal scores_chosen
 signal collection_chosen
 signal jukebox_chosen
+signal appearance_chosen
 signal quit_chosen
 
-enum Item { PLAY, INFINITE, ISLES, EDITOR, SCORES, COLLECTION, MUSIC, SOUND, JUKEBOX, QUIT }
+## Two columns of five, then the jukebox under them both.
+enum Item { PLAY, INFINITE, ISLES, EDITOR, APPEARANCE, SCORES, COLLECTION, MUSIC, SOUND, QUIT, JUKEBOX }
 
-const ITEMS := ["PLAY", "INFINITE MODE", "FLOATING ISLES", "MAP EDITOR", "HIGH SCORES", "COLLECTION", "MUSIC", "SOUND", "JUKEBOX", "QUIT"]
+const ITEMS := ["PLAY", "INFINITE MODE", "FLOATING ISLES", "MAP EDITOR", "APPEARANCE", "HIGH SCORES", "COLLECTION", "MUSIC", "SOUND", "QUIT", "JUKEBOX"]
+const COLUMN_ROWS := 5
 const ITEM_TOP := 156.0
 const ITEM_GAP := 18.0
 const CENTER_X := 320.0
+const COLUMN_X := [216.0, 424.0]
+const ITEM_HALF_WIDTH := 100.0
 const ACCENT := Color("ffe25a")
 const TEXT := Color("f7f4e6")
 const DIM := Color("8f97a8")
@@ -28,12 +33,14 @@ const LOGO_BALL_RADIUS := 20.0
 const BALL_FLIGHT_TIME := 1.7
 const TEE_X := 112.0
 const CUP_X := 560.0
-const MENU_PANEL := Rect2(196, 149, 248, 188)
+const MENU_PANEL := Rect2(98, 149, 444, 119)
 const HINT_Y := 138.0
 
 var library: MapLibrary
 var profile: Profile
 var _selected: int = 0
+## The column to go back to from the jukebox, which is under them both.
+var _last_column: int = 0
 var _course_size: int = 0
 var _time: float = 0.0
 var _camera: Camera2D
@@ -63,6 +70,7 @@ func _ready() -> void:
 	add_child(_scene)
 	var golfer := TitleGolfer.new()
 	golfer.setup_title(TEE_X, _ground_y)
+	golfer.wear(profile.model, profile.worn_pieces(profile.model))
 	golfer.struck.connect(func() -> void: _flight = 0.0)
 	add_child(golfer)
 	var layer := CanvasLayer.new()
@@ -95,9 +103,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("spin_down", false) or event.is_action_pressed("aim_down", false):
 		_step_selection(1)
 	elif event.is_action_pressed("look_left", false):
-		_change_level(-1)
+		_step_sideways(-1)
 	elif event.is_action_pressed("look_right", false):
-		_change_level(1)
+		_step_sideways(1)
 	elif event.is_action_pressed("swing", false):
 		_choose(_selected)
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -110,9 +118,35 @@ func _unhandled_input(event: InputEvent) -> void:
 		quit_chosen.emit()
 
 
+## Where a menu item is on the screen, by the middle of its row.
+static func item_center(item: int) -> Vector2:
+	if item == Item.JUKEBOX:
+		return Vector2(CENTER_X, ITEM_TOP + float(COLUMN_ROWS) * ITEM_GAP + 6.0)
+	return Vector2(COLUMN_X[item / COLUMN_ROWS], ITEM_TOP + float(item % COLUMN_ROWS) * ITEM_GAP + 6.0)
+
+
+# Down a column and on to the jukebox, then back round to the top of the same column.
 func _step_selection(direction: int) -> void:
-	_selected = posmod(_selected + direction, ITEMS.size())
+	if _selected == Item.JUKEBOX:
+		var row: int = 0 if direction > 0 else COLUMN_ROWS - 1
+		_selected = _last_column * COLUMN_ROWS + row
+	else:
+		_last_column = _selected / COLUMN_ROWS
+		var row: int = _selected % COLUMN_ROWS + direction
+		_selected = Item.JUKEBOX if row < 0 or row >= COLUMN_ROWS else _last_column * COLUMN_ROWS + row
 	Sound.sfx("menu_move")
+
+
+# Left and right set the level on a volume row, and otherwise change column.
+func _step_sideways(direction: int) -> void:
+	if _selected == Item.MUSIC or _selected == Item.SOUND:
+		_change_level(direction)
+	elif _selected != Item.JUKEBOX:
+		var column: int = _selected / COLUMN_ROWS
+		var target: int = column + direction
+		if target >= 0 and target < COLUMN_X.size():
+			_selected = target * COLUMN_ROWS + _selected % COLUMN_ROWS
+			Sound.sfx("menu_move")
 
 
 func _change_level(direction: int) -> void:
@@ -123,7 +157,7 @@ func _change_level(direction: int) -> void:
 
 
 func _click_level(item: int, x: float) -> void:
-	var level: int = VolumeRow.level_at(x, CENTER_X)
+	var level: int = VolumeRow.level_at(x, item_center(item).x)
 	if level < 0:
 		return
 	if item == Item.MUSIC:
@@ -134,8 +168,8 @@ func _click_level(item: int, x: float) -> void:
 
 func _item_at(at: Vector2) -> int:
 	for i in ITEMS.size():
-		var y: float = ITEM_TOP + float(i) * ITEM_GAP
-		if absf(at.x - CENTER_X) < 110.0 and at.y >= y - 2.0 and at.y < y + 16.0:
+		var center: Vector2 = item_center(i)
+		if absf(at.x - center.x) < ITEM_HALF_WIDTH and at.y >= center.y - 8.0 and at.y < center.y + 10.0:
 			return i
 	return -1
 
@@ -169,6 +203,9 @@ func _choose(index: int) -> void:
 		Item.JUKEBOX:
 			Sound.sfx("menu_ok")
 			jukebox_chosen.emit()
+		Item.APPEARANCE:
+			Sound.sfx("menu_ok")
+			appearance_chosen.emit()
 		Item.MUSIC, Item.SOUND:
 			# Space steps the level round, for anyone without left and right to hand.
 			var level: int = Sound.music_level if index == Item.MUSIC else Sound.sfx_level
@@ -225,20 +262,21 @@ func _draw_menu() -> void:
 	_menu.draw_rect(MENU_PANEL, Color(0.06, 0.09, 0.16, 0.6))
 	_menu.draw_rect(MENU_PANEL, Color(0.95, 0.92, 0.82, 0.5), false, 1.0)
 	for i in ITEMS.size():
-		var y: float = ITEM_TOP + float(i) * ITEM_GAP
+		var center: Vector2 = item_center(i)
+		var y: float = center.y - 6.0
 		if i == Item.MUSIC:
-			VolumeRow.draw(_menu, str(ITEMS[i]), Sound.music_level, CENTER_X, y, i == _selected)
+			VolumeRow.draw(_menu, str(ITEMS[i]), Sound.music_level, center.x, y, i == _selected)
 			continue
 		if i == Item.SOUND:
-			VolumeRow.draw(_menu, str(ITEMS[i]), Sound.sfx_level, CENTER_X, y, i == _selected)
+			VolumeRow.draw(_menu, str(ITEMS[i]), Sound.sfx_level, center.x, y, i == _selected)
 			continue
 		var color: Color = ACCENT if i == _selected else TEXT
 		if (i == Item.PLAY and _course_size == 0) or (i == Item.INFINITE and not profile.rival_beaten):
 			color = DIM
-		PixelFont.draw_centered(_menu, str(ITEMS[i]), CENTER_X, y, color, 2)
+		PixelFont.draw_centered(_menu, str(ITEMS[i]), center.x, y, color, 2)
 		if i == _selected:
 			var half: float = float(PixelFont.text_width(str(ITEMS[i]), 2)) / 2.0
-			PixelFont.draw_shadowed(_menu, ">", Vector2(CENTER_X - half - 22.0, y), ACCENT, 2)
+			PixelFont.draw_shadowed(_menu, ">", Vector2(center.x - half - 22.0, y), ACCENT, 2)
 	if _selected == Item.INFINITE and not profile.rival_beaten:
 		PixelFont.draw_centered(_menu, "BEAT THE RIVAL ONCE TO OPEN INFINITE MODE", CENTER_X, HINT_Y, ACCENT)
 	elif _course_size == 0:

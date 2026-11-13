@@ -2847,6 +2847,100 @@ func _test_profile() -> void:
 	_check(damaged.unlocked.is_empty() and damaged.runs_finished == 0, "a damaged profile is cleaned up")
 	DirAccess.remove_absolute(path)
 	_test_collection()
+	_test_wardrobe()
+
+
+func _test_wardrobe() -> void:
+	# Each model has five colors of everything, and a column is the same color all the way down.
+	var ids: Dictionary = {}
+	_check(Wardrobe.SLOTS == [Wardrobe.SHIRT, Wardrobe.BOTTOMS, Wardrobe.SHOES, Wardrobe.HAT], "no gloves or sunglasses")
+	for model: String in Wardrobe.MODELS:
+		var shirts: Array[Dictionary] = Wardrobe.items_for(model, Wardrobe.SHIRT)
+		for slot: String in Wardrobe.SLOTS:
+			var items: Array[Dictionary] = Wardrobe.items_for(model, slot)
+			_check(items.size() == 5, "%s %s has five colors" % [model, slot])
+			for i in items.size():
+				var item: Dictionary = items[i]
+				_check(not ids.has(item["id"]), "%s is the only piece with that id" % item["id"])
+				ids[item["id"]] = true
+				_check(Wardrobe.by_id(str(item["id"]))["name"] == item["name"], "%s can be found again" % item["id"])
+				_check(item["main"] == shirts[i]["main"], "%s matches its column" % item["id"])
+			_check(int(items[0]["price"]) == 0 and str(items[0]["unlock"]) == "", "%s %s's first color is free" % [model, slot])
+			_check(int(items[1]["price"]) == 15 and int(items[2]["price"]) == 15, "%s %s's next two cost 15" % [model, slot])
+			_check(str(items[3]["name"]).begins_with("BLACK") and items[3]["unlock"] == Wardrobe.UNLOCK_RIVAL, "black comes from the rival")
+			_check(str(items[4]["name"]).begins_with("GOLD") and items[4]["unlock"] == Wardrobe.UNLOCK_ISLES, "gold comes from the 4000 yard isles")
+			_check(int(items[3]["price"]) == 0 and int(items[4]["price"]) == 0, "earned colors cost nothing")
+	_check(Wardrobe.items_for(Wardrobe.FEMALE, Wardrobe.SHIRT)[0]["name"] == "WHITE SHIRT", "her first shirt is white, like the rest of the column")
+
+	# Buying and wearing.
+	var path: String = "user://test_wardrobe_profile.json"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+	var profile := Profile.new(path)
+	_check(profile.wallet == 50, "every save starts with 50 coins")
+	_check(profile.model == Wardrobe.MALE, "the golfer starts as male")
+	var start: Dictionary = profile.worn_pieces(Wardrobe.MALE)
+	_check(start.size() == 4, "wearing all four pieces")
+	for slot: String in Wardrobe.SLOTS:
+		_check(start[slot]["main"] == Color("f2efe4"), "the starting %s is white" % slot)
+	_check(profile.owns_clothes("female_shirt_white") and not profile.owns_clothes("female_shirt_coral"), "only free pieces are owned at first")
+	_check(not profile.owns_clothes("male_hat_black") and not profile.owns_clothes("male_hat_gold"), "black and gold start locked")
+	_check(not profile.buy_clothes("male_hat_black") and not profile.wear_clothes(Wardrobe.MALE, Wardrobe.HAT, "male_hat_black"), "a locked color can't be had")
+	_check(not profile.wear_clothes(Wardrobe.MALE, Wardrobe.SHIRT, "male_shirt_red"), "clothes must be bought before wearing")
+	_check(not profile.wear_clothes(Wardrobe.MALE, Wardrobe.SHIRT, "female_shirt_white"), "a model can't wear the other's clothes")
+	_check(not profile.wear_clothes(Wardrobe.MALE, Wardrobe.SHIRT, ""), "a golfer can't go without a shirt")
+	_check(profile.buy_clothes("male_shirt_red") and profile.wallet == 35, "a color costs 15")
+	_check(profile.buy_clothes("male_shirt_red") and profile.wallet == 35, "buying it again costs nothing")
+	_check(profile.wear_clothes(Wardrobe.MALE, Wardrobe.SHIRT, "male_shirt_red"), "a bought piece can be worn")
+	profile.wallet = 10
+	_check(not profile.buy_clothes("male_shirt_blue") and profile.wallet == 10, "a piece that can't be afforded isn't bought")
+
+	# Black for beating the rival, gold for finishing the 4000 yard isles.
+	profile.rival_beaten = true
+	_check(profile.owns_clothes("female_skirt_black") or profile.owns_clothes("female_bottoms_black"), "beating the rival opens black")
+	_check(profile.wear_clothes(Wardrobe.FEMALE, Wardrobe.BOTTOMS, "female_bottoms_black") and profile.wallet == 10, "for free")
+	profile.record_isles(2000, 30, 0)
+	_check(not profile.owns_clothes("male_hat_gold"), "a shorter isles course doesn't open gold")
+	profile.record_isles(4000, 60, 3)
+	_check(profile.owns_clothes("male_hat_gold") and profile.wear_clothes(Wardrobe.MALE, Wardrobe.HAT, "male_hat_gold"), "finishing the 4000 yard isles opens gold")
+
+	# Leftover coins go in the wallet, however the run ended.
+	var lost: RunState = _new_run_state()
+	lost.ending = RunState.Ending.GAVE_UP
+	lost.coins = 300
+	var result: Dictionary = profile.record_run(lost)
+	_check(int(result["coins_saved"]) == 300 and profile.wallet == 310, "leftover coins are saved")
+	profile.set_model(Wardrobe.FEMALE)
+
+	var reloaded := Profile.new(path)
+	_check(reloaded.wallet == 310 and reloaded.model == Wardrobe.FEMALE, "the wallet and model survive a restart")
+	_check(reloaded.owned_clothes == ["male_shirt_red"] and str(reloaded.clothes[Wardrobe.FEMALE][Wardrobe.BOTTOMS]) == "female_bottoms_black", "and so do the clothes")
+	_check(str(reloaded.clothes[Wardrobe.MALE][Wardrobe.HAT]) == "male_hat_gold", "each model keeps its own")
+
+	# Clothes that were taken out are paid back once, and what was worn goes back to white.
+	var old_file := FileAccess.open(path, FileAccess.WRITE)
+	old_file.store_string(JSON.stringify({ "wallet": 10, "model": "female", "owned_clothes": ["male_shirt_checkered", "female_gloves_0", "male_hat_2", "male_shirt_red"], "clothes": { "male": { "shirt": "male_shirt_checkered", "gloves": "female_gloves_0" }, "female": { "bottoms": "female_bottoms_0" } } }))
+	old_file.close()
+	var old_save := Profile.new(path)
+	_check(old_save.wallet == 10 + 40 + 15 + 15, "removed clothes are paid back")
+	_check(old_save.owned_clothes == ["male_shirt_red"], "and only clothes that still exist are kept")
+	_check(str(old_save.clothes[Wardrobe.MALE][Wardrobe.SHIRT]) == "male_shirt_white" and old_save.worn_pieces(Wardrobe.MALE).size() == 4, "a removed piece goes back to white")
+	_check(Profile.new(path).wallet == old_save.wallet, "and the refund isn't paid twice")
+
+	# Damaged saves can't hand out clothes, and saves from before clothes start off right.
+	var bad_file := FileAccess.open(path, FileAccess.WRITE)
+	bad_file.store_string(JSON.stringify({ "wallet": -5, "model": "robot", "owned_clothes": ["nope", 3, "male_hat_black"], "clothes": { "male": { "shirt": "male_shirt_blue", "hat": "female_hat_white", "shoes": 7 }, "female": "x" } }))
+	bad_file.close()
+	var damaged := Profile.new(path)
+	_check(damaged.wallet == 0 and damaged.model == Wardrobe.MALE, "a damaged wardrobe is cleaned up")
+	_check(str(damaged.clothes[Wardrobe.MALE][Wardrobe.SHIRT]) == "male_shirt_white" and str(damaged.clothes[Wardrobe.MALE][Wardrobe.HAT]) == "male_hat_white", "and can't wear what it doesn't own")
+	_check(not damaged.owns_clothes("male_hat_black"), "or claim a locked color")
+	var older_file := FileAccess.open(path, FileAccess.WRITE)
+	older_file.store_string(JSON.stringify({ "runs_finished": 4 }))
+	older_file.close()
+	var older_save := Profile.new(path)
+	_check(older_save.wallet == 50 and older_save.runs_finished == 4, "a save from before clothes gets the starting coins")
+	DirAccess.remove_absolute(path)
 
 
 func _test_collection() -> void:

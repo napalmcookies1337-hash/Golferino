@@ -222,6 +222,8 @@ func _build_views() -> void:
 
 	var golfer := GolferView.new()
 	golfer.setup(game)
+	if profile != null:
+		golfer.wear(profile.model, profile.worn_pieces(profile.model))
 	_world.add_child(golfer)
 
 	if game.rival != null:
